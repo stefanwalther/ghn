@@ -1,0 +1,1 @@
+../../../.specify/extensions/ext/.specify-dev/agent-commands/claude/speckit-ext-backlog-add/SKILL.md

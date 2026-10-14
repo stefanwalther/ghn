@@ -1,0 +1,105 @@
+# Native Extension Manifest for the speckit-ext umbrella
+# Consumed by: specify extension add/remove/update
+#
+# This is a single umbrella extension that provides all 16 spec-kit-ext
+# commands under the `speckit.ext.*` namespace. It replaces the previous
+# layout of 13 separate extensions, which became incompatible with
+# specify's namespace validation (which requires the extension id to
+# match the middle segment of every command name).
+
+schema_version: "1.0"
+
+extension:
+  id: ext
+  name: Spec-Kit Extensions
+  version: 0.6.1
+  description: >-
+    Workflow extensions for spec-driven development: fast-track, validate,
+    code-review, manual-testing, scope-change, session-handover, closeout,
+    finalize, PR creation, post-merge tidy-up, backlog management, cleanup,
+    and workspace docs.
+
+author: Stefan Walther
+license: MIT
+repository: https://github.com/stefanwalther/spec-kit-extensions
+homepage: https://github.com/stefanwalther/spec-kit-extensions
+documentation: extensions/speckit.ext/README.md
+changelog: extensions/speckit.ext/CHANGELOG.md
+
+requires:
+  speckit_version: ">=0.0.90"
+
+tags:
+  - workflow
+  - validation
+  - code-review
+  - testing
+  - pr-creation
+  - backlog
+  - cleanup
+  - documentation
+
+provides:
+  commands:
+    # Pre-implementation
+    - name: speckit.ext.fast-track
+      file: commands/speckit.ext.fast-track.md
+      description: Orchestrate specify, plan, and tasks workflow into a single command
+    - name: speckit.ext.ft
+      file: commands/speckit.ext.ft.md
+      description: Shorthand alias for fast-track
+
+    # Mid-implementation
+    - name: speckit.ext.scope-change
+      file: commands/speckit.ext.scope-change.md
+      description: Document scope changes and ad-hoc additions during feature implementation
+    - name: speckit.ext.session-handover
+      file: commands/speckit.ext.session-handover.md
+      description: Mid-implementation context handover with proactive monitoring and continuation prompts
+    - name: speckit.ext.handover
+      file: commands/speckit.ext.handover.md
+      description: Shorthand alias for session-handover
+    - name: speckit.ext.manual-testing
+      file: commands/speckit.ext.manual-testing.md
+      description: User-led manual testing workflow with structured feedback collection
+    - name: speckit.ext.code-review
+      file: commands/speckit.ext.code-review.md
+      description: Multi-agent code review before PR creation
+
+    # Pre-merge
+    - name: speckit.ext.validate
+      file: commands/speckit.ext.validate.md
+      description: Pre-merge validation and quality gate for feature completion
+    - name: speckit.ext.closeout
+      file: commands/speckit.ext.closeout.md
+      description: Pre-PR (optional) — create documentation artifacts (COMPLETION.md, HANDOVER.md) for complex features
+
+    # Pre-PR finalization
+    - name: speckit.ext.finalize
+      file: commands/speckit.ext.finalize.md
+      description: Pre-PR — clean up transient files and update workspace docs (README, CHANGELOG)
+    - name: speckit.ext.pr
+      file: commands/speckit.ext.pr.md
+      description: Create pull request for spec-kit feature using agent-based workflow
+
+    # Post-merge
+    - name: speckit.ext.post-merge
+      file: commands/speckit.ext.post-merge.md
+      description: Post-merge — final cleanup, workspace doc update, and worktree teardown prompt
+
+    # Cross-cutting
+    - name: speckit.ext.backlog
+      file: commands/speckit.ext.backlog.md
+      description: Process and clean development backlog by resolving items one-by-one
+    - name: speckit.ext.backlog-add
+      file: commands/speckit.ext.backlog-add.md
+      description: Quick-add item to development backlog without interrupting flow
+    - name: speckit.ext.backlog-sync
+      file: commands/speckit.ext.backlog-sync.md
+      description: Sync local backlog items to Notion AI Coding Projects database
+    - name: speckit.ext.cleanup
+      file: commands/speckit.ext.cleanup.md
+      description: Clean up completed feature spec directories with intelligent content review
+    - name: speckit.ext.update-workspace
+      file: commands/speckit.ext.update-workspace.md
+      description: Update workspace-level documentation after feature completion

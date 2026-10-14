@@ -2,3 +2,10 @@
 .env
 .env.*
 !.env.example
+# >>> speckit.install managed block (do not edit between markers)
+# Agent local state: credentials, caches, transient artifacts.
+.opencode/
+.claude/.credentials.json
+.codex/.credentials.json
+.pi/.credentials.json
+# <<< speckit.install managed block
