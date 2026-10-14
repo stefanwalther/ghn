@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "ext": {
+      "version": "0.6.1",
+      "source": "local",
+      "manifest_hash": "sha256:0d89e3c32e20d1c066d681bca88466fb7fa5fcfd6188759978669f424f9f3af9",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.ext.fast-track",
+          "speckit.ext.ft",
+          "speckit.ext.scope-change",
+          "speckit.ext.session-handover",
+          "speckit.ext.handover",
+          "speckit.ext.manual-testing",
+          "speckit.ext.code-review",
+          "speckit.ext.validate",
+          "speckit.ext.closeout",
+          "speckit.ext.finalize",
+          "speckit.ext.pr",
+          "speckit.ext.post-merge",
+          "speckit.ext.backlog",
+          "speckit.ext.backlog-add",
+          "speckit.ext.backlog-sync",
+          "speckit.ext.cleanup",
+          "speckit.ext.update-workspace"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-10-09T15:12:18.271104+00:00"
+    }
+  }
+}
