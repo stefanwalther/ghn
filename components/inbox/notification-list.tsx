@@ -7,6 +7,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { QUICK_SELECTS } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
+import { ItemMenu, type ItemMenuAction } from "@/components/inbox/item-menu";
 
 export interface InboxItem {
   id: string;
@@ -53,6 +54,7 @@ export function NotificationList({
   onToggle,
   onToggleAll,
   onQuickSelect,
+  onMenuAction,
 }: {
   items: InboxItem[];
   selected: Set<string>;
@@ -61,6 +63,7 @@ export function NotificationList({
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onQuickSelect: (reason: string) => void;
+  onMenuAction: (item: InboxItem, action: ItemMenuAction) => void;
 }) {
   const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
   return (
@@ -151,19 +154,22 @@ export function NotificationList({
                 </div>
                 <p className="mt-1 truncate text-sm font-medium">{item.subject}</p>
               </div>
-              <a
-                href={item.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Open source for ${item.subject}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  saveLastOpened(item.id);
-                }}
-                className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden />
-              </a>
+              <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
+                <ItemMenu item={item} onAction={onMenuAction} />
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open source for ${item.subject}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveLastOpened(item.id);
+                  }}
+                  className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                </a>
+              </div>
             </li>
           );
         })}

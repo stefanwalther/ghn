@@ -24,6 +24,21 @@ test.describe("live github sync smoke", () => {
     await expect(page.getByText(/selected/)).toHaveCount(0);
   });
 
+  test("item menu opens with triage actions and closes on escape", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const trigger = page.getByRole("button", { name: /Actions for / }).first();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /Mark as done/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /Open source/ })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+  });
+
   test("refresh control keeps the inbox stable", async ({ page }) => {
     await page.goto("/");
     const refresh = page.getByRole("button", { name: /refresh inbox/i });

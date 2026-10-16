@@ -35,7 +35,7 @@ export function ContributionsChip() {
         title={
           count === null
             ? "GitHub contributions unavailable (offline or not signed in)"
-            : "GitHub contributions today (UTC day; the profile tooltip can differ by one at day edges)"
+            : "GitHub contributions today (UTC day; the profile heatmap buckets by local day and can differ by a few near midnight)"
         }
       >
       <Badge variant="muted">{label}</Badge>

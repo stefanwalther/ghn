@@ -204,6 +204,15 @@ function InboxView() {
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
   }
 
+  function menuAction(item: InboxItem, action: "open" | BulkAction) {
+    if (action === "open") {
+      saveLastOpened(item.id);
+      window.open(item.sourceUrl, "_blank", "noopener");
+      return;
+    }
+    void apply(action, [item.id]);
+  }
+
   async function apply(action: BulkAction, ids?: string[]) {
     const targets = ids ?? [...selected];
     if (targets.length === 0) return;
@@ -481,6 +490,7 @@ function InboxView() {
           onToggle={toggle}
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
+          onMenuAction={menuAction}
         />
           ) : null}
           {status === "ready" && collapsed.length > 0 ? (
