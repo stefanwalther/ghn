@@ -39,7 +39,10 @@
   --secondary: oklch(0.2795 0.0368 260.031);
   --secondary-foreground: oklch(0.9842 0.0034 247.8575);
   --muted: oklch(0.2795 0.0368 260.031);
-  --muted-foreground: oklch(0.7118 0.133 158.5092);
+  /* App-local readability override: registry muted-foreground is a
+     saturated mint that strains in long triage lists. Near-neutral
+     slate at the same lightness keeps AA with less chroma noise. */
+  --muted-foreground: oklch(0.78 0.025 260);
   --accent: oklch(0.3925 0.0896 152.5353);
   --accent-foreground: oklch(0.8871 0.2122 128.5041);
   --border: oklch(0.2795 0.0368 260.031);
