@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isReleaseItem, matchAge, QUICK_SELECTS, startOfYear } from "@/lib/filters";
+import { isMergedItem, isReleaseItem, matchAge, QUICK_SELECTS, startOfYear } from "@/lib/filters";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -68,8 +68,22 @@ describe("isReleaseItem", () => {
   });
 });
 
+describe("isMergedItem", () => {
+  test("seed reason still counts", () => {
+    expect(isMergedItem({ reason: "merged", prMerged: false })).toBe(true);
+  });
+
+  test("live merged PR counts", () => {
+    expect(isMergedItem({ reason: "subscribed", prMerged: true })).toBe(true);
+  });
+
+  test("open PR does not count", () => {
+    expect(isMergedItem({ reason: "subscribed", prMerged: false })).toBe(false);
+  });
+});
+
 describe("quick selects on live data", () => {
-  test("no dead merged shortcut without a live signal", () => {
-    expect(QUICK_SELECTS.map((q) => q.value)).not.toContain("merged");
+  test("merged shortcut is actionable", () => {
+    expect(QUICK_SELECTS.map((q) => q.value)).toContain("merged");
   });
 });

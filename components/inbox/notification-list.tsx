@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
-import { QUICK_SELECTS } from "@/lib/filters";
+import { QUICK_SELECTS, isMergedItem } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
 import { ItemMenu, type ItemMenuAction } from "@/components/inbox/item-menu";
@@ -16,6 +16,7 @@ export interface InboxItem {
   subject: string;
   subjectType?: string | null;
   reason: string;
+  prMerged?: boolean | null;
   createdAt: number;
   isRead: number;
   isDone: number;
@@ -100,6 +101,8 @@ export function NotificationList({
       <ul className="divide-y divide-border/40">
         {items.map((item) => {
           const checked = selected.has(item.id);
+          const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
+          const tone = merged ? "merged" : reasonTone(item.reason);
           return (
             <li
               key={item.id}
@@ -130,15 +133,15 @@ export function NotificationList({
                 aria-hidden="true"
                 className={cn(
                   "mt-2 h-2 w-2 shrink-0 rounded-full",
-                  item.isRead === 0 ? reasonDot(item.reason) : "bg-transparent"
+                  item.isRead === 0 ? (merged ? "bg-merged" : reasonDot(item.reason)) : "bg-transparent"
                 )}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
                   <span className="text-xs text-muted-foreground">{item.repositoryName}</span>
-                  <Badge variant={reasonTone(item.reason)}>
-                    {item.reason.replace("_", " ")}
+                  <Badge variant={tone}>
+                    {merged ? "merged" : item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
                   {item.localUnread ? (

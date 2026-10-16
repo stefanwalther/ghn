@@ -41,6 +41,7 @@ export const TYPE_FILTERS: { value: string; label: string }[] = [
 
 export const QUICK_SELECTS: { value: string; label: string }[] = [
   { value: "release", label: "All releases" },
+  { value: "merged", label: "All merged" },
 ];
 
 export function isReleaseItem(input: {
@@ -53,6 +54,14 @@ export function isReleaseItem(input: {
   if (/^v\d+\.\d+/i.test(input.subject.trim())) return true;
   if (/chore\(main\): release/i.test(input.subject)) return true;
   return false;
+}
+
+export function isMergedItem(input: {
+  reason: string;
+  prMerged?: boolean | null;
+}): boolean {
+  if (input.reason === "merged") return true;
+  return input.prMerged === true;
 }
 
 const DAY = 24 * 60 * 60 * 1000;
