@@ -88,6 +88,9 @@ export function FilterSidebar({
 
   const activeTypeLabel = types.find((t) => t.value === activeType)?.label;
   const activeRepoName = repos.find((r) => r.id === activeRepo)?.fullName;
+  const visibleRepos = repos.filter(
+    (r) => r.id === activeRepo || r.main > 0
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -166,7 +169,7 @@ export function FilterSidebar({
               {repos.reduce((n, r) => n + r.main, 0)}
             </Badge>
           </SidebarButton>
-          {repos.map((r) => {
+          {visibleRepos.map((r) => {
             const active = activeRepo === r.id;
             return (
               <SidebarButton

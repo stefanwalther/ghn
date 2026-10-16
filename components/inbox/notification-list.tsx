@@ -28,7 +28,7 @@ export interface InboxItem {
 
 const FAILURE_REASONS = new Set(["action_failed", "ci_failed"]);
 
-function reasonTone(reason: string): "destructive" | "merged" | "muted" {
+export function reasonTone(reason: string): "destructive" | "merged" | "muted" {
   if (FAILURE_REASONS.has(reason)) return "destructive";
   if (reason === "merged") return "merged";
   return "muted";
