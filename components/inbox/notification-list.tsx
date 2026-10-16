@@ -109,10 +109,18 @@ export function NotificationList({
                   aria-label={`Select ${item.subject}`}
                 />
               </span>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "mt-2 h-2 w-2 shrink-0 rounded-full",
+                  item.isRead === 0 ? "bg-primary" : "bg-transparent"
+                )}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
                   <Badge variant="muted">{item.repositoryName}</Badge>
-                  <Badge variant={item.isRead === 0 ? "default" : "muted"}>
+                  <Badge variant="muted">
                     {item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
