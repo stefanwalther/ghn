@@ -46,7 +46,7 @@ const REASONS = [
   "ci_failed",
   "release",
   "merged",
-  "assigned",
+  "assign",
   "subscribed",
 ] as const;
 

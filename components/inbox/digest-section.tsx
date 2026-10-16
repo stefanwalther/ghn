@@ -29,6 +29,7 @@ export function DigestSection({ groups }: { groups: DigestGroup[] }) {
           meta={
             <span className="flex items-center gap-2">
               <Badge variant="muted">{g.pendingCount} pending</Badge>
+              <Badge variant="muted">{g.rhythm}</Badge>
               <span className="text-xs text-muted-foreground">
                 {g.isSnoozed ? `snoozed until ${g.snoozeLabel}` : `due ${g.nextDueLabel}`}
               </span>

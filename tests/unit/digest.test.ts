@@ -31,8 +31,7 @@ describe("digest boundaries", () => {
     expect(isDue(repo, Date.now())).toBe(true);
   });
 
-  test("non-due items excluded from main flow", () => {
-    const now = Date.now();
+  test("non-due items excluded from main flow", () => {    const now = Date.now();
     const repos = new Map([
       ["fast", { id: "fast", rhythm: "immediate" as const, lastPromotedAt: null, nextDueAt: null }],
       ["slow", { id: "slow", rhythm: "weekly" as const, lastPromotedAt: now, nextDueAt: now + 86400000 }],
@@ -45,5 +44,43 @@ describe("digest boundaries", () => {
     const { mainFlow, collapsedRepoIds } = splitInbox(items, repos, now);
     expect(mainFlow.map((i) => i.id)).toEqual(["1"]);
     expect([...collapsedRepoIds]).toEqual(["slow"]);
+  });
+});
+
+describe("digest on live-discovered rows", () => {
+  test("weekly repo with future nextDueAt stays collapsed until due", () => {
+    const now = Date.now();
+    const repos = new Map([
+      ["live", { id: "live", rhythm: "weekly" as const, lastPromotedAt: null, nextDueAt: now + 86400000 }],
+    ]);
+    expect(isDue(repos.get("live")!, now)).toBe(false);
+    const { mainFlow, collapsedRepoIds } = splitInbox(
+      [{ id: "t1", repositoryId: "live", isDone: false }],
+      repos,
+      now
+    );
+    expect(mainFlow).toHaveLength(0);
+    expect([...collapsedRepoIds]).toEqual(["live"]);
+  });
+
+  test("past-due digest repo promotes into the main flow", () => {
+    const now = Date.now();
+    const repos = new Map([
+      ["live", { id: "live", rhythm: "monthly" as const, lastPromotedAt: now - 40 * 86400000, nextDueAt: now - 1000 }],
+    ]);
+    expect(isDue(repos.get("live")!, now)).toBe(true);
+    const { mainFlow } = splitInbox(
+      [{ id: "t1", repositoryId: "live", isDone: false }],
+      repos,
+      now
+    );
+    expect(mainFlow.map((i) => i.id)).toEqual(["t1"]);
+  });
+
+  test("switching a live repo to immediate promotes pending items", () => {
+    const now = Date.now();
+    const repo = { id: "live", rhythm: "immediate" as const, lastPromotedAt: now, nextDueAt: null };
+    expect(isDue(repo, now)).toBe(true);
+    expect(computeNextDueAt("immediate", now)).toBeNull();
   });
 });

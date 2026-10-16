@@ -13,6 +13,7 @@ export interface RepoRowData {
   rhythm: string;
   nextDueLabel: string;
   pendingCount: number;
+  unreachable?: boolean;
   snoozedUntil: number | null;
   isSnoozed: boolean;
   snoozeLabel: string;
@@ -70,10 +71,19 @@ export function RepoRow({
           <Badge variant="muted">{repo.ownership}</Badge>
           <Badge variant="muted">{repo.pendingCount} pending</Badge>
           {repo.isSnoozed ? <Badge variant="accent">Snoozed until {repo.snoozeLabel}</Badge> : null}
+          {repo.unreachable ? (
+            <Badge
+              variant="destructive"
+              title="GitHub no longer returns this repository (renamed, deleted, or access lost). Cached items stay readable."
+            >
+              Unreachable
+            </Badge>
+          ) : null}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Next digest {repo.nextDueLabel}. Monthly and biweekly items stay
-          collapsed in the inbox until due.
+          {repo.unreachable
+            ? "GitHub no longer returns this repository. Cached items stay readable; change the rhythm or remove it once triaged."
+            : "Next digest " + repo.nextDueLabel + ". Monthly and biweekly items stay collapsed in the inbox until due."}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">

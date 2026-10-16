@@ -10,7 +10,7 @@ Returns the contribution count for one UTC calendar day.
 Response 200:
 
 ```json
-{ "date": "2026-10-16", "count": 30, "cached": true }
+{ "date": "2026-10-16", "count": 30, "cached": true, "login": "stefanwalther" }
 ```
 
 Rules:
