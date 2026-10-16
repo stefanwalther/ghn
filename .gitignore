@@ -2,6 +2,18 @@
 .env
 .env.*
 !.env.example
+node_modules/
+.next/
+out/
+dist/
+build/
+*.log
+data/quiet-notifications.db
+data/*.db-shm
+data/*.db-wal
+tsconfig.tsbuildinfo
+coverage/
+.next-env.d.ts
 # >>> speckit.install managed block (do not edit between markers)
 # Agent local state: credentials, caches, transient artifacts.
 .opencode/
