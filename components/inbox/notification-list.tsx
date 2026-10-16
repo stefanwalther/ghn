@@ -71,7 +71,7 @@ export function NotificationList({
           aria-label="Select all visible"
         />
         <span className="text-xs text-muted-foreground">
-          {selected.size > 0 ? `${selected.size} selected` : `${items.length} items`}
+          {items.length} {items.length === 1 ? "item" : "items"}
         </span>
         <span className="ml-auto flex items-center gap-1">
           {showHints ? (

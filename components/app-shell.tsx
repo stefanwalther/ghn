@@ -16,7 +16,9 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(
+    () => typeof window === "undefined" || window.innerWidth >= 768
+  );
 
   React.useEffect(() => {
     try {
@@ -44,7 +46,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {open ? (
-        <aside className="flex w-60 shrink-0 flex-col gap-1 bg-sidebar p-4">
+        <>
+          <div
+            aria-hidden="true"
+            onClick={toggleSidebar}
+            className="fixed inset-0 z-30 cursor-pointer bg-background/80 md:hidden"
+          />
+          <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 bg-sidebar p-4 shadow-md md:static md:z-auto md:shadow-none">
           <div className="mb-4 px-2 text-sm font-semibold">Quiet Notifications</div>
           {NAV.map((item) => {
             const active =
@@ -55,6 +63,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
+                onClick={() => {
+                  if (window.innerWidth < 768) setOpen(false);
+                }}
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active && "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -65,7 +76,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-        </aside>
+          </aside>
+        </>
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 px-4 py-3">
