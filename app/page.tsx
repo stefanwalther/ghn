@@ -36,24 +36,38 @@ function InboxView() {
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [showHints, setShowHints] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = React.useState(false);
+  const loadedRef = React.useRef(false);
+  const reqRef = React.useRef(0);
 
   const query = serializeInboxFilters(filters);
 
   const load = React.useCallback(async () => {
-    setStatus("loading");
+    const silent = loadedRef.current;
+    if (!silent) setStatus("loading");
+    else setRefreshing(true);
+    const my = ++reqRef.current;
     try {
       const res = await fetch(`/api/notifications${query}`, { cache: "no-store" });
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
+      if (reqRef.current !== my) return;
       setItems(data.mainFlow ?? []);
       setCollapsed(data.collapsedSection ?? []);
       setTypeFacets(data.facets?.types ?? []);
       setRepoFacets(data.facets?.repos ?? []);
+      loadedRef.current = true;
       setStatus("ready");
+      setNotice(null);
     } catch {
-      setStatus("error");
+      if (reqRef.current !== my) return;
+      if (!loadedRef.current) setStatus("error");
+      else setNotice("Refresh failed. Showing last loaded data.");
+    } finally {
+      if (reqRef.current === my) setRefreshing(false);
     }
   }, [query]);
 
@@ -109,6 +123,23 @@ function InboxView() {
     const targets = ids ?? [...selected];
     if (targets.length === 0) return;
     setBusy(true);
+    setNotice(null);
+    const targetSet = new Set(targets);
+    const prevItems = items;
+    if (action === "done" || action === "unsubscribe") {
+      setItems((prev) => prev.filter((i) => !targetSet.has(i.id)));
+    } else if (action === "read") {
+      setItems((prev) =>
+        prev.map((i) => (targetSet.has(i.id) ? { ...i, isRead: 1 } : i))
+      );
+    } else {
+      setItems((prev) =>
+        prev.map((i) =>
+          targetSet.has(i.id) ? { ...i, isDone: 0, isRead: 0 } : i
+        )
+      );
+    }
+    setSelected(new Set());
     try {
       const res = await fetch("/api/notifications/bulk", {
         method: "POST",
@@ -116,8 +147,10 @@ function InboxView() {
         body: JSON.stringify({ ids: targets, action }),
       });
       if (!res.ok) throw new Error("bulk failed");
-      setSelected(new Set());
       await load();
+    } catch {
+      setItems(prevItems);
+      setNotice("Action failed. Restored previous state.");
     } finally {
       setBusy(false);
     }
@@ -248,7 +281,10 @@ function InboxView() {
             aria-label="Refresh inbox"
             onClick={() => load()}
           >
-            <RefreshCw className="h-4 w-4" aria-hidden />
+            <RefreshCw
+              className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+              aria-hidden
+            />
           </Button>
           <Button
             variant="ghost"
@@ -285,13 +321,18 @@ function InboxView() {
         </aside>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <InboxFilters filters={filters} onChange={setFilters} />
-      <BulkBar
-        selectedCount={selected.size}
-        busy={busy}
-        showHints={showHints}
-        onAction={apply}
-        onClear={() => setSelected(new Set())}
-      />
+          <BulkBar
+            selectedCount={selected.size}
+            busy={busy}
+            showHints={showHints}
+            onAction={apply}
+            onClear={() => setSelected(new Set())}
+          />
+          {notice ? (
+            <p role="alert" className="text-xs text-destructive">
+              {notice}
+            </p>
+          ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
           {status === "error" ? <ErrorInbox onRetry={load} /> : null}
           {status === "ready" && items.length === 0 && collapsed.length === 0 ? <EmptyInbox /> : null}
