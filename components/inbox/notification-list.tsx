@@ -133,7 +133,7 @@ export function NotificationList({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
-                  <Badge variant="muted">{item.repositoryName}</Badge>
+                  <span className="text-xs text-muted-foreground">{item.repositoryName}</span>
                   <Badge variant={reasonTone(item.reason)}>
                     {item.reason.replace("_", " ")}
                   </Badge>
