@@ -22,6 +22,12 @@ export interface InboxItem {
   dueLabel: string | null;
 }
 
+const FAILURE_REASONS = new Set(["action_failed", "ci_failed"]);
+
+function reasonTone(reason: string): "destructive" | "muted" {
+  return FAILURE_REASONS.has(reason) ? "destructive" : "muted";
+}
+
 function ageLabel(createdAt: number): string {
   const mins = Math.max(1, Math.round((Date.now() - createdAt) / 60000));
   if (mins < 60) return `${mins}m ago`;
@@ -113,14 +119,18 @@ export function NotificationList({
                 aria-hidden="true"
                 className={cn(
                   "mt-2 h-2 w-2 shrink-0 rounded-full",
-                  item.isRead === 0 ? "bg-primary" : "bg-transparent"
+                  item.isRead === 0
+                    ? FAILURE_REASONS.has(item.reason)
+                      ? "bg-destructive"
+                      : "bg-primary"
+                    : "bg-transparent"
                 )}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
                   <Badge variant="muted">{item.repositoryName}</Badge>
-                  <Badge variant="muted">
+                  <Badge variant={reasonTone(item.reason)}>
                     {item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
