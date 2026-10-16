@@ -13,6 +13,7 @@ import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isEditableTarget } from "@/lib/shortcuts";
+import { isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -201,6 +202,18 @@ function InboxView() {
   }
 
   function quickSelect(reason: string) {
+    if (reason === "release") {
+      setSelected(
+        new Set(
+          items
+            .filter((i) =>
+              isReleaseItem({ reason: i.reason, subject: i.subject, subjectType: i.subjectType ?? null })
+            )
+            .map((i) => i.id)
+        )
+      );
+      return;
+    }
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
   }
 

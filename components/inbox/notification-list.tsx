@@ -14,6 +14,7 @@ export interface InboxItem {
   repositoryId: string;
   repositoryName: string;
   subject: string;
+  subjectType?: string | null;
   reason: string;
   createdAt: number;
   isRead: number;
