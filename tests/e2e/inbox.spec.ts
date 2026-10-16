@@ -39,6 +39,37 @@ test.describe("live github sync smoke", () => {
     await expect(menu).toHaveCount(0);
   });
 
+  test("item drawer opens from menu and closes on escape", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const trigger = page.getByRole("button", { name: /Actions for / }).first();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await page.getByRole("menuitem", { name: /Open in drawer/ }).click();
+    const drawer = page.getByRole("dialog", { name: "Item details" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("link", { name: /Open in new window/ })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+  });
+
+  test("repository list hides fully-empty repos", async ({ page }) => {
+    await page.goto("/");
+    const section = page.locator('section[aria-label="Repository filters"]');
+    const buttons = section.getByRole("button", { name: /^Filter by / });
+    await expect(buttons.first()).toBeVisible();
+    const n = await buttons.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const button = buttons.nth(i);
+      const text = (await button.innerText()).trim();
+      const badge = text.split(/\s+/).pop();
+      const active = await button.getAttribute("aria-current");
+      if (active !== "true") expect(badge).not.toBe("0");
+    }
+  });
+
   test("refresh control keeps the inbox stable", async ({ page }) => {
     await page.goto("/");
     const refresh = page.getByRole("button", { name: /refresh inbox/i });
