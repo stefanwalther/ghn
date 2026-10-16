@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 import * as React from "react";
 import { BulkBar, type BulkAction } from "@/components/inbox/bulk-bar";
 import { DigestSection } from "@/components/inbox/digest-section";
@@ -72,6 +73,13 @@ function InboxView() {
       document.getElementById(`notification-${last}`)?.scrollIntoView({ block: "nearest" });
     }
   }, [status]);
+
+  function prefersReducedMotion(): boolean {
+    return (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
 
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
@@ -236,9 +244,18 @@ function InboxView() {
           <Button
             variant="ghost"
             size="sm"
+            title="Refresh inbox"
+            aria-label="Refresh inbox"
+            onClick={() => load()}
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setSelected(new Set());
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
             }}
           >
             Back to inbox top

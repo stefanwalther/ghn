@@ -113,8 +113,6 @@ export function NotificationList({
                 }
               }}
               tabIndex={0}
-              role="checkbox"
-              aria-checked={checked}
             >
               <span onClick={(e) => e.stopPropagation()} className="pt-0.5">
                 <Checkbox
