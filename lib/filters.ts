@@ -44,6 +44,26 @@ export const QUICK_SELECTS: { value: string; label: string }[] = [
   { value: "merged", label: "All merged" },
 ];
 
+export function isReleaseItem(input: {
+  reason: string;
+  subject: string;
+  subjectType?: string | null;
+}): boolean {
+  if (input.reason === "release") return true;
+  if (input.subjectType === "Release") return true;
+  if (/^v\d+\.\d+/i.test(input.subject.trim())) return true;
+  if (/chore\(main\): release/i.test(input.subject)) return true;
+  return false;
+}
+
+export function isMergedItem(input: {
+  reason: string;
+  prMerged?: boolean | null;
+}): boolean {
+  if (input.reason === "merged") return true;
+  return input.prMerged === true;
+}
+
 const DAY = 24 * 60 * 60 * 1000;
 
 export function startOfYear(now: number): number {

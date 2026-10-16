@@ -72,6 +72,11 @@ CREATE TABLE IF NOT EXISTS writeback_queue (
       "ALTER TABLE notifications ADD COLUMN local_unread INTEGER NOT NULL DEFAULT 0"
     );
   }
+  if (!notifCols.some((c) => c.name === "pr_merged")) {
+    sqlite.exec(
+      "ALTER TABLE notifications ADD COLUMN pr_merged INTEGER NOT NULL DEFAULT 0"
+    );
+  }
 }
 
 function main(): void {

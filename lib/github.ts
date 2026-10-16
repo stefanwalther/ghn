@@ -247,12 +247,17 @@ export async function checkRepoExists(token: string, fullName: string): Promise<
   }
 }
 
+const prMergedByApiUrl = new Map<string, boolean>();
+
+export function readPrMerged(subjectApiUrl: string): boolean {
+  return prMergedByApiUrl.get(subjectApiUrl) === true;
+}
+
 export async function resolveSubjectHtmlUrl(
   token: string,
   thread: GhThread,
   cache: Map<string, string>
-): Promise<string> {
-  if (!thread.subjectApiUrl) return deriveFallbackUrl(thread);
+): Promise<string> {  if (!thread.subjectApiUrl) return deriveFallbackUrl(thread);
   const cached = cache.get(thread.subjectApiUrl);
   if (cached) return cached;
   try {
@@ -262,9 +267,12 @@ export async function resolveSubjectHtmlUrl(
       cache.set(thread.subjectApiUrl, fallback);
       return fallback;
     }
-    const payload = (await res.json()) as { html_url?: unknown };
+    const payload = (await res.json()) as { html_url?: unknown; merged?: unknown };
     const url = typeof payload.html_url === "string" ? payload.html_url : deriveFallbackUrl(thread);
     cache.set(thread.subjectApiUrl, url);
+    if (thread.subjectType === "PullRequest") {
+      prMergedByApiUrl.set(thread.subjectApiUrl, payload.merged === true);
+    }
     return url;
   } catch {
     const fallback = deriveFallbackUrl(thread);

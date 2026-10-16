@@ -3,6 +3,7 @@ import { notifications, repositories, syncState } from "@/db/schema";
 import type { Db } from "@/db/client";
 import { computeNextDueAt } from "@/lib/digest";
 import type { GhThread } from "@/lib/github";
+import { readPrMerged } from "@/lib/github";
 
 export function repoIdForFullName(fullName: string): string {
   return fullName.toLowerCase().replace(/\//g, "--");
@@ -161,6 +162,7 @@ export async function upsertThreads(
         isRead: thread.unread ? 0 : 1,
         isDone: 0,
         localUnread: 0,
+        prMerged: readPrMerged(thread.subjectApiUrl) ? 1 : 0,
         sourceUrl: urlById.get(thread.id) ?? "",
       });
       upserted += 1;
@@ -181,6 +183,9 @@ export async function upsertThreads(
         createdAt: thread.updatedAt,
         githubUpdatedAt: thread.updatedAt,
         isRead,
+        prMerged: urlById.has(thread.id)
+          ? readPrMerged(thread.subjectApiUrl) ? 1 : 0
+          : (row.prMerged ?? 0),
         sourceUrl: changed ? (urlById.get(thread.id) ?? row.sourceUrl) : row.sourceUrl,
       })
       .where(eq(notifications.id, thread.id));

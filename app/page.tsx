@@ -8,11 +8,14 @@ import { DigestSection } from "@/components/inbox/digest-section";
 import { EmptyInbox, ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
 import { FilterSidebar, type RepoFacet, type TypeFacet } from "@/components/inbox/filter-sidebar";
 import { InboxFilters } from "@/components/inbox/inbox-filters";
+import { ItemDrawer } from "@/components/inbox/item-drawer";
+import type { ItemMenuAction } from "@/components/inbox/item-menu";
 import { NotificationList, type InboxItem } from "@/components/inbox/notification-list";
 import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
+import { isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -35,6 +38,7 @@ function InboxView() {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [helpOpen, setHelpOpen] = React.useState(false);
+  const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -201,16 +205,45 @@ function InboxView() {
   }
 
   function quickSelect(reason: string) {
+    if (reason === "release") {
+      setSelected(
+        new Set(
+          items
+            .filter((i) =>
+              isReleaseItem({ reason: i.reason, subject: i.subject, subjectType: i.subjectType ?? null })
+            )
+            .map((i) => i.id)
+        )
+      );
+      return;
+    }
+    if (reason === "merged") {
+      setSelected(
+        new Set(
+          items.filter((i) => isMergedItem({ reason: i.reason, prMerged: i.prMerged ?? false })).map((i) => i.id)
+        )
+      );
+      return;
+    }
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
   }
 
-  function menuAction(item: InboxItem, action: "open" | BulkAction) {
+  function menuAction(item: InboxItem, action: ItemMenuAction) {
+    if (action === "drawer") {
+      setDrawerItem(item);
+      return;
+    }
     if (action === "open") {
       saveLastOpened(item.id);
       window.open(item.sourceUrl, "_blank", "noopener");
       return;
     }
     void apply(action, [item.id]);
+  }
+
+  function drawerAction(item: InboxItem, action: ItemMenuAction) {
+    if (action === "done" || action === "unsubscribe") setDrawerItem(null);
+    menuAction(item, action);
   }
 
   async function apply(action: BulkAction, ids?: string[]) {
@@ -293,7 +326,8 @@ function InboxView() {
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        if (helpOpen) setHelpOpen(false);
+        if (drawerItem) setDrawerItem(null);
+        else if (helpOpen) setHelpOpen(false);
         else setSelected(new Set());
         return;
       }
@@ -338,6 +372,11 @@ function InboxView() {
             saveLastOpened(item.id);
             window.open(item.sourceUrl, "_blank", "noopener");
           }
+          break;
+        }
+        case "d": {
+          const item = focusIdx !== null ? items[focusIdx] : undefined;
+          if (item) setDrawerItem(item);
           break;
         }
         case "a":
@@ -502,6 +541,13 @@ function InboxView() {
         </div>
       </div>
       {helpOpen ? <ShortcutsHelp onClose={() => setHelpOpen(false)} /> : null}
+      {drawerItem ? (
+        <ItemDrawer
+          item={drawerItem}
+          onClose={() => setDrawerItem(null)}
+          onAction={drawerAction}
+        />
+      ) : null}
     </div>
   );
 }

@@ -277,6 +277,63 @@ describe("stale and conditional sync state", () => {
   });
 });
 
+describe("merged-status capture", () => {
+  test("persists merged flag from the subject payload", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(
+          JSON.stringify({ html_url: "https://github.com/acme/web/pull/12", merged: true }),
+          { headers: { "Content-Type": "application/json" } }
+        ),
+    });
+    try {
+      const github = await import("@/lib/github");
+      const db = makeTestDb();
+      const apiUrl = `http://localhost:${server.port}/repos/acme/web/pulls/12`;
+      await upsertThreads(
+        db,
+        [thread({ id: "5001", subjectApiUrl: apiUrl })],
+        null,
+        1792000001000,
+        (t) => github.resolveSubjectHtmlUrl("token", t, new Map())
+      );
+      expect(github.readPrMerged(apiUrl)).toBe(true);
+      const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "5001"));
+      expect(rows[0]?.prMerged).toBe(1);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("open PRs persist unmerged", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(
+          JSON.stringify({ html_url: "https://github.com/acme/web/pull/13", merged: false }),
+          { headers: { "Content-Type": "application/json" } }
+        ),
+    });
+    try {
+      const github = await import("@/lib/github");
+      const db = makeTestDb();
+      const apiUrl = `http://localhost:${server.port}/repos/acme/web/pulls/13`;
+      await upsertThreads(
+        db,
+        [thread({ id: "5002", subjectApiUrl: apiUrl })],
+        null,
+        1792000001000,
+        (t) => github.resolveSubjectHtmlUrl("token", t, new Map())
+      );
+      const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "5002"));
+      expect(rows[0]?.prMerged).toBe(0);
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
 describe("remote-done propagation", () => {
   test("threads absent from a full pass become done", async () => {
     const db = makeTestDb();
