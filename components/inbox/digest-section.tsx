@@ -10,6 +10,8 @@ export interface DigestGroup {
   nextDueAt: number | null;
   nextDueLabel: string;
   pendingCount: number;
+  isSnoozed?: boolean;
+  snoozeLabel?: string;
 }
 
 export function DigestSection({ groups }: { groups: DigestGroup[] }) {
@@ -27,13 +29,16 @@ export function DigestSection({ groups }: { groups: DigestGroup[] }) {
           meta={
             <span className="flex items-center gap-2">
               <Badge variant="muted">{g.pendingCount} pending</Badge>
-              <span className="text-xs text-muted-foreground">due {g.nextDueLabel}</span>
+              <span className="text-xs text-muted-foreground">
+                {g.isSnoozed ? `snoozed until ${g.snoozeLabel}` : `due ${g.nextDueLabel}`}
+              </span>
             </span>
           }
         >
           <p className="text-sm text-muted-foreground">
-            New items stay here until the {g.rhythm} digest is due. Switch this
-            repo to immediate to promote them now.
+            {g.isSnoozed
+              ? `Snoozed until ${g.snoozeLabel}. Unsnooze it from Repositories to bring items back early.`
+              : `New items stay here until the ${g.rhythm} digest is due. Switch this repo to immediate to promote them now.`}
           </p>
         </Collapsible>
       ))}

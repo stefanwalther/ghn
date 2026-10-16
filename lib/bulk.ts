@@ -1,4 +1,4 @@
-const ACTIONS = new Set(["done", "unread", "read"]);
+const ACTIONS = new Set(["done", "unread", "read", "unsubscribe"]);
 
 export function validateBulkInput(
   ids: unknown,

@@ -3,6 +3,8 @@
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Kbd } from "@/components/ui/kbd";
+import { QUICK_SELECTS } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
 
@@ -20,6 +22,20 @@ export interface InboxItem {
   dueLabel: string | null;
 }
 
+const FAILURE_REASONS = new Set(["action_failed", "ci_failed"]);
+
+function reasonTone(reason: string): "destructive" | "merged" | "muted" {
+  if (FAILURE_REASONS.has(reason)) return "destructive";
+  if (reason === "merged") return "merged";
+  return "muted";
+}
+
+function reasonDot(reason: string): string {
+  if (FAILURE_REASONS.has(reason)) return "bg-destructive";
+  if (reason === "merged") return "bg-merged";
+  return "bg-primary";
+}
+
 function ageLabel(createdAt: number): string {
   const mins = Math.max(1, Math.round((Date.now() - createdAt) / 60000));
   if (mins < 60) return `${mins}m ago`;
@@ -31,25 +47,49 @@ function ageLabel(createdAt: number): string {
 export function NotificationList({
   items,
   selected,
+  focusedId,
+  showHints,
   onToggle,
   onToggleAll,
+  onQuickSelect,
 }: {
   items: InboxItem[];
   selected: Set<string>;
+  focusedId?: string;
+  showHints: boolean;
   onToggle: (id: string) => void;
   onToggleAll: () => void;
+  onQuickSelect: (reason: string) => void;
 }) {
   const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
   return (
     <div className="overflow-hidden rounded-lg bg-card shadow-sm">
-      <div className="flex items-center gap-3 border-b border-border/40 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border/40 px-4 py-2">
         <Checkbox
           checked={allSelected}
           onChange={onToggleAll}
           aria-label="Select all visible"
         />
         <span className="text-xs text-muted-foreground">
-          {selected.size > 0 ? `${selected.size} selected` : `${items.length} items`}
+          {items.length} {items.length === 1 ? "item" : "items"}
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          {showHints ? (
+            <span className="mr-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <Kbd>j</Kbd>/<Kbd>k</Kbd> move <Kbd>x</Kbd> select <Kbd>a</Kbd> all
+            </span>
+          ) : null}
+          <span className="text-xs text-muted-foreground">Quick select:</span>
+          {QUICK_SELECTS.map((q) => (
+            <button
+              key={q.value}
+              type="button"
+              onClick={() => onQuickSelect(q.value)}
+              className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {q.label}
+            </button>
+          ))}
         </span>
       </div>
       <ul className="divide-y divide-border/40">
@@ -61,18 +101,18 @@ export function NotificationList({
               id={`notification-${item.id}`}
               className={cn(
                 "flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                item.isRead === 0 && "bg-accent/30"
+                item.isRead === 0 && "bg-accent/30",
+                focusedId === item.id && "ring-2 ring-inset ring-ring"
               )}
               onClick={() => onToggle(item.id)}
               onKeyDown={(e) => {
+                if ((e.target as HTMLElement).tagName === "INPUT") return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onToggle(item.id);
                 }
               }}
               tabIndex={0}
-              role="checkbox"
-              aria-checked={checked}
             >
               <span onClick={(e) => e.stopPropagation()} className="pt-0.5">
                 <Checkbox
@@ -81,10 +121,18 @@ export function NotificationList({
                   aria-label={`Select ${item.subject}`}
                 />
               </span>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "mt-2 h-2 w-2 shrink-0 rounded-full",
+                  item.isRead === 0 ? reasonDot(item.reason) : "bg-transparent"
+                )}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="muted">{item.repositoryName}</Badge>
-                  <Badge variant={item.isRead === 0 ? "default" : "muted"}>
+                  <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
+                  <span className="text-xs text-muted-foreground">{item.repositoryName}</span>
+                  <Badge variant={reasonTone(item.reason)}>
                     {item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}

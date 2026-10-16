@@ -41,6 +41,21 @@ export default function ReposPage() {
     }
   }
 
+  async function setSnooze(id: string, snoozedUntil: number | null) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/repositories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snoozedUntil }),
+      });
+      if (!res.ok) throw new Error("patch failed");
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div>
@@ -54,7 +69,7 @@ export default function ReposPage() {
       {status === "error" ? <ErrorInbox onRetry={load} /> : null}
       {status === "ready"
         ? repos.map((repo) => (
-            <RepoRow key={repo.id} repo={repo} onRhythm={setRhythm} busy={busy} />
+      <RepoRow key={repo.id} repo={repo} onRhythm={setRhythm} onSnooze={setSnooze} busy={busy} />
           ))
         : null}
     </div>

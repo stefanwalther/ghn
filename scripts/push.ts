@@ -25,5 +25,20 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS notifications_repo_idx ON notifications (repository_id);
 CREATE INDEX IF NOT EXISTS notifications_done_idx ON notifications (is_done);
+CREATE TABLE IF NOT EXISTS muted_subjects (
+  repository_id TEXT NOT NULL,
+  subject TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS contribution_days (
+  date TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  fetched_at INTEGER NOT NULL
+);
 `);
+const repoCols = sqlite
+  .query("PRAGMA table_info(repositories)")
+  .all() as { name: string }[];
+if (!repoCols.some((c) => c.name === "snoozed_until")) {
+  sqlite.exec("ALTER TABLE repositories ADD COLUMN snoozed_until INTEGER");
+}
 console.log(JSON.stringify({ pushed: true }));

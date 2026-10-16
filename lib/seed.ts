@@ -1,4 +1,5 @@
-import { notifications, repositories } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { mutedSubjects, notifications, repositories } from "@/db/schema";
 import { computeNextDueAt, type Rhythm } from "@/lib/digest";
 
 interface SeedRepo {
@@ -32,9 +33,22 @@ const SUBJECTS = [
   "Dark mode contrast fix",
   "Keyboard focus audit",
   "Weekly digest summary",
+  "Release pipeline failed on main",
+  "v2.4.0 released",
+  "chore(deps): bump sonner from 2.0.7 to 2.0.8 (#818)",
+  "chore(deps): bump postgres from 3.4.7 to 3.4.9 (#819)",
 ];
 
-const REASONS = ["mention", "review_requested", "ci_failed", "assigned", "subscribed"] as const;
+const REASONS = [
+  "mention",
+  "review_requested",
+  "action_failed",
+  "ci_failed",
+  "release",
+  "merged",
+  "assigned",
+  "subscribed",
+] as const;
 
 function seededRandom(seed: number): () => number {
   let s = seed;
@@ -71,7 +85,13 @@ export async function seedDatabase(now = Date.now()): Promise<{ repositories: nu
     const subject = SUBJECTS[i % SUBJECTS.length];
     if (!subject) continue;
     const reason = REASONS[i % REASONS.length] ?? "subscribed";
-    const ageDays = Math.floor(rand() * 45);
+    const roll = rand();
+    const ageDays =
+      roll < 0.6
+        ? Math.floor(rand() * 30)
+        : roll < 0.85
+          ? 30 + Math.floor(rand() * 300)
+          : 366 + Math.floor(rand() * 200);
     const created = now - ageDays * 24 * 60 * 60 * 1000 - i * 60 * 1000;
     const isRead = rand() > 0.7 ? 1 : 0;
     items.push({
@@ -86,5 +106,17 @@ export async function seedDatabase(now = Date.now()): Promise<{ repositories: nu
     });
   }
   if (items.length > 0) await db.insert(notifications).values(items);
+  const muted = await db.select().from(mutedSubjects);
+  for (const m of muted) {
+    await db
+      .update(notifications)
+      .set({ isDone: 1 })
+      .where(
+        and(
+          eq(notifications.repositoryId, m.repositoryId),
+          eq(notifications.subject, m.subject)
+        )
+      );
+  }
   return { repositories: REPOS.length, notifications: items.length };
 }

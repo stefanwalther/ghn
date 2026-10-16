@@ -27,10 +27,14 @@ Response 200:
 
 ## PATCH /api/repositories/[id]
 
-Changes one repo rhythm. Body:
+Changes one repo rhythm and/or snooze. Body accepts `rhythm` and `snoozedUntil` (null clears):
 
 ```json
 { "rhythm": "monthly" }
+```
+
+```json
+{ "snoozedUntil": 1729600000000 }
 ```
 
 Response 200 returns the updated repo object with recomputed `nextDueAt`.

@@ -21,6 +21,9 @@
   --sidebar-accent-foreground: oklch(0.2077 0.0398 265.7549);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
+  /* App-local semantic token: GitHub-parity purple for merged PRs.
+     w5r has no purple; scoped to status badges and dots only. */
+  --merged: oklch(0.52 0.22 292);
   --radius: 1rem;
   --font-sans: Inter, system-ui, sans-serif;
   --font-mono: JetBrains Mono, monospace;
@@ -36,7 +39,10 @@
   --secondary: oklch(0.2795 0.0368 260.031);
   --secondary-foreground: oklch(0.9842 0.0034 247.8575);
   --muted: oklch(0.2795 0.0368 260.031);
-  --muted-foreground: oklch(0.7118 0.133 158.5092);
+  /* App-local readability override: registry muted-foreground is a
+     saturated mint that strains in long triage lists. Near-neutral
+     slate at the same lightness keeps AA with less chroma noise. */
+  --muted-foreground: oklch(0.78 0.025 260);
   --accent: oklch(0.3925 0.0896 152.5353);
   --accent-foreground: oklch(0.8871 0.2122 128.5041);
   --border: oklch(0.2795 0.0368 260.031);
@@ -47,6 +53,7 @@
   --sidebar-accent-foreground: oklch(0.9842 0.0034 247.8575);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
+  --merged: oklch(0.72 0.18 295);
 }
 
 @theme inline {
@@ -70,6 +77,7 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-merged: var(--merged);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
