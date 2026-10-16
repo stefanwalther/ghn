@@ -19,6 +19,18 @@ describe("bulk validation", () => {
     });
   });
 
+  test("accepts unsubscribe and read", () => {
+    expect(validateBulkInput(["n_005"], "unsubscribe")).toEqual({
+      ok: true,
+      ids: ["n_005"],
+      action: "unsubscribe",
+    });
+    expect(validateBulkInput(["n_005"], "read")).toEqual({
+      ok: true,
+      ids: ["n_005"],
+      action: "read",
+    });
+  });
   test("accepts unread for done-to-unread re-entry", () => {
     const result = validateBulkInput(["n_005"], "unread");
     expect(result.ok).toBe(true);

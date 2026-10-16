@@ -1,32 +1,32 @@
 "use client";
 
 import { Select } from "@/components/ui/select";
+import { AGE_FILTERS } from "@/lib/filters";
 import type { InboxFilters } from "@/lib/view-state";
 
 export function InboxFilters({
   filters,
-  repoOptions,
   onChange,
 }: {
   filters: InboxFilters;
-  repoOptions: { id: string; fullName: string }[];
   onChange: (next: InboxFilters) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="text-xs text-muted-foreground" htmlFor="repo-filter">
-        Repository
+      <label className="text-xs text-muted-foreground" htmlFor="age-filter">
+        Age
       </label>
       <Select
-        id="repo-filter"
-        value={filters.repo}
-        onChange={(e) => onChange({ ...filters, repo: e.target.value })}
-        aria-label="Filter by repository"
+        id="age-filter"
+        value={filters.age}
+        onChange={(e) =>
+          onChange({ ...filters, age: e.target.value as InboxFilters["age"] })
+        }
+        aria-label="Filter by age"
       >
-        <option value="all">All repositories</option>
-        {repoOptions.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.fullName}
+        {AGE_FILTERS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
           </option>
         ))}
       </Select>

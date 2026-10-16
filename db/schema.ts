@@ -11,6 +11,7 @@ export const repositories = sqliteTable(
       .$type<"immediate" | "weekly" | "biweekly" | "monthly">(),
     lastPromotedAt: integer("last_promoted_at"),
     nextDueAt: integer("next_due_at"),
+    snoozedUntil: integer("snoozed_until"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => ({ rhythmIdx: index("repositories_rhythm_idx").on(t.rhythm) })
@@ -29,7 +30,10 @@ export const notifications = sqliteTable(
       .$type<
         | "mention"
         | "review_requested"
+        | "action_failed"
         | "ci_failed"
+        | "release"
+        | "merged"
         | "assigned"
         | "subscribed"
       >(),
@@ -48,3 +52,14 @@ export type Repository = typeof repositories.$inferSelect;
 export type NewRepository = typeof repositories.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+
+export const mutedSubjects = sqliteTable("muted_subjects", {
+  repositoryId: text("repository_id").notNull(),
+  subject: text("subject").notNull(),
+});
+
+export const contributionDays = sqliteTable("contribution_days", {
+  date: text("date").primaryKey(),
+  count: integer("count").notNull(),
+  fetchedAt: integer("fetched_at").notNull(),
+});

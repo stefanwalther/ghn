@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
+import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
+import { matchAge, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
 
 export const dynamic = "force-dynamic";
+
+const AGES = ["all", "24h", "48h", "7d", "14d", "30d", "year", "older"] as const;
 
 export async function GET(request: Request) {
   const { db } = await import("@/db/client");
   const url = new URL(request.url);
   const repoFilter = url.searchParams.get("repo") || "all";
   const stateFilter = url.searchParams.get("state") || "unread";
+  const typeFilter = url.searchParams.get("type") || "all";
+  const rawAge = url.searchParams.get("age") || "all";
+  const ageFilter: AgeFilter = (AGES as readonly string[]).includes(rawAge)
+    ? (rawAge as AgeFilter)
+    : "all";
   const now = Date.now();
 
   const repos = await db.select().from(repositories);
@@ -32,6 +41,60 @@ export async function GET(request: Request) {
   if (stateFilter === "done" && repoFilter !== "all") {
     filtered = filtered.filter((n) => n.repositoryId === repoFilter);
   }
+  if (typeFilter !== "all") {
+    filtered = filtered.filter((n) => n.reason === typeFilter);
+  }
+  if (ageFilter !== "all") {
+    filtered = filtered.filter((n) => matchAge(n.createdAt, now, ageFilter));
+  }
+
+  const matchState = (isDone: number) =>
+    stateFilter === "done" ? isDone === 1 : stateFilter === "all" ? true : isDone === 0;
+  const matchBase = (
+    n: (typeof rows)[number],
+    ignore: "type" | "repo" | "none"
+  ) =>
+    matchState(n.isDone) &&
+    (ignore === "repo" || repoFilter === "all" || n.repositoryId === repoFilter) &&
+    (ignore === "type" || typeFilter === "all" || n.reason === typeFilter) &&
+    matchAge(n.createdAt, now, ageFilter);
+
+  const placement = (n: (typeof rows)[number]): "main" | "quiet" => {
+    if (n.isDone === 1) return "main";
+    const repo = reposById.get(n.repositoryId);
+    if (!repo) return "main";
+    if (isSnoozed(repo.snoozedUntil, now)) return "quiet";
+    return isDue(repo, now) ? "main" : "quiet";
+  };
+
+  const typeCounts = new Map<string, number>();
+  for (const n of rows) {
+    if (!matchBase(n, "type")) continue;
+    if (placement(n) !== "main") continue;
+    typeCounts.set(n.reason, (typeCounts.get(n.reason) ?? 0) + 1);
+  }
+  const repoFacets = new Map<string, { main: number; quiet: number }>();
+  for (const n of rows) {
+    if (!matchBase(n, "repo")) continue;
+    const entry = repoFacets.get(n.repositoryId) ?? { main: 0, quiet: 0 };
+    entry[placement(n)] += 1;
+    repoFacets.set(n.repositoryId, entry);
+  }
+
+  const facets = {
+    types: TYPE_FILTERS.filter((t) => t.value !== "all").map((t) => ({
+      value: t.value,
+      label: t.label,
+      count: typeCounts.get(t.value) ?? 0,
+    })),
+    repos: repos.map((r) => ({
+      id: r.id,
+      fullName: r.fullName,
+      main: repoFacets.get(r.id)?.main ?? 0,
+      quiet: repoFacets.get(r.id)?.quiet ?? 0,
+      isSnoozed: isSnoozed(r.snoozedUntil, now),
+    })),
+  };
 
   filtered.sort((a, b) => b.createdAt - a.createdAt);
 
@@ -59,7 +122,8 @@ export async function GET(request: Request) {
       continue;
     }
     const repo = reposById.get(n.repositoryId);
-    const due = repo ? isDue(repo, now) : true;
+    const snoozed = repo ? isSnoozed(repo.snoozedUntil, now) : false;
+    const due = (repo ? isDue(repo, now) : true) && !snoozed;
     const item = {
       id: n.id,
       repositoryId: n.repositoryId,
@@ -87,6 +151,7 @@ export async function GET(request: Request) {
 
   const collapsedSection = [...collapsedByRepo.entries()].map(([id, entry]) => {
     const repo = reposById.get(id);
+    const snoozed = repo ? isSnoozed(repo.snoozedUntil, now) : false;
     return {
       repositoryId: id,
       repositoryName: repo?.fullName ?? id,
@@ -95,8 +160,10 @@ export async function GET(request: Request) {
       nextDueLabel: formatDueDate(repo?.nextDueAt ?? null),
       pendingCount: (entry.items as unknown[]).length,
       items: stateFilter === "done" ? [] : [],
+      isSnoozed: snoozed,
+      snoozeLabel: formatSnoozeUntil(repo?.snoozedUntil ?? null, now),
     };
   });
 
-  return NextResponse.json({ now, mainFlow, collapsedSection });
+  return NextResponse.json({ now, mainFlow, collapsedSection, facets });
 }

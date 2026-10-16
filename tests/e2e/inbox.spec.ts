@@ -6,7 +6,8 @@ test.describe("quiet notifications inbox", () => {
   }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
-    await expect(page.getByLabel("Filter by repository")).toBeVisible();
+    await expect(page.getByText("Filters", { exact: true })).toBeVisible();
+    await expect(page.getByText("Repositories", { exact: true }).first()).toBeVisible();
 
     const firstCheckbox = page.getByLabel("Select all visible");
     await expect(firstCheckbox).toBeVisible();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { repositories } from "@/db/schema";
 import { computeNextDueAt, formatDueDate, type Rhythm } from "@/lib/digest";
+import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
 
 const RHYTHMS: Rhythm[] = ["immediate", "weekly", "biweekly", "monthly"];
 
@@ -15,33 +16,63 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const rhythm: unknown = body?.rhythm;
-  if (typeof rhythm !== "string" || !(RHYTHMS as string[]).includes(rhythm)) {
+  const snoozedUntil: unknown = body?.snoozedUntil;
+  const now = Date.now();
+  if (rhythm !== undefined && (typeof rhythm !== "string" || !(RHYTHMS as string[]).includes(rhythm))) {
     return NextResponse.json(
       { error: "`rhythm` must be `immediate`, `weekly`, `biweekly`, or `monthly`" },
       { status: 400 }
     );
   }
+  if (
+    snoozedUntil !== undefined &&
+    snoozedUntil !== null &&
+    (typeof snoozedUntil !== "number" || snoozedUntil <= now)
+  ) {
+    return NextResponse.json(
+      { error: "`snoozedUntil` must be null or a future timestamp" },
+      { status: 400 }
+    );
+  }
+  if (rhythm === undefined && snoozedUntil === undefined) {
+    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+  }
   const rows = await db.select().from(repositories).where(eq(repositories.id, id));
   const repo = rows[0];
   if (!repo) return NextResponse.json({ error: "unknown repository" }, { status: 404 });
 
-  const now = Date.now();
-  const nextDueAt =
-    rhythm === "immediate" ? null : computeNextDueAt(rhythm as Rhythm, now);
-  const lastPromotedAt = rhythm === "immediate" ? now : repo.lastPromotedAt;
+  const rhythmChanged = rhythm !== undefined && rhythm !== repo.rhythm;
+  const nextRhythm = (rhythm as Rhythm) ?? repo.rhythm;
+  const nextDueAt = rhythmChanged
+    ? nextRhythm === "immediate"
+      ? null
+      : computeNextDueAt(nextRhythm, now)
+    : repo.nextDueAt;
+  const lastPromotedAt =
+    rhythmChanged && nextRhythm === "immediate" ? now : repo.lastPromotedAt;
+  const nextSnoozedUntil =
+    snoozedUntil === undefined ? repo.snoozedUntil : (snoozedUntil as number | null);
 
   await db
     .update(repositories)
-    .set({ rhythm: rhythm as Rhythm, nextDueAt, lastPromotedAt })
+    .set({
+      rhythm: nextRhythm,
+      nextDueAt,
+      lastPromotedAt,
+      snoozedUntil: nextSnoozedUntil,
+    })
     .where(eq(repositories.id, id));
 
   return NextResponse.json({
     id,
     fullName: repo.fullName,
     ownership: repo.ownership,
-    rhythm,
+    rhythm: nextRhythm,
     lastPromotedAt,
     nextDueAt,
     nextDueLabel: formatDueDate(nextDueAt),
+    snoozedUntil: nextSnoozedUntil,
+    isSnoozed: isSnoozed(nextSnoozedUntil, now),
+    snoozeLabel: formatSnoozeUntil(nextSnoozedUntil, now),
   });
 }

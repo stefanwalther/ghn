@@ -2,7 +2,7 @@
 
 **Base**: Next.js App Router Route Handlers, JSON only. All timestamps are unix ms.
 
-## GET /api/notifications?repo=<id|all>&state=<unread|all|done>
+## GET /api/notifications?repo=<id|all>&state=<unread|all|done>&type=<reason|all>&age=<24h|48h|7d|14d|30d|year|older|all>
 
 Returns grouped inbox for the current digest clock.
 
@@ -43,6 +43,7 @@ Rules:
 
 - `mainFlow` holds immediate plus due digest items with `isDone = 0`.
 - `collapsedSection` holds one entry per non-due digest repo with counts. Item previews load on expand via the same endpoint with `?repo=<id>`.
+- `facets` drives the left rail: `types` counts main-flow items per reason ignoring the active type filter, `repos` counts main and quiet items per repository ignoring the active repo filter.
 - Empty inbox returns empty arrays, UI renders the w5r empty state.
 
 ## POST /api/notifications/bulk
@@ -55,7 +56,7 @@ Request:
 { "ids": ["n_001", "n_002"], "action": "done" }
 ```
 
-`action` is `done`, `unread`, or `read`.
+`action` is `done`, `unsubscribe`, `read`, or `unread`. Unsubscribe marks the items done and records their repository and subject as muted, so reseeds keep them out of the inbox.
 
 Response 200:
 

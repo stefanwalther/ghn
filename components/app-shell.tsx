@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Bell, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
+import { ContributionsChip } from "@/components/contributions-chip";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -81,6 +82,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="min-w-0 flex-1 text-sm text-muted-foreground">
             {pathname === "/repos" ? "Digest settings per repository" : "Triage with fewer clicks"}
           </div>
+          <ContributionsChip />
           <button
             type="button"
             aria-label="Toggle theme"

@@ -71,17 +71,18 @@ A developer who jumps to GitHub to read or comment never loses their place: ever
 ### Functional Requirements
 
 - **FR-001**: System MUST present a unified inbox of notifications showing repository, subject, reason, and age for each item without requiring per-item navigation.
-- **FR-002**: System MUST let users filter the inbox by repository and by read/done state.
+- **FR-002**: System MUST let users filter the inbox by repository, by notification type (mention, review requested, action failed, CI failed, release, merged, assigned, subscribed), by age bucket (last 24 hours, last 48 hours, last 7/14/30 days, this year, older than a year, all time), and by read/done state.
 - **FR-003**: Users MUST be able to mark one or multiple notifications as done and as unread from the list view.
 - **FR-004**: System MUST let users open the source thread for any notification from the list.
 - **FR-005**: System MUST preserve inbox context (filter and position) when the user returns from a source thread.
-- **FR-006**: Users MUST be able to set a per-repository update rhythm of immediate, weekly, every-2-weeks, or monthly.
+- **FR-006**: Users MUST be able to set a per-repository update rhythm of immediate, weekly, every-2-weeks, or monthly, plus a temporary snooze (in 1 hour, in 3 hours, this evening, tomorrow morning, next week, or a custom time) that hides the repo until it expires without changing the rhythm.
 - **FR-007**: System MUST keep non-due digest items out of the main triage flow in a dimmed collapsed section at the bottom, showing a pending count per repository (decision Q2: Option C).
 - **FR-008**: System MUST promote a digest group into the main flow when it becomes due, with a visible due indicator and next due date.
 - **FR-009**: System MUST persist per-repository digest settings and pending state across restarts using local storage.
 - **FR-010**: System MUST display repository-level digest status (rhythm, next due date, pending count) in the UI.
 - **FR-011**: System MUST provide a single-click return path from a source thread context back to the prior inbox state ("Back to notifications").
-- **FR-012**: System MUST provide bulk checkbox triage with one-click Done and Unread from the list view (decision Q1: Option A). Keyboard shortcuts and inline preview are out of MVP scope and may layer on later without changing digest logic.
+- **FR-015**: System MUST display the authenticated user's GitHub contribution count for the current day, fetched via `gh`, cached locally per day, always visible in the header, with a quiet fallback when offline or unauthenticated.
+- **FR-012**: System MUST provide bulk checkbox triage with one-click Done and Unread from the list view (decision Q1: Option A), plus keyboard triage (j/k move, x select, e done, Shift+U unsubscribe, u unread, r read, o open, a select all, Esc clear, ? help) that never fires while typing, with key hints revealed while holding Alt. Inline preview remains out of scope.
 - **FR-013**: System MUST render non-due digests as a dimmed collapsed section at the bottom of the same inbox view (decision Q2: Option C), not as a separate tab.
 - **FR-014**: System MUST source MVP notification data from local mocked seed data only (decision Q3: Option A). Live GitHub read is an explicit follow-up and MUST NOT add a second data path to the MVP.
 

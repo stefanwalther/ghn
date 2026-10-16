@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, count, eq } from "drizzle-orm";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
+import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,9 @@ export async function GET() {
       nextDueLabel: formatDueDate(repo.nextDueAt),
       pendingCount: pendingCount ?? 0,
       isDue: due,
+      snoozedUntil: repo.snoozedUntil,
+      isSnoozed: isSnoozed(repo.snoozedUntil, now),
+      snoozeLabel: formatSnoozeUntil(repo.snoozedUntil, now),
     });
   }
   return NextResponse.json({ repositories: result });
