@@ -24,8 +24,16 @@ export interface InboxItem {
 
 const FAILURE_REASONS = new Set(["action_failed", "ci_failed"]);
 
-function reasonTone(reason: string): "destructive" | "muted" {
-  return FAILURE_REASONS.has(reason) ? "destructive" : "muted";
+function reasonTone(reason: string): "destructive" | "merged" | "muted" {
+  if (FAILURE_REASONS.has(reason)) return "destructive";
+  if (reason === "merged") return "merged";
+  return "muted";
+}
+
+function reasonDot(reason: string): string {
+  if (FAILURE_REASONS.has(reason)) return "bg-destructive";
+  if (reason === "merged") return "bg-merged";
+  return "bg-primary";
 }
 
 function ageLabel(createdAt: number): string {
@@ -119,11 +127,7 @@ export function NotificationList({
                 aria-hidden="true"
                 className={cn(
                   "mt-2 h-2 w-2 shrink-0 rounded-full",
-                  item.isRead === 0
-                    ? FAILURE_REASONS.has(item.reason)
-                      ? "bg-destructive"
-                      : "bg-primary"
-                    : "bg-transparent"
+                  item.isRead === 0 ? reasonDot(item.reason) : "bg-transparent"
                 )}
               />
               <div className="min-w-0 flex-1">
