@@ -15,7 +15,7 @@ const NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = React.useState(true);
 
   React.useEffect(() => {
@@ -86,12 +86,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             aria-label="Toggle theme"
-            aria-pressed={theme === "dark"}
+            aria-pressed={resolvedTheme === "dark"}
             title="Toggle theme (Cmd+F12)"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {theme === "dark" ? (
+            {resolvedTheme === "dark" ? (
               <Sun className="h-4 w-4" aria-hidden />
             ) : (
               <Moon className="h-4 w-4" aria-hidden />
