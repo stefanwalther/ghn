@@ -16,14 +16,17 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
-  const [open, setOpen] = React.useState(
-    () => typeof window === "undefined" || window.innerWidth >= 768
-  );
+  // Render the server-consistent header until mounted: theme resolution and
+  // viewport width are client-only and must not fork the first render.
+  const [mounted, setMounted] = React.useState(false);
+  const [open, setOpen] = React.useState(true);
 
   React.useEffect(() => {
+    setMounted(true);
     try {
       const saved = localStorage.getItem("quiet-notifications:sidebar");
       if (saved === "closed") setOpen(false);
+      else if (saved !== "open" && window.innerWidth < 768) setOpen(false);
     } catch {
       // ignore
     }
@@ -98,12 +101,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             aria-label="Toggle theme"
-            aria-pressed={resolvedTheme === "dark"}
+            aria-pressed={mounted && resolvedTheme === "dark"}
             title="Toggle theme (Cmd+F12)"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {resolvedTheme === "dark" ? (
+            {mounted && resolvedTheme === "dark" ? (
               <Sun className="h-4 w-4" aria-hidden />
             ) : (
               <Moon className="h-4 w-4" aria-hidden />

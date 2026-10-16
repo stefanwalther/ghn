@@ -17,6 +17,7 @@ export interface InboxItem {
   createdAt: number;
   isRead: number;
   isDone: number;
+  localUnread?: boolean;
   sourceUrl: string;
   due: boolean;
   dueLabel: string | null;
@@ -136,6 +137,14 @@ export function NotificationList({
                     {item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
+                  {item.localUnread ? (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title="Unread is local only; GitHub has no mark-unread endpoint"
+                    >
+                      local only
+                    </span>
+                  ) : null}
                   <span className="font-mono text-xs text-muted-foreground">
                     {ageLabel(item.createdAt)}
                   </span>

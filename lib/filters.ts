@@ -22,13 +22,21 @@ export const AGE_FILTERS: { value: AgeFilter; label: string }[] = [
 export const TYPE_FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "All types" },
   { value: "mention", label: "Mention" },
+  { value: "team_mention", label: "Team mention" },
   { value: "review_requested", label: "Review requested" },
+  { value: "assign", label: "Assigned" },
+  { value: "author", label: "Author" },
+  { value: "comment", label: "Comment" },
+  { value: "ci_activity", label: "CI activity" },
   { value: "action_failed", label: "Action failed" },
   { value: "ci_failed", label: "CI failed" },
   { value: "release", label: "Release" },
   { value: "merged", label: "Merged" },
-  { value: "assigned", label: "Assigned" },
   { value: "subscribed", label: "Subscribed" },
+  { value: "manual", label: "Manual" },
+  { value: "invitation", label: "Invitation" },
+  { value: "state_change", label: "State change" },
+  { value: "security_advisory", label: "Security advisory" },
 ];
 
 export const QUICK_SELECTS: { value: string; label: string }[] = [

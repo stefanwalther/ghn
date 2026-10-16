@@ -40,6 +40,13 @@ function InboxView() {
   const [notice, setNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = React.useState(false);
+  const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
+  const [stale, setStale] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+  const [pollSecs, setPollSecs] = React.useState(60);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const [conn, setConn] = React.useState<{ connected: boolean; reason?: string } | null>(null);
+  const [syncError, setSyncError] = React.useState<string | null>(null);
   const loadedRef = React.useRef(false);
   const reqRef = React.useRef(0);
 
@@ -59,6 +66,8 @@ function InboxView() {
       setCollapsed(data.collapsedSection ?? []);
       setTypeFacets(data.facets?.types ?? []);
       setRepoFacets(data.facets?.repos ?? []);
+      setLastSyncAt(typeof data.lastSyncAt === "number" ? data.lastSyncAt : null);
+      setStale(data.stale === true);
       loadedRef.current = true;
       setStatus("ready");
       setNotice(null);
@@ -94,6 +103,82 @@ function InboxView() {
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     );
   }
+
+  React.useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/connection", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!cancelled && data) {
+          setConn({ connected: data.connected === true, reason: data.reason });
+        }
+      } catch {
+        // Connection probe is best-effort; the inbox still loads from cache.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function formatSyncTime(ts: number): string {
+    return new Date(ts).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function syncErrorMessage(reason: unknown): string {
+    if (reason === "auth") return "GitHub access missing. Run `gh auth login` on the server and refresh.";
+    if (reason === "rate_limited") return "GitHub rate limit reached. Retry shortly; cached inbox shown.";
+    if (reason === "network") return "GitHub unreachable. Showing cached inbox.";
+    return "Sync failed. Showing last loaded data.";
+  }
+
+  async function refresh() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => null);
+      if (data && typeof data.pollIntervalSecs === "number") setPollSecs(data.pollIntervalSecs);
+      if (data && typeof data.lastSyncAt === "number") setLastSyncAt(data.lastSyncAt);
+      if (data && data.fresh === false) {
+        setStale(true);
+        setSyncError(syncErrorMessage(data.reason));
+      } else {
+        setStale(false);
+        setSyncError(null);
+      }
+    } catch {
+      setSyncError("Sync failed. Showing last loaded data.");
+    } finally {
+      setSyncing(false);
+      try {
+        const connRes = await fetch("/api/connection", { cache: "no-store" });
+        const connData = await connRes.json().catch(() => null);
+        if (connData) {
+          setConn({ connected: connData.connected === true, reason: connData.reason });
+        }
+      } catch {
+        // Best-effort; banner state keeps its previous value.
+      }
+    }
+    await load();
+  }
+
+  const nextAllowedAt = lastSyncAt !== null ? lastSyncAt + pollSecs * 1000 : 0;
+  const inPollWindow = lastSyncAt !== null && nowMs < nextAllowedAt && !syncing;
+  const countdownSecs = inPollWindow ? Math.ceil((nextAllowedAt - nowMs) / 1000) : 0;
 
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
@@ -195,12 +280,12 @@ function InboxView() {
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
         if (helpOpen) setHelpOpen(false);
         else setSelected(new Set());
         return;
       }
+      if (isEditableTarget(e.target)) return;
       if (helpOpen) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const focusedId = focusIdx !== null ? items[focusIdx]?.id : undefined;
@@ -277,15 +362,22 @@ function InboxView() {
           <Button
             variant="ghost"
             size="sm"
-            title="Refresh inbox"
-            aria-label="Refresh inbox"
-            onClick={() => load()}
+            title={inPollWindow ? `Next refresh in ${countdownSecs}s` : "Refresh from GitHub"}
+            aria-label={inPollWindow ? `Next refresh in ${countdownSecs} seconds` : "Refresh inbox from GitHub"}
+            onClick={() => void refresh()}
+            disabled={syncing || refreshing || inPollWindow}
           >
             <RefreshCw
-              className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+              className={syncing || refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
               aria-hidden
             />
           </Button>
+          {lastSyncAt !== null ? (
+            <span className="text-xs text-muted-foreground" title={`Poll interval ${pollSecs}s`}>
+              {stale ? "Stale · " : ""}Synced {formatSyncTime(lastSyncAt)}
+              {inPollWindow ? ` · ${countdownSecs}s` : ""}
+            </span>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
@@ -296,16 +388,18 @@ function InboxView() {
           >
             Back to inbox top
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={async () => {
-              await fetch("/api/notifications/seed", { method: "POST" });
-              await load();
-            }}
-          >
-            Reseed demo data
-          </Button>
+          {lastSyncAt === null ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                await fetch("/api/notifications/seed", { method: "POST" });
+                await load();
+              }}
+            >
+              Reseed demo data
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-col gap-4 lg:flex-row">
@@ -332,6 +426,48 @@ function InboxView() {
             <p role="alert" className="text-xs text-destructive">
               {notice}
             </p>
+          ) : null}
+          {conn && !conn.connected ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/50 bg-card px-4 py-3 shadow-sm"
+            >
+              <p className="flex-1 text-sm">
+                <span className="font-medium">GitHub disconnected.</span>{" "}
+                <span className="text-muted-foreground">
+                  Cached inbox below
+                  {lastSyncAt !== null ? ` · last synced ${formatSyncTime(lastSyncAt)}` : ""}.
+                  Run `gh auth login` on the server, then retry.
+                </span>
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refresh()}
+                disabled={syncing}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          {conn?.connected !== false && (stale || syncError) ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-input bg-card px-4 py-3 shadow-sm"
+            >
+              <p className="flex-1 text-sm text-muted-foreground">
+                {syncError ?? "Data may be stale."}
+                {lastSyncAt !== null ? ` Last synced ${formatSyncTime(lastSyncAt)}.` : ""}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refresh()}
+                disabled={syncing || inPollWindow}
+              >
+                Retry
+              </Button>
+            </div>
           ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
           {status === "error" ? <ErrorInbox onRetry={load} /> : null}
