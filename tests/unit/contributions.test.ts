@@ -39,10 +39,10 @@ describe("contributions", () => {
     expect(pickDay({}, "2026-10-16")).toBeNull();
   });
 
-  test("cache freshness: past days forever, today one hour", () => {
+  test("cache freshness: past days forever, today five minutes", () => {
     const now = 1000;
     expect(isFresh(0, now, "2026-10-15", "2026-10-16")).toBe(true);
-    expect(isFresh(now - 30 * 60 * 1000, now, "2026-10-16", "2026-10-16")).toBe(true);
-    expect(isFresh(now - 2 * 3600 * 1000, now, "2026-10-16", "2026-10-16")).toBe(false);
+    expect(isFresh(now - 4 * 60 * 1000, now, "2026-10-16", "2026-10-16")).toBe(true);
+    expect(isFresh(now - 6 * 60 * 1000, now, "2026-10-16", "2026-10-16")).toBe(false);
   });
 });

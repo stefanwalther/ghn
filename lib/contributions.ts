@@ -25,7 +25,7 @@ export function isFresh(
   now: number,
   date: string,
   today: string,
-  ttlMs = 3600 * 1000
+  ttlMs = 5 * 60 * 1000
 ): boolean {
   if (date !== today) return true;
   return now - fetchedAt < ttlMs;
