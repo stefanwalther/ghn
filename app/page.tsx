@@ -13,7 +13,7 @@ import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isEditableTarget } from "@/lib/shortcuts";
-import { isReleaseItem } from "@/lib/filters";
+import { isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -210,6 +210,14 @@ function InboxView() {
               isReleaseItem({ reason: i.reason, subject: i.subject, subjectType: i.subjectType ?? null })
             )
             .map((i) => i.id)
+        )
+      );
+      return;
+    }
+    if (reason === "merged") {
+      setSelected(
+        new Set(
+          items.filter((i) => isMergedItem({ reason: i.reason, prMerged: i.prMerged ?? false })).map((i) => i.id)
         )
       );
       return;

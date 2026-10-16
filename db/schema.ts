@@ -28,6 +28,7 @@ export const notifications = sqliteTable(
     subject: text("subject").notNull(),
     subjectType: text("subject_type"),
     reason: text("reason").notNull(),
+    prMerged: integer("pr_merged").notNull().default(0),
     createdAt: integer("created_at").notNull(),
     githubUpdatedAt: integer("github_updated_at"),
     isRead: integer("is_read").notNull().default(0),
