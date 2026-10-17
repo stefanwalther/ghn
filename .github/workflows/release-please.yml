@@ -1,0 +1,31 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update release pull request
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Run CI on the release pull request
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          ref="$(jq -r '.headBranchName' <<<"${RELEASE_PR}")"
+          gh workflow run ci.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "${ref}"
