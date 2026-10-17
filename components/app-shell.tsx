@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, Gauge, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
 import { Kbd } from "@/components/ui/kbd";
@@ -13,6 +13,7 @@ import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
 const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
   { href: "/repos", label: "Repositories", icon: Settings2 },
+  { href: "/rate-limits", label: "Rate limits", icon: Gauge },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -140,7 +141,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </span>
           <div className="min-w-0 flex-1 text-sm text-muted-foreground">
-            {pathname === "/repos" ? "Digest settings per repository" : "Triage with fewer clicks"}
+            {pathname === "/repos"
+              ? "Digest settings per repository"
+              : pathname === "/rate-limits"
+                ? "GitHub API buckets from response headers"
+                : "Triage with fewer clicks"}
           </div>
           <ContributionsChip />
           <button
