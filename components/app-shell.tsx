@@ -6,7 +6,9 @@ import { useTheme } from "next-themes";
 import { Bell, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
+import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
 
 const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
@@ -20,6 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // viewport width are client-only and must not fork the first render.
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(true);
+  const [showHints, setShowHints] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
@@ -45,6 +48,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return !v;
     });
   }
+
+  const toggleRef = React.useRef(toggleSidebar);
+  toggleRef.current = toggleSidebar;
+
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (isAltHintKey(e)) {
+        setShowHints(true);
+        // Prevent the browser from shifting focus to its own menu while
+        // hints are visible (Windows Alt behavior).
+        e.preventDefault();
+        return;
+      }
+      if (isToggleSidebarEvent(e)) {
+        e.preventDefault();
+        toggleRef.current();
+      }
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (isAltHintKey(e) || !e.altKey) setShowHints(false);
+    }
+    function onBlur() {
+      setShowHints(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -84,16 +120,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 px-4 py-3">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label="Toggle sidebar"
-            title="Toggle sidebar (Cmd+B)"
-            onClick={toggleSidebar}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            ☰
-          </button>
+          <span className="relative inline-flex">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label="Toggle sidebar"
+              title="Toggle sidebar (Cmd+B)"
+              onClick={toggleSidebar}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
+            {showHints ? (
+              <Kbd
+                className="pointer-events-none absolute -top-2 -right-3 shadow-sm"
+              >
+                <span aria-hidden="true">⌘B</span>
+              </Kbd>
+            ) : null}
+          </span>
           <div className="min-w-0 flex-1 text-sm text-muted-foreground">
             {pathname === "/repos" ? "Digest settings per repository" : "Triage with fewer clicks"}
           </div>

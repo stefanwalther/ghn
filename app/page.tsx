@@ -14,7 +14,7 @@ import { NotificationList, type InboxItem } from "@/components/inbox/notificatio
 import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { isEditableTarget } from "@/lib/shortcuts";
+import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { copyText } from "@/lib/clipboard";
 import { isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
@@ -308,10 +308,13 @@ function InboxView() {
 
   React.useEffect(() => {
     function onAltDown(e: KeyboardEvent) {
-      if (e.key === "Alt") setShowHints(true);
+      if (isAltHintKey(e)) {
+        setShowHints(true);
+        e.preventDefault();
+      }
     }
     function onAltUp(e: KeyboardEvent) {
-      if (e.key === "Alt") setShowHints(false);
+      if (isAltHintKey(e) || !e.altKey) setShowHints(false);
     }
     function onBlur() {
       setShowHints(false);
