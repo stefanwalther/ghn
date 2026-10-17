@@ -12,6 +12,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { key: "u", label: "Unread", description: "Mark selection unread (or the focused row)" },
   { key: "r", label: "Read", description: "Mark selection read (or the focused row)" },
   { key: "o", label: "Open", description: "Open the focused thread in a new tab" },
+  { key: "c", label: "Copy", description: "Copy the focused thread link" },
   { key: "d", label: "Drawer", description: "Open the focused thread in the side drawer" },
   { key: "a", label: "All", description: "Select or clear all visible rows" },
   { key: "Cmd+B", label: "Sidebar", description: "Show or hide the main menu" },

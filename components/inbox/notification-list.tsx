@@ -57,6 +57,7 @@ export function NotificationList({
   onToggleAll,
   onQuickSelect,
   onMenuAction,
+  onOpen,
 }: {
   items: InboxItem[];
   selected: Set<string>;
@@ -66,6 +67,7 @@ export function NotificationList({
   onToggleAll: () => void;
   onQuickSelect: (reason: string) => void;
   onMenuAction: (item: InboxItem, action: ItemMenuAction) => void;
+  onOpen: (item: InboxItem) => void;
 }) {
   const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
   return (
@@ -112,34 +114,44 @@ export function NotificationList({
                 item.isRead === 0 && "bg-accent/30",
                 focusedId === item.id && "ring-2 ring-inset ring-ring"
               )}
-              onClick={() => onToggle(item.id)}
+              onClick={() => onOpen(item)}
               onKeyDown={(e) => {
                 if ((e.target as HTMLElement).tagName === "INPUT") return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onToggle(item.id);
+                  onOpen(item);
                 }
               }}
               tabIndex={0}
             >
-              <span onClick={(e) => e.stopPropagation()} className="pt-0.5">
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle(item.id);
+                }}
+                title={`Select ${item.subject}`}
+                className="flex items-start gap-3 self-stretch py-0.5 pr-3"
+              >
                 <Checkbox
                   checked={checked}
-                  onChange={() => onToggle(item.id)}
+                  onChange={() => {}}
                   aria-label={`Select ${item.subject}`}
                 />
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "mt-2 h-2 w-2 shrink-0 rounded-full",
+                    item.isRead === 0 ? (merged ? "bg-merged" : reasonDot(item.reason)) : "bg-transparent"
+                  )}
+                />
               </span>
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "mt-2 h-2 w-2 shrink-0 rounded-full",
-                  item.isRead === 0 ? (merged ? "bg-merged" : reasonDot(item.reason)) : "bg-transparent"
-                )}
-              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
                   <span className="text-xs text-muted-foreground">{item.repositoryName}</span>
+                  {item.subjectType === "PullRequest" ? (
+                    <Badge variant="outline">PR</Badge>
+                  ) : null}
                   <Badge variant={tone}>
                     {merged ? "merged" : item.reason.replace("_", " ")}
                   </Badge>
