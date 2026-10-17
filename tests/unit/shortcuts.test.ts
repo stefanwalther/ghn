@@ -4,7 +4,7 @@ import { SHORTCUTS, isEditableTarget } from "@/lib/shortcuts";
 describe("shortcuts", () => {
   test("help lists the core triage keys", () => {
     const keys = SHORTCUTS.map((s) => s.key);
-    for (const k of ["j / k", "x", "e", "Shift+U", "u", "r", "o", "d", "a", "Esc", "?"]) {
+    for (const k of ["j / k", "x", "e", "Shift+U", "u", "r", "o", "d", "c", "a", "Esc", "?"]) {
       expect(keys).toContain(k);
     }
   });

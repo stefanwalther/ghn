@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { BellOff, Check, ExternalLink, Mail, MailOpen, MoreHorizontal, PanelRight } from "lucide-react";
+import { BellOff, Check, ExternalLink, Link2, Mail, MailOpen, MoreHorizontal, PanelRight } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
 import type { BulkAction } from "@/components/inbox/bulk-bar";
 import type { InboxItem } from "@/components/inbox/notification-list";
 import { cn } from "@/lib/utils";
 
-export type ItemMenuAction = "open" | "drawer" | BulkAction;
+export type ItemMenuAction = "open" | "drawer" | "copy" | BulkAction;
 
 const MENU_WIDTH = 240;
 const MENU_GAP = 8;
@@ -19,6 +19,7 @@ function menuItems(item: InboxItem): { value: ItemMenuAction; label: string; hin
   return [
     { value: "open", label: "Open source", hint: "O" },
     { value: "drawer", label: "Open in drawer", hint: "D" },
+    { value: "copy", label: "Copy link", hint: "C" },
     { value: "done", label: "Mark as done", hint: "E" },
     item.isRead === 0
       ? { value: "read", label: "Mark as read", hint: "R" }
@@ -156,6 +157,8 @@ export function ItemMenu({
                     <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "drawer" ? (
                     <PanelRight className="h-4 w-4 shrink-0" aria-hidden />
+                  ) : entry.value === "copy" ? (
+                    <Link2 className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "done" ? (
                     <Check className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "read" ? (

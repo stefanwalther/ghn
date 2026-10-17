@@ -47,9 +47,20 @@ test.describe("live github sync smoke", () => {
     await expect(trigger).toBeVisible();
     await trigger.click();
     await page.getByRole("menuitem", { name: /Open in drawer/ }).click();
-    const drawer = page.getByRole("dialog", { name: "Item details" });
+    const drawer = page.getByRole("dialog", { name: "Preview drawer" });
     await expect(drawer).toBeVisible();
+    const box = await drawer.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThan(0);
+    expect(box!.width).toBeGreaterThan(800);
     await expect(drawer.getByRole("link", { name: /Open in new window/ })).toBeVisible();
+    const titleLink = drawer.getByRole("link", { name: /^Open source for / }).first();
+    await expect(titleLink).toBeVisible();
+    await expect(titleLink).toHaveAttribute("href", /github\.com/);
+    await expect(titleLink).toHaveAttribute("target", "_blank");
+    await titleLink.hover();
+    await expect(titleLink.locator("svg")).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: "Triage" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);
   });
@@ -68,6 +79,68 @@ test.describe("live github sync smoke", () => {
       const active = await button.getAttribute("aria-current");
       if (active !== "true") expect(badge).not.toBe("0");
     }
+  });
+
+  test("copy link puts the source url on the clipboard", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.goto("/");
+    const trigger = page.getByRole("button", { name: /Actions for / }).first();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await page.getByRole("menuitem", { name: /Copy link/ }).click();
+    await expect
+      .poll(async () => page.evaluate(() => navigator.clipboard.readText()), {
+        timeout: 10000,
+      })
+      .toContain("github.com");
+  });
+
+  test("row click opens the drawer, gutter click selects", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const row = page.locator("ul li").first();
+    await expect(row).toBeVisible();
+    await row.click();
+    const drawer = page.getByRole("dialog", { name: "Preview drawer" });
+    await expect(drawer).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await row.getByRole("checkbox").click();
+    await expect(page.getByText(/1 selected/)).toBeVisible();
+  });
+
+  test("pull request filter shows only PR rows with a PR badge", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Filter by Pull requests" }).click();
+    await expect(page).toHaveURL(/type=pull_request/);
+    const rows = page.locator("ul li");
+    await expect(rows.first()).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const lis = [...document.querySelectorAll("ul li")];
+            return {
+              total: lis.length,
+              missing: lis.filter(
+                (li) =>
+                  ![...li.querySelectorAll("*")].some((e) => e.textContent === "PR")
+              ).length,
+            };
+          }),
+        { timeout: 15000 }
+      )
+      .toEqual({ total: expect.any(Number), missing: 0 });
+    const result = await page.evaluate(() => ({
+      total: document.querySelectorAll("ul li").length,
+    }));
+    expect(result.total).toBeGreaterThan(0);
   });
 
   test("refresh control keeps the inbox stable", async ({ page }) => {

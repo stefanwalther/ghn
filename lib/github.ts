@@ -253,6 +253,252 @@ export function readPrMerged(subjectApiUrl: string): boolean {
   return prMergedByApiUrl.get(subjectApiUrl) === true;
 }
 
+export function subjectApiUrlFromHtml(htmlUrl: string): string | null {
+  const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
+  if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
+  const kind = match[2] === "pull" ? "pulls" : "issues";
+  return `https://api.github.com/repos/${match[1]}/${kind}/${match[3]}`;
+}
+
+export interface SubjectContent {
+  title: string;
+  body: string | null;
+  state: string | null;
+  authorLogin: string | null;
+  htmlUrl: string;
+  draft: boolean | null;
+  merged: boolean | null;
+  headSha: string | null;
+}
+
+export async function fetchSubjectContent(
+  token: string,
+  apiUrl: string
+): Promise<SubjectContent | null> {
+  try {
+    const res = await fetch(apiUrl, { headers: baseHeaders(token) });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as {
+      title?: unknown;
+      body?: unknown;
+      state?: unknown;
+      user?: unknown;
+      html_url?: unknown;
+      draft?: unknown;
+      merged?: unknown;
+      head?: unknown;
+    };
+    if (typeof payload.title !== "string" || typeof payload.html_url !== "string") {
+      return null;
+    }
+    const user = payload.user as { login?: unknown } | null | undefined;
+    const head = payload.head as { sha?: unknown } | null | undefined;
+    return {
+      title: payload.title,
+      body: typeof payload.body === "string" ? payload.body : null,
+      state: typeof payload.state === "string" ? payload.state : null,
+      authorLogin: typeof user?.login === "string" ? user.login : null,
+      htmlUrl: payload.html_url,
+      draft: typeof payload.draft === "boolean" ? payload.draft : null,
+      merged: typeof payload.merged === "boolean" ? payload.merged : null,
+      headSha: typeof head?.sha === "string" ? head.sha : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function subjectCommentsUrlFromHtml(htmlUrl: string): string | null {  const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
+  if (!match?.[1] || !match?.[3]) return null;
+  return `https://api.github.com/repos/${match[1]}/issues/${match[3]}/comments`;
+}
+
+export interface ThreadComment {
+  authorLogin: string;
+  body: string;
+  createdAt: number;
+}
+
+export async function fetchThreadComments(
+  token: string,
+  commentsUrl: string
+): Promise<ThreadComment[]> {
+  try {
+    const res = await fetch(commentsUrl, { headers: baseHeaders(token) });
+    if (!res.ok) return [];
+    const payload = (await res.json()) as Array<{
+      user?: unknown;
+      body?: unknown;
+      created_at?: unknown;
+    }>;
+    if (!Array.isArray(payload)) return [];
+    const comments: ThreadComment[] = [];
+    for (const raw of payload) {
+      const user = raw.user as { login?: unknown } | null | undefined;
+      const createdAt =
+        typeof raw.created_at === "string" ? Date.parse(raw.created_at) : Number.NaN;
+      if (typeof user?.login !== "string" || typeof raw.body !== "string") continue;
+      if (Number.isNaN(createdAt)) continue;
+      comments.push({ authorLogin: user.login, body: raw.body, createdAt });
+    }
+    return comments;
+  } catch {
+    return [];
+  }
+}
+
+export interface PullCoords {
+  owner: string;
+  repo: string;
+  number: number;
+}
+
+export interface RepoCoords {
+  owner: string;
+  repo: string;
+}
+
+export function parseRepoCoords(htmlUrl: string): RepoCoords | null {
+  const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/);
+  if (!match?.[1] || !match?.[2]) return null;
+  return { owner: match[1], repo: match[2] };
+}
+
+export function parseBranchFromTitle(title: string): string | null {
+  const match = title.match(/ for ([^\s]+) branch$/);
+  return match?.[1] ?? null;
+}
+
+export interface WorkflowRun {
+  name: string;
+  htmlUrl: string;
+  status: string;
+  conclusion: string | null;
+  branch: string | null;
+  createdAt: number;
+}
+
+export async function fetchWorkflowRuns(
+  token: string,
+  input: { owner: string; repo: string; branch: string | null; apiBase?: string }
+): Promise<WorkflowRun[]> {
+  try {
+    const base = input.apiBase ?? "https://api.github.com";
+    const params = new URLSearchParams({ per_page: "5" });
+    if (input.branch) params.set("branch", input.branch);
+    const res = await fetch(
+      `${base}/repos/${input.owner}/${input.repo}/actions/runs?${params.toString()}`,
+      { headers: baseHeaders(token) }
+    );
+    if (!res.ok) return [];
+    const payload = (await res.json()) as { workflow_runs?: unknown };
+    if (!Array.isArray(payload.workflow_runs)) return [];
+    const runs: WorkflowRun[] = [];
+    for (const raw of payload.workflow_runs) {
+      const r = raw as {
+        name?: unknown;
+        html_url?: unknown;
+        status?: unknown;
+        conclusion?: unknown;
+        head_branch?: unknown;
+        created_at?: unknown;
+      };
+      const createdAt =
+        typeof r.created_at === "string" ? Date.parse(r.created_at) : Number.NaN;
+      if (
+        typeof r.name !== "string" ||
+        typeof r.html_url !== "string" ||
+        typeof r.status !== "string" ||
+        Number.isNaN(createdAt)
+      ) {
+        continue;
+      }
+      runs.push({
+        name: r.name,
+        htmlUrl: r.html_url,
+        status: r.status,
+        conclusion: typeof r.conclusion === "string" ? r.conclusion : null,
+        branch: typeof r.head_branch === "string" ? r.head_branch : null,
+        createdAt,
+      });
+    }
+    return runs;
+  } catch {
+    return [];
+  }
+}
+
+export function parsePullCoords(apiUrl: string): PullCoords | null {
+  const match = apiUrl.match(/^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)/);
+  if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
+  return { owner: match[1], repo: match[2], number: Number.parseInt(match[3], 10) };
+}
+
+export interface CheckSummary {
+  state: "success" | "failure" | "pending" | "error";
+  passing: number;
+  total: number;
+}
+
+export async function fetchCheckSummary(
+  token: string,
+  input: { owner: string; repo: string; sha: string; apiBase?: string }
+): Promise<CheckSummary | null> {
+  try {
+    const base = input.apiBase ?? "https://api.github.com";
+    const headers = baseHeaders(token);
+    const [statusRes, runsRes] = await Promise.all([
+      fetch(
+        `${base}/repos/${input.owner}/${input.repo}/commits/${input.sha}/status`,
+        { headers }
+      ).catch(() => null),
+      fetch(
+        `${base}/repos/${input.owner}/${input.repo}/commits/${input.sha}/check-runs`,
+        { headers }
+      ).catch(() => null),
+    ]);
+    const states: string[] = [];
+    if (statusRes && statusRes.ok) {
+      const payload = (await statusRes.json()) as { statuses?: unknown };
+      if (Array.isArray(payload.statuses)) {
+        for (const s of payload.statuses) {
+          const state = (s as { state?: unknown }).state;
+          states.push(state === "success" || state === "failure" || state === "error" ? state : "pending");
+        }
+      }
+    }
+    if (runsRes && runsRes.ok) {
+      const payload = (await runsRes.json()) as { check_runs?: unknown };
+      if (Array.isArray(payload.check_runs)) {
+        for (const run of payload.check_runs) {
+          const r = run as { status?: unknown; conclusion?: unknown };
+          if (r.status === "completed" && r.conclusion === "success") states.push("success");
+          else if (
+            r.status === "completed" &&
+            (r.conclusion === "failure" ||
+              r.conclusion === "timed_out" ||
+              r.conclusion === "cancelled" ||
+              r.conclusion === "action_required")
+          )
+            states.push("failure");
+          else states.push("pending");
+        }
+      }
+    } else if (!statusRes || !statusRes.ok) {
+      return null;
+    }
+    const passing = states.filter((s) => s === "success").length;
+    const state = states.includes("failure")
+      ? "failure"
+      : states.length > 0 && passing === states.length
+        ? "success"
+        : "pending";
+    return { state, passing, total: states.length };
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveSubjectHtmlUrl(
   token: string,
   thread: GhThread,

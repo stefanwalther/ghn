@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isMergedItem, isReleaseItem, matchAge, QUICK_SELECTS, startOfYear } from "@/lib/filters";
+import { isMergedItem, isReleaseItem, matchAge, matchesTypeFilter, QUICK_SELECTS, startOfYear, TYPE_FILTERS } from "@/lib/filters";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -85,5 +85,27 @@ describe("isMergedItem", () => {
 describe("quick selects on live data", () => {
   test("merged shortcut is actionable", () => {
     expect(QUICK_SELECTS.map((q) => q.value)).toContain("merged");
+  });
+
+  test("pull requests have their own filter", () => {
+    expect(TYPE_FILTERS.map((t) => t.value)).toContain("pull_request");
+  });
+});
+
+describe("matchesTypeFilter", () => {
+  test("all passes everything", () => {
+    expect(matchesTypeFilter("subscribed", "Issue", "all")).toBe(true);
+  });
+
+  test("pull_request matches PullRequest subjects regardless of reason", () => {
+    expect(matchesTypeFilter("author", "PullRequest", "pull_request")).toBe(true);
+    expect(matchesTypeFilter("subscribed", "PullRequest", "pull_request")).toBe(true);
+    expect(matchesTypeFilter("subscribed", "Issue", "pull_request")).toBe(false);
+    expect(matchesTypeFilter("subscribed", null, "pull_request")).toBe(false);
+  });
+
+  test("other values keep matching the reason", () => {
+    expect(matchesTypeFilter("mention", "Issue", "mention")).toBe(true);
+    expect(matchesTypeFilter("subscribed", "Issue", "mention")).toBe(false);
   });
 });

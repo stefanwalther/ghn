@@ -21,6 +21,7 @@ export const AGE_FILTERS: { value: AgeFilter; label: string }[] = [
 
 export const TYPE_FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "All types" },
+  { value: "pull_request", label: "Pull requests" },
   { value: "mention", label: "Mention" },
   { value: "team_mention", label: "Team mention" },
   { value: "review_requested", label: "Review requested" },
@@ -62,6 +63,16 @@ export function isMergedItem(input: {
 }): boolean {
   if (input.reason === "merged") return true;
   return input.prMerged === true;
+}
+
+export function matchesTypeFilter(
+  reason: string,
+  subjectType: string | null | undefined,
+  filter: string
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "pull_request") return subjectType === "PullRequest";
+  return reason === filter;
 }
 
 const DAY = 24 * 60 * 60 * 1000;

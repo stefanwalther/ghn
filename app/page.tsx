@@ -15,6 +15,7 @@ import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isEditableTarget } from "@/lib/shortcuts";
+import { copyText } from "@/lib/clipboard";
 import { isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
@@ -228,9 +229,14 @@ function InboxView() {
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
   }
 
-  function menuAction(item: InboxItem, action: ItemMenuAction) {
+  async function menuAction(item: InboxItem, action: ItemMenuAction) {
     if (action === "drawer") {
       setDrawerItem(item);
+      return;
+    }
+    if (action === "copy") {
+      const ok = await copyText(item.sourceUrl);
+      setNotice(ok ? "Link copied to clipboard." : "Copy failed in this browser.");
       return;
     }
     if (action === "open") {
@@ -374,6 +380,11 @@ function InboxView() {
         case "d": {
           const item = focusIdx !== null ? items[focusIdx] : undefined;
           if (item) setDrawerItem(item);
+          break;
+        }
+        case "c": {
+          const item = focusIdx !== null ? items[focusIdx] : undefined;
+          if (item) void menuAction(item, "copy");
           break;
         }
         case "a":
@@ -530,6 +541,7 @@ function InboxView() {
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
           onMenuAction={menuAction}
+          onOpen={(item) => setDrawerItem(item)}
         />
           ) : null}
           {status === "ready" && collapsed.length > 0 ? (
