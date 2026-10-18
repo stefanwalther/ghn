@@ -157,7 +157,10 @@ export default function RateLimitsPage() {
                     >
                       <div
                         className={`h-full rounded-full transition-all ${barClass(bucket.percent, rateLimited)}`}
-                        style={{ width: `${Math.min(100, bucket.percent)}%` }}
+                        style={{
+                          width: `${Math.min(100, Math.max(0, bucket.percent))}%`,
+                          minWidth: bucket.percent > 0 ? 6 : 0,
+                        }}
                       />
                     </div>
                     <p className="font-mono text-xs text-muted-foreground">
