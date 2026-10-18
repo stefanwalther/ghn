@@ -334,6 +334,40 @@ describe("merged-status capture", () => {
   });
 });
 
+describe("seed shape", () => {
+  test("seeds ten repos and two hundred valid notifications", async () => {
+    const { seedDatabase } = await import("@/lib/seed");
+    const db = makeTestDb();
+    const summary = await seedDatabase(1792000000000, db);
+    expect(summary).toEqual({ repositories: 10, notifications: 200 });
+    const rows = await db.select().from(schema.notifications);
+    expect(rows).toHaveLength(200);
+    for (const r of rows) {
+      expect(r.subject.length).toBeGreaterThan(0);
+      expect(r.subject.length).toBeLessThanOrEqual(200);
+      expect(r.sourceUrl.startsWith("https://")).toBe(true);
+    }
+  });
+
+  test("muted subjects land done", async () => {
+    const { seedDatabase } = await import("@/lib/seed");
+    const db = makeTestDb();
+    const now = 1792000000000;
+    await seedDatabase(now, db);
+    const first = (await db.select().from(schema.notifications))[0];
+    if (!first) throw new Error("seed produced no rows");
+    await db
+      .insert(schema.mutedSubjects)
+      .values({ repositoryId: first.repositoryId, subject: first.subject });
+    await seedDatabase(now, db);
+    const rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.id, first.id));
+    expect(rows[0]?.isDone).toBe(1);
+  });
+});
+
 describe("remote-done propagation", () => {
   test("threads absent from a full pass become done", async () => {
     const db = makeTestDb();
