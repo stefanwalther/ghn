@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { mutedSubjects, notifications, repositories } from "@/db/schema";
+import type { Db } from "@/db/client";
 import { computeNextDueAt, type Rhythm } from "@/lib/digest";
 
 interface SeedRepo {
@@ -58,8 +59,11 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-export async function seedDatabase(now = Date.now()): Promise<{ repositories: number; notifications: number }> {
-  const { db } = await import("@/db/client");
+export async function seedDatabase(
+  now = Date.now(),
+  injectedDb?: Db
+): Promise<{ repositories: number; notifications: number }> {
+  const db = injectedDb ?? (await import("@/db/client")).db;
   const rand = seededRandom(42);
   await db.delete(notifications);
   await db.delete(repositories);
