@@ -1,19 +1,22 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import type { Options as ReactMarkdownOptions } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
-import { unwrapDetails } from "@/lib/markdown";
+import { remarkPrAutolinks, unwrapDetails } from "@/lib/markdown";
 
 const bodyText = { fontSize: "0.875rem", lineHeight: "1.6" } as const;
 
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, repositoryUrl }: { text: string; repositoryUrl?: string }) {
+  const extraPlugins: NonNullable<ReactMarkdownOptions["remarkPlugins"]> =
+    repositoryUrl === undefined ? [] : [[remarkPrAutolinks, { repositoryUrl }]];
   return (
     <div style={bodyText}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkEmoji]}
+        remarkPlugins={[remarkGfm, remarkEmoji, ...extraPlugins]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, defaultSchema]]}
         components={{
           h1: ({ children }) => (

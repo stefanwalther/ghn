@@ -69,6 +69,7 @@ export function ItemDrawer({
   const [runs, setRuns] = React.useState<WorkflowRun[]>([]);
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
+  const repositoryUrl = `https://github.com/${item.repositoryName}`;
 
   function resizeTo(clientX: number): void {
     setWidth(clampDrawerWidth(window.innerWidth - clientX));
@@ -286,7 +287,7 @@ export function ItemDrawer({
                 {content.state ?? ""}
               </p>
               {content.body ? (
-                <Markdown text={content.body} />
+                <Markdown text={content.body} repositoryUrl={repositoryUrl} />
               ) : (
                 <p className="text-sm text-muted-foreground">No description.</p>
               )}              {content.comments.length > 0 ? (
@@ -300,7 +301,7 @@ export function ItemDrawer({
                       <p className="text-xs text-muted-foreground">
                         {c.authorLogin} · {new Date(c.createdAt).toLocaleString()}
                       </p>
-                      <Markdown text={c.body} />
+                      <Markdown text={c.body} repositoryUrl={repositoryUrl} />
                     </div>
                   ))}
                 </div>
