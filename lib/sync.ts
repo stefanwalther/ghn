@@ -3,7 +3,7 @@ import { notifications, repositories, syncState } from "@/db/schema";
 import type { Db } from "@/db/client";
 import { computeNextDueAt } from "@/lib/digest";
 import type { GhThread } from "@/lib/github";
-import { readPrMerged } from "@/lib/github";
+import { readPrMerged, readSubjectState } from "@/lib/github";
 
 export function repoIdForFullName(fullName: string): string {
   return fullName.toLowerCase().replace(/\//g, "--");
@@ -156,6 +156,7 @@ export async function upsertThreads(
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
+        subjectState: readSubjectState(thread.subjectApiUrl),
         reason: thread.reason,
         createdAt: thread.updatedAt,
         githubUpdatedAt: thread.updatedAt,
@@ -179,6 +180,9 @@ export async function upsertThreads(
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
+        subjectState: urlById.has(thread.id)
+          ? readSubjectState(thread.subjectApiUrl)
+          : (row.subjectState ?? null),
         reason: thread.reason,
         createdAt: thread.updatedAt,
         githubUpdatedAt: thread.updatedAt,

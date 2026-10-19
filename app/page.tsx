@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { copyText } from "@/lib/clipboard";
-import { isMergedItem, isReleaseItem } from "@/lib/filters";
+import { isClosedItem, isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -226,6 +226,22 @@ function InboxView() {
       );
       return;
     }
+    if (reason === "closed") {
+      setSelected(
+        new Set(
+          items
+            .filter((i) =>
+              isClosedItem({
+                reason: i.reason,
+                prMerged: i.prMerged ?? false,
+                subjectState: i.subjectState ?? null,
+              })
+            )
+            .map((i) => i.id)
+        )
+      );
+      return;
+    }
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
   }
 
@@ -244,12 +260,44 @@ function InboxView() {
       window.open(item.sourceUrl, "_blank", "noopener");
       return;
     }
+    if (action === "sync") {
+      await syncOne(item.id);
+      return;
+    }
     void apply(action, [item.id]);
   }
 
   function drawerAction(item: InboxItem, action: ItemMenuAction) {
     if (action === "done" || action === "unsubscribe") setDrawerItem(null);
     menuAction(item, action);
+  }
+
+  async function syncOne(id: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/thread/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "sync failed");
+      if (data?.gone === true) {
+        setItems((prev) => prev.filter((i) => i.id !== id));
+        setDrawerItem((prev) => (prev?.id === id ? null : prev));
+        setNotice("Thread is gone on GitHub; marked done.");
+        return;
+      }
+      if (data?.item) {
+        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...data.item } : i)));
+        setDrawerItem((prev) => (prev?.id === id ? { ...prev, ...data.item } : prev));
+      }
+    } catch {
+      setNotice("Sync failed for this item.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function apply(action: BulkAction, ids?: string[]) {
@@ -372,6 +420,13 @@ function InboxView() {
           if (selected.size > 0) apply("read");
           else if (focusedId) apply("read", [focusedId]);
           break;
+        case "s": {
+          const targets = selected.size > 0 ? [...selected] : focusedId ? [focusedId] : [];
+          (async () => {
+            for (const id of targets) await syncOne(id);
+          })();
+          break;
+        }
         case "o": {
           const item = focusIdx !== null ? items[focusIdx] : undefined;
           if (item) {

@@ -178,6 +178,28 @@ export async function listNotifications(
   }
 }
 
+export async function fetchThread(
+  token: string,
+  threadId: string
+): Promise<GhResult<GhThread>> {
+  try {
+    const res = await fetch(`${apiBase()}/notifications/threads/${threadId}`, {
+      headers: baseHeaders(token),
+    });
+    if (!res.ok) {
+      return { ok: false, reason: classifyStatus(res.status, res), status: res.status };
+    }
+    const payload = (await res.json()) as Record<string, unknown>;
+    const thread = parseThread(payload);
+    if (!thread) {
+      return { ok: false, reason: "unknown", status: res.status };
+    }
+    return { ok: true, data: thread };
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+}
+
 async function writeThread(
   token: string,
   threadId: string,
@@ -248,9 +270,14 @@ export async function checkRepoExists(token: string, fullName: string): Promise<
 }
 
 const prMergedByApiUrl = new Map<string, boolean>();
+const subjectStateByApiUrl = new Map<string, string | null>();
 
 export function readPrMerged(subjectApiUrl: string): boolean {
   return prMergedByApiUrl.get(subjectApiUrl) === true;
+}
+
+export function readSubjectState(subjectApiUrl: string): string | null {
+  return subjectStateByApiUrl.get(subjectApiUrl) ?? null;
 }
 
 export function subjectApiUrlFromHtml(htmlUrl: string): string | null {
@@ -513,12 +540,20 @@ export async function resolveSubjectHtmlUrl(
       cache.set(thread.subjectApiUrl, fallback);
       return fallback;
     }
-    const payload = (await res.json()) as { html_url?: unknown; merged?: unknown };
+    const payload = (await res.json()) as {
+      html_url?: unknown;
+      merged?: unknown;
+      state?: unknown;
+    };
     const url = typeof payload.html_url === "string" ? payload.html_url : deriveFallbackUrl(thread);
     cache.set(thread.subjectApiUrl, url);
     if (thread.subjectType === "PullRequest") {
       prMergedByApiUrl.set(thread.subjectApiUrl, payload.merged === true);
     }
+    subjectStateByApiUrl.set(
+      thread.subjectApiUrl,
+      typeof payload.state === "string" ? payload.state : null
+    );
     return url;
   } catch {
     const fallback = deriveFallbackUrl(thread);

@@ -27,6 +27,7 @@ export const notifications = sqliteTable(
       .references(() => repositories.id),
     subject: text("subject").notNull(),
     subjectType: text("subject_type"),
+    subjectState: text("subject_state"),
     reason: text("reason").notNull(),
     prMerged: integer("pr_merged").notNull().default(0),
     createdAt: integer("created_at").notNull(),

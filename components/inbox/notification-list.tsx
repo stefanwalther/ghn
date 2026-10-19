@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
-import { QUICK_SELECTS, isMergedItem } from "@/lib/filters";
+import { QUICK_SELECTS, isClosedItem, isMergedItem } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
 import { ItemMenu, type ItemMenuAction } from "@/components/inbox/item-menu";
@@ -15,6 +15,7 @@ export interface InboxItem {
   repositoryName: string;
   subject: string;
   subjectType?: string | null;
+  subjectState?: string | null;
   reason: string;
   prMerged?: boolean | null;
   createdAt: number;
@@ -28,9 +29,23 @@ export interface InboxItem {
 
 const FAILURE_REASONS = new Set(["action_failed", "ci_failed"]);
 
-export function reasonTone(reason: string): "destructive" | "merged" | "muted" {
+export function reasonTone(reason: string): "destructive" | "merged" | "muted";
+export function reasonTone(item: {
+  reason: string;
+  prMerged?: boolean | null;
+  subjectState?: string | null;
+}): "destructive" | "merged" | "secondary" | "muted";
+export function reasonTone(
+  reasonOrItem: string | { reason: string; prMerged?: boolean | null; subjectState?: string | null }
+): "destructive" | "merged" | "secondary" | "muted" {
+  const reason = typeof reasonOrItem === "string" ? reasonOrItem : reasonOrItem.reason;
   if (FAILURE_REASONS.has(reason)) return "destructive";
   if (reason === "merged") return "merged";
+  if (typeof reasonOrItem !== "string") {
+    if (isMergedItem({ reason, prMerged: reasonOrItem.prMerged ?? false })) return "merged";
+    if (isClosedItem({ reason, prMerged: reasonOrItem.prMerged ?? false, subjectState: reasonOrItem.subjectState ?? null }))
+      return "secondary";
+  }
   return "muted";
 }
 
@@ -104,7 +119,12 @@ export function NotificationList({
         {items.map((item) => {
           const checked = selected.has(item.id);
           const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
-          const tone = merged ? "merged" : reasonTone(item.reason);
+          const closed = isClosedItem({
+            reason: item.reason,
+            prMerged: item.prMerged ?? false,
+            subjectState: item.subjectState ?? null,
+          });
+          const tone = merged ? "merged" : closed ? "secondary" : reasonTone(item.reason);
           return (
             <li
               key={item.id}
@@ -153,7 +173,7 @@ export function NotificationList({
                     <Badge variant="outline">PR</Badge>
                   ) : null}
                   <Badge variant={tone}>
-                    {merged ? "merged" : item.reason.replace("_", " ")}
+                    {merged ? "merged" : closed ? "closed" : item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
                   {item.localUnread ? (
