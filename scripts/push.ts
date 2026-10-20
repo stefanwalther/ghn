@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS writeback_queue (
       "ALTER TABLE notifications ADD COLUMN pr_merged INTEGER NOT NULL DEFAULT 0"
     );
   }
+  if (!notifCols.some((c) => c.name === "subject_state")) {
+    sqlite.exec("ALTER TABLE notifications ADD COLUMN subject_state TEXT");
+  }
 }
 
 function main(): void {

@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, EyeOff, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/inbox/markdown";
-import { isMergedItem } from "@/lib/filters";
-import type { CheckSummary, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
+import { isClosedItem, isMergedItem } from "@/lib/filters";
+import type { CheckSummary, DependabotAlertDetails, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
+import { SecurityAlertPreview } from "@/components/inbox/security-alert-preview";
 import {
   findPinnedRun,
   formatRunAge,
@@ -69,19 +70,35 @@ export function ItemDrawer({
   item,
   onClose,
   onAction,
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+  positionLabel,
 }: {
   item: InboxItem;
   onClose: () => void;
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  positionLabel?: string;
 }) {
   const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
-  const [content, setContent] = React.useState<ThreadDetails | null>(null);
-  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
+  const closed = isClosedItem({
+    reason: item.reason,
+    prMerged: item.prMerged ?? false,
+    subjectState: item.subjectState ?? null,
+  });
+  const [content, setContent] = React.useState<ThreadDetails | null>(null);  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
     "loading"
   );
   const [runs, setRuns] = React.useState<WorkflowRun[]>([]);
+  const [alert, setAlert] = React.useState<DependabotAlertDetails | null>(null);
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
+  const scrollRef = React.useRef<HTMLElement>(null);
   const repositoryUrl = `https://github.com/${item.repositoryName}`;
   const branchFromTitle = parseBranchFromTitle(item.subject);
   const workflowName = parseWorkflowNameFromTitle(item.subject);
@@ -114,9 +131,14 @@ export function ItemDrawer({
   }
 
   React.useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [item.id]);
+
+  React.useEffect(() => {
     let cancelled = false;
     setContent(null);
     setRuns([]);
+    setAlert(null);
     setContentState("loading");
     (async () => {
       try {
@@ -127,13 +149,20 @@ export function ItemDrawer({
         const data = (await res.json()) as ThreadDetails & {
           content?: SubjectContent | null;
           runs?: WorkflowRun[];
+          alert?: DependabotAlertDetails | null;
         };
         if (!cancelled) {
-          if ("content" in data && data.content === null) {
+          if (data.alert) {
+            setAlert(data.alert);
             setContent(null);
+            setRuns(Array.isArray(data.runs) ? data.runs : []);
+          } else if ("content" in data && data.content === null) {
+            setContent(null);
+            setAlert(null);
             setRuns(Array.isArray(data.runs) ? data.runs : []);
           } else {
             setContent(data as ThreadDetails);
+            setAlert(null);
             setRuns([]);
           }
           setContentState("ready");
@@ -150,6 +179,7 @@ export function ItemDrawer({
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div className="absolute inset-0 bg-background/80" aria-hidden="true" />
       <aside
+        ref={scrollRef}
         role="dialog"
         aria-modal="true"
         aria-label="Preview drawer"
@@ -191,22 +221,57 @@ export function ItemDrawer({
             <h2 className="mt-1 text-base font-semibold">
               <TitleLink item={item} />
             </h2>
+            {positionLabel ? (
+              <p aria-live="polite" className="mt-1 text-xs text-muted-foreground">
+                {positionLabel}
+              </p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            autoFocus
-            aria-label="Close details"
-            title="Close details (Esc)"
-            onClick={onClose}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
+          <div className="flex shrink-0 items-start gap-1">
+            <button
+              type="button"
+              aria-label="Previous thread"
+              title="Previous thread (k / [)"
+              onClick={onPrev}
+              disabled={!hasPrev || !onPrev}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
+            >
+              <ChevronUp className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label="Next thread"
+              title="Next thread (j / ])"
+              onClick={onNext}
+              disabled={!hasNext || !onNext}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              autoFocus
+              aria-label="Close details"
+              title="Close details (Esc)"
+              onClick={onClose}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={merged ? "merged" : reasonTone(item.reason)}>
-            {merged ? "merged" : item.reason.replace("_", " ")}
-          </Badge>
+          {(() => {
+            const liveMerged = content?.merged === true;
+            const liveClosed = content?.state === "closed" && content?.merged !== true;
+            const showMerged = merged || liveMerged;
+            const showClosed = !showMerged && (closed || liveClosed);
+            return (
+              <Badge variant={showMerged ? "merged" : showClosed ? "secondary" : reasonTone(item)}>
+                {showMerged ? "merged" : showClosed ? "closed" : item.reason.replace("_", " ")}
+              </Badge>
+            );
+          })()}
           {content?.draft === true ? <Badge variant="secondary">draft</Badge> : null}
           {content?.checks ? (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -254,8 +319,11 @@ export function ItemDrawer({
               Loading thread…
             </p>
           ) : null}
+          {contentState === "ready" && alert ? (
+            <SecurityAlertPreview alert={alert} repositoryUrl={repositoryUrl} />
+          ) : null}
           {contentState === "unavailable" ||
-          (contentState === "ready" && !content) ? (
+          (contentState === "ready" && !content && !alert) ? (
             runs.length > 0 ? (
               <>
                 <div className="flex w-full flex-col gap-1 text-left">
@@ -334,7 +402,7 @@ export function ItemDrawer({
                   No preview for {previewFallbackKind(item.subjectType)}
                 </p>
                 <p className="max-w-sm text-sm text-muted-foreground">
-                  The preview drawer renders issues and pull requests. For
+                  The preview drawer renders issues, pull requests, and security alerts. For
                   everything else, continue on GitHub.
                 </p>
                 <a
@@ -379,7 +447,7 @@ export function ItemDrawer({
             </>
           ) : null}
         </div>
-        {contentState !== "unavailable" && content ? (
+        {contentState !== "unavailable" && (content || alert) ? (
           <a
             href={item.sourceUrl}
             target="_blank"

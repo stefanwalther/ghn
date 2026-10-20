@@ -33,6 +33,7 @@ export const TYPE_FILTERS: { value: string; label: string }[] = [
   { value: "ci_failed", label: "CI failed" },
   { value: "release", label: "Release" },
   { value: "merged", label: "Merged" },
+  { value: "closed", label: "Closed" },
   { value: "subscribed", label: "Subscribed" },
   { value: "manual", label: "Manual" },
   { value: "invitation", label: "Invitation" },
@@ -43,6 +44,7 @@ export const TYPE_FILTERS: { value: string; label: string }[] = [
 export const QUICK_SELECTS: { value: string; label: string }[] = [
   { value: "release", label: "All releases" },
   { value: "merged", label: "All merged" },
+  { value: "closed", label: "All closed" },
 ];
 
 export function isReleaseItem(input: {
@@ -65,13 +67,32 @@ export function isMergedItem(input: {
   return input.prMerged === true;
 }
 
+export function isClosedItem(input: {
+  reason: string;
+  prMerged?: boolean | null;
+  subjectState?: string | null;
+}): boolean {
+  if (isMergedItem(input)) return false;
+  return input.subjectState === "closed";
+}
+
 export function matchesTypeFilter(
   reason: string,
   subjectType: string | null | undefined,
-  filter: string
+  filter: string,
+  extra?: { prMerged?: boolean | null; subjectState?: string | null }
 ): boolean {
   if (filter === "all") return true;
   if (filter === "pull_request") return subjectType === "PullRequest";
+  if (filter === "merged") {
+    if (reason === "merged") return true;
+    return extra?.prMerged === true;
+  }
+  if (filter === "closed") {
+    if (extra?.subjectState !== "closed") return false;
+    if (reason === "merged" || extra?.prMerged === true) return false;
+    return true;
+  }
   return reason === filter;
 }
 

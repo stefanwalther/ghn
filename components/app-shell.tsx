@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Gauge, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, ExternalLink, Gauge, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
+import { DemoBanner } from "@/components/demo-banner";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
@@ -14,6 +15,29 @@ const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
   { href: "/repos", label: "Repositories", icon: Settings2 },
   { href: "/rate-limits", label: "Rate limits", icon: Gauge },
+];
+
+const GITHUB_NAV = [
+  {
+    href: "https://github.com/notifications",
+    label: "GitHub Notifications",
+    icon: ExternalLink,
+  },
+  {
+    href: "https://github.com/watching",
+    label: "Watched repositories",
+    icon: ExternalLink,
+  },
+  {
+    href: "https://github.com/notifications/subscriptions",
+    label: "Subscriptions",
+    icon: ExternalLink,
+  },
+  {
+    href: "https://github.com/settings/notifications",
+    label: "Notification settings",
+    icon: ExternalLink,
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -116,10 +140,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <div className="mt-6 mb-1 px-3 text-xs font-medium text-muted-foreground">
+            GitHub
+          </div>
+          {GITHUB_NAV.map((item) => {
+            const Icon = item.icon;
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (window.innerWidth < 768) setOpen(false);
+                }}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+                {item.label}
+              </a>
+            );
+          })}
           </aside>
         </>
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
+        <DemoBanner />
         <header className="flex items-center gap-2 px-4 py-3">
           <span className="relative inline-flex">
             <button
