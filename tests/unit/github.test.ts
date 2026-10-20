@@ -11,6 +11,68 @@ import {
   subjectCommentsUrlFromHtml,
 } from "@/lib/github";
 
+describe("fetchThread", () => {
+  test("returns a single parsed thread from fixture", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(
+          JSON.stringify({
+            id: "1001",
+            unread: false,
+            reason: "subscribed",
+            updated_at: "2026-10-18T10:00:00Z",
+            subject: {
+              title: "Fix it",
+              type: "PullRequest",
+              url: "https://api.github.com/repos/acme/web/pulls/12",
+            },
+            repository: {
+              full_name: "acme/web",
+              html_url: "https://github.com/acme/web",
+              owner: { login: "acme" },
+            },
+            url: "https://api.github.com/notifications/threads/1001",
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        ),
+    });
+    const prior = process.env.GHN_API_BASE;
+    process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+    try {
+      const { fetchThread } = await import("@/lib/github");
+      const result = await fetchThread("token", "1001");
+      expect(result.ok).toBe(true);
+      expect(result.data?.id).toBe("1001");
+      expect(result.data?.subjectTitle).toBe("Fix it");
+      expect(result.data?.unread).toBe(false);
+    } finally {
+      if (prior === undefined) delete process.env.GHN_API_BASE;
+      else process.env.GHN_API_BASE = prior;
+      server.stop(true);
+    }
+  });
+
+  test("surfaces the status when the thread is gone", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response("{}", { status: 404 }),
+    });
+    const prior = process.env.GHN_API_BASE;
+    process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+    try {
+      const { fetchThread } = await import("@/lib/github");
+      const result = await fetchThread("token", "missing");
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(404);
+    } finally {
+      if (prior === undefined) delete process.env.GHN_API_BASE;
+      else process.env.GHN_API_BASE = prior;
+      server.stop(true);
+    }
+  });
+});
+
 describe("subjectApiUrlFromHtml", () => {
   test("pull and issue pages map to api urls", () => {
     expect(subjectApiUrlFromHtml("https://github.com/acme/web/pull/12")).toBe(

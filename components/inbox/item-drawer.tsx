@@ -5,7 +5,7 @@ import { ExternalLink, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/inbox/markdown";
-import { isMergedItem } from "@/lib/filters";
+import { isClosedItem, isMergedItem } from "@/lib/filters";
 import type { CheckSummary, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
 import {
   DRAWER_MAX_WIDTH,
@@ -62,8 +62,12 @@ export function ItemDrawer({
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
 }) {
   const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
-  const [content, setContent] = React.useState<ThreadDetails | null>(null);
-  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
+  const closed = isClosedItem({
+    reason: item.reason,
+    prMerged: item.prMerged ?? false,
+    subjectState: item.subjectState ?? null,
+  });
+  const [content, setContent] = React.useState<ThreadDetails | null>(null);  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
     "loading"
   );
   const [runs, setRuns] = React.useState<WorkflowRun[]>([]);
@@ -175,9 +179,17 @@ export function ItemDrawer({
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={merged ? "merged" : reasonTone(item.reason)}>
-            {merged ? "merged" : item.reason.replace("_", " ")}
-          </Badge>
+          {(() => {
+            const liveMerged = content?.merged === true;
+            const liveClosed = content?.state === "closed" && content?.merged !== true;
+            const showMerged = merged || liveMerged;
+            const showClosed = !showMerged && (closed || liveClosed);
+            return (
+              <Badge variant={showMerged ? "merged" : showClosed ? "secondary" : reasonTone(item)}>
+                {showMerged ? "merged" : showClosed ? "closed" : item.reason.replace("_", " ")}
+              </Badge>
+            );
+          })()}
           {content?.draft === true ? <Badge variant="secondary">draft</Badge> : null}
           {content?.checks ? (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
