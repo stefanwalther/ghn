@@ -229,9 +229,15 @@ function InboxView() {
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
   }
 
+  function openDrawer(item: InboxItem) {
+    const idx = items.findIndex((i) => i.id === item.id);
+    if (idx >= 0) setFocusIdx(idx);
+    setDrawerItem(item);
+  }
+
   async function menuAction(item: InboxItem, action: ItemMenuAction) {
     if (action === "drawer") {
-      setDrawerItem(item);
+      openDrawer(item);
       return;
     }
     if (action === "copy") {
@@ -259,6 +265,9 @@ function InboxView() {
     setNotice(null);
     const targetSet = new Set(targets);
     const prevItems = items;
+    if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
+      setDrawerItem(null);
+    }
     if (action === "done" || action === "unsubscribe") {
       setItems((prev) => prev.filter((i) => !targetSet.has(i.id)));
     } else if (action === "read") {
@@ -306,6 +315,38 @@ function InboxView() {
     });
   }
 
+  function stepDrawer(delta: number) {
+    if (items.length === 0) return;
+    const currentIdx = drawerItem
+      ? items.findIndex((i) => i.id === drawerItem.id)
+      : (focusIdx ?? -1);
+    const baseIdx = currentIdx >= 0 ? currentIdx : delta > 0 ? -1 : items.length;
+    const next = Math.min(items.length - 1, Math.max(0, baseIdx + delta));
+    setFocusIdx(next);
+    const nextItem = items[next];
+    if (nextItem) {
+      setDrawerItem(nextItem);
+      saveLastOpened(nextItem.id);
+    }
+    requestAnimationFrame(() => {
+      const id = items[next]?.id;
+      const el = id ? document.getElementById(`notification-${id}`) : null;
+      el?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  const drawerIdx = drawerItem ? items.findIndex((i) => i.id === drawerItem.id) : -1;
+  const drawerPositionLabel =
+    drawerItem && drawerIdx >= 0 ? `${drawerIdx + 1} of ${items.length}` : undefined;
+
+  React.useEffect(() => {
+    if (!drawerItem) return;
+    const fresh = items.find((i) => i.id === drawerItem.id);
+    if (fresh && (fresh.isRead !== drawerItem.isRead || fresh.subject !== drawerItem.subject)) {
+      setDrawerItem(fresh);
+    }
+  }, [items, drawerItem]);
+
   React.useEffect(() => {
     function onAltDown(e: KeyboardEvent) {
       if (isAltHintKey(e)) {
@@ -340,40 +381,55 @@ function InboxView() {
       if (isEditableTarget(e.target)) return;
       if (helpOpen) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const focusedId = focusIdx !== null ? items[focusIdx]?.id : undefined;
+      const drawerOpen = drawerItem !== null;
+      const activeId = drawerOpen ? drawerItem.id : focusIdx !== null ? items[focusIdx]?.id : undefined;
       if (e.key === "U" && e.shiftKey) {
         if (selected.size > 0) apply("unsubscribe");
-        else if (focusedId) apply("unsubscribe", [focusedId]);
+        else if (activeId) apply("unsubscribe", [activeId]);
         return;
       }
       switch (e.key) {
         case "j":
         case "ArrowDown":
           e.preventDefault();
-          moveFocus(1);
+          if (drawerOpen) stepDrawer(1);
+          else moveFocus(1);
           break;
         case "k":
         case "ArrowUp":
           e.preventDefault();
-          moveFocus(-1);
+          if (drawerOpen) stepDrawer(-1);
+          else moveFocus(-1);
+          break;
+        case "[":
+          if (drawerOpen) {
+            e.preventDefault();
+            stepDrawer(-1);
+          }
+          break;
+        case "]":
+          if (drawerOpen) {
+            e.preventDefault();
+            stepDrawer(1);
+          }
           break;
         case "x":
-          if (focusedId) toggle(focusedId);
+          if (activeId) toggle(activeId);
           break;
         case "e":
           if (selected.size > 0) apply("done");
-          else if (focusedId) apply("done", [focusedId]);
+          else if (activeId) apply("done", [activeId]);
           break;
         case "u":
           if (selected.size > 0) apply("unread");
-          else if (focusedId) apply("unread", [focusedId]);
+          else if (activeId) apply("unread", [activeId]);
           break;
         case "r":
           if (selected.size > 0) apply("read");
-          else if (focusedId) apply("read", [focusedId]);
+          else if (activeId) apply("read", [activeId]);
           break;
         case "o": {
-          const item = focusIdx !== null ? items[focusIdx] : undefined;
+          const item = drawerOpen ? drawerItem : focusIdx !== null ? items[focusIdx] : undefined;
           if (item) {
             saveLastOpened(item.id);
             window.open(item.sourceUrl, "_blank", "noopener");
@@ -381,12 +437,13 @@ function InboxView() {
           break;
         }
         case "d": {
+          if (drawerOpen) break;
           const item = focusIdx !== null ? items[focusIdx] : undefined;
-          if (item) setDrawerItem(item);
+          if (item) openDrawer(item);
           break;
         }
         case "c": {
-          const item = focusIdx !== null ? items[focusIdx] : undefined;
+          const item = drawerOpen ? drawerItem : focusIdx !== null ? items[focusIdx] : undefined;
           if (item) void menuAction(item, "copy");
           break;
         }
@@ -544,7 +601,7 @@ function InboxView() {
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
           onMenuAction={menuAction}
-          onOpen={(item) => setDrawerItem(item)}
+          onOpen={(item) => openDrawer(item)}
         />
           ) : null}
           {status === "ready" && collapsed.length > 0 ? (
@@ -558,6 +615,11 @@ function InboxView() {
           item={drawerItem}
           onClose={() => setDrawerItem(null)}
           onAction={drawerAction}
+          onPrev={() => stepDrawer(-1)}
+          onNext={() => stepDrawer(1)}
+          hasPrev={drawerIdx > 0}
+          hasNext={drawerIdx >= 0 && drawerIdx < items.length - 1}
+          positionLabel={drawerPositionLabel}
         />
       ) : null}
     </div>

@@ -5,7 +5,8 @@ export interface ShortcutDef {
 }
 
 export const SHORTCUTS: ShortcutDef[] = [
-  { key: "j / k", label: "Move down / up", description: "Move focus between rows" },
+  { key: "j / k", label: "Move down / up", description: "Move focus between rows, or to the next / previous thread when the drawer is open" },
+  { key: "[ / ]", label: "Prev / next in drawer", description: "Jump to the previous / next thread while the drawer is open" },
   { key: "x", label: "Select", description: "Toggle the focused row" },
   { key: "e", label: "Done", description: "Mark selection done (or the focused row)" },
   { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row)" },

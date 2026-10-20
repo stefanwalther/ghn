@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, EyeOff, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/inbox/markdown";
@@ -56,10 +56,20 @@ export function ItemDrawer({
   item,
   onClose,
   onAction,
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+  positionLabel,
 }: {
   item: InboxItem;
   onClose: () => void;
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  positionLabel?: string;
 }) {
   const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
   const [content, setContent] = React.useState<ThreadDetails | null>(null);
@@ -69,6 +79,7 @@ export function ItemDrawer({
   const [runs, setRuns] = React.useState<WorkflowRun[]>([]);
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
+  const scrollRef = React.useRef<HTMLElement>(null);
   const repositoryUrl = `https://github.com/${item.repositoryName}`;
 
   function resizeTo(clientX: number): void {
@@ -83,6 +94,10 @@ export function ItemDrawer({
       return current;
     });
   }
+
+  React.useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [item.id]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -121,6 +136,7 @@ export function ItemDrawer({
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div className="absolute inset-0 bg-background/80" aria-hidden="true" />
       <aside
+        ref={scrollRef}
         role="dialog"
         aria-modal="true"
         aria-label="Preview drawer"
@@ -162,17 +178,44 @@ export function ItemDrawer({
             <h2 className="mt-1 text-base font-semibold">
               <TitleLink item={item} />
             </h2>
+            {positionLabel ? (
+              <p aria-live="polite" className="mt-1 text-xs text-muted-foreground">
+                {positionLabel}
+              </p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            autoFocus
-            aria-label="Close details"
-            title="Close details (Esc)"
-            onClick={onClose}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
+          <div className="flex shrink-0 items-start gap-1">
+            <button
+              type="button"
+              aria-label="Previous thread"
+              title="Previous thread (k / [)"
+              onClick={onPrev}
+              disabled={!hasPrev || !onPrev}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
+            >
+              <ChevronUp className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label="Next thread"
+              title="Next thread (j / ])"
+              onClick={onNext}
+              disabled={!hasNext || !onNext}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              autoFocus
+              aria-label="Close details"
+              title="Close details (Esc)"
+              onClick={onClose}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={merged ? "merged" : reasonTone(item.reason)}>
