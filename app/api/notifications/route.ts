@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
-import { matchAge, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
+import { isClosedItem, isMergedItem, matchAge, matchesTypeFilter, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
+import { readSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,11 @@ export async function GET(request: Request) {
 
   const repos = await db.select().from(repositories);
   const reposById = new Map(repos.map((r) => [r.id, r]));
+  const lastSyncRaw = await readSyncState(db, "lastSyncAt");
+  const pollRaw = await readSyncState(db, "pollIntervalSecs");
+  const lastSyncAt = lastSyncRaw ? Number.parseInt(lastSyncRaw, 10) : null;
+  const pollIntervalSecs = Number.parseInt(pollRaw ?? "60", 10) || 60;
+  const stale = lastSyncAt !== null && now - lastSyncAt > 2 * pollIntervalSecs * 1000;
 
   const rows = await db.select().from(notifications);
   const repoName = (id: string) => reposById.get(id)?.fullName ?? id;
@@ -42,7 +48,12 @@ export async function GET(request: Request) {
     filtered = filtered.filter((n) => n.repositoryId === repoFilter);
   }
   if (typeFilter !== "all") {
-    filtered = filtered.filter((n) => n.reason === typeFilter);
+    filtered = filtered.filter((n) =>
+      matchesTypeFilter(n.reason, n.subjectType, typeFilter, {
+        prMerged: (n.prMerged ?? 0) === 1,
+        subjectState: n.subjectState ?? null,
+      })
+    );
   }
   if (ageFilter !== "all") {
     filtered = filtered.filter((n) => matchAge(n.createdAt, now, ageFilter));
@@ -56,7 +67,12 @@ export async function GET(request: Request) {
   ) =>
     matchState(n.isDone) &&
     (ignore === "repo" || repoFilter === "all" || n.repositoryId === repoFilter) &&
-    (ignore === "type" || typeFilter === "all" || n.reason === typeFilter) &&
+    (ignore === "type" ||
+      typeFilter === "all" ||
+      matchesTypeFilter(n.reason, n.subjectType, typeFilter, {
+        prMerged: (n.prMerged ?? 0) === 1,
+        subjectState: n.subjectState ?? null,
+      })) &&
     matchAge(n.createdAt, now, ageFilter);
 
   const placement = (n: (typeof rows)[number]): "main" | "quiet" => {
@@ -68,10 +84,18 @@ export async function GET(request: Request) {
   };
 
   const typeCounts = new Map<string, number>();
+  let pullRequestCount = 0;
+  let mergedCount = 0;
+  let closedCount = 0;
   for (const n of rows) {
     if (!matchBase(n, "type")) continue;
     if (placement(n) !== "main") continue;
     typeCounts.set(n.reason, (typeCounts.get(n.reason) ?? 0) + 1);
+    if (n.subjectType === "PullRequest") pullRequestCount += 1;
+    const prMerged = (n.prMerged ?? 0) === 1;
+    const subjectState = n.subjectState ?? null;
+    if (isMergedItem({ reason: n.reason, prMerged })) mergedCount += 1;
+    if (isClosedItem({ reason: n.reason, prMerged, subjectState })) closedCount += 1;
   }
   const repoFacets = new Map<string, { main: number; quiet: number }>();
   for (const n of rows) {
@@ -85,7 +109,14 @@ export async function GET(request: Request) {
     types: TYPE_FILTERS.filter((t) => t.value !== "all").map((t) => ({
       value: t.value,
       label: t.label,
-      count: typeCounts.get(t.value) ?? 0,
+      count:
+        t.value === "pull_request"
+          ? pullRequestCount
+          : t.value === "merged"
+            ? mergedCount
+            : t.value === "closed"
+              ? closedCount
+              : (typeCounts.get(t.value) ?? 0),
     })),
     repos: repos.map((r) => ({
       id: r.id,
@@ -111,10 +142,14 @@ export async function GET(request: Request) {
         repositoryId: n.repositoryId,
         repositoryName: repoName(n.repositoryId),
         subject: n.subject,
+        subjectType: n.subjectType ?? null,
+        subjectState: n.subjectState ?? null,
         reason: n.reason,
+        prMerged: (n.prMerged ?? 0) === 1,
         createdAt: n.createdAt,
         isRead: n.isRead,
         isDone: n.isDone,
+        localUnread: n.localUnread === 1,
         sourceUrl: n.sourceUrl,
         due: true,
         dueLabel: null,
@@ -124,18 +159,27 @@ export async function GET(request: Request) {
     const repo = reposById.get(n.repositoryId);
     const snoozed = repo ? isSnoozed(repo.snoozedUntil, now) : false;
     const due = (repo ? isDue(repo, now) : true) && !snoozed;
+    const justPromoted =
+      !!repo &&
+      repo.rhythm === "immediate" &&
+      repo.lastPromotedAt != null &&
+      now - repo.lastPromotedAt < 24 * 3600 * 1000;
     const item = {
       id: n.id,
       repositoryId: n.repositoryId,
       repositoryName: repoName(n.repositoryId),
       subject: n.subject,
+      subjectType: n.subjectType ?? null,
+      subjectState: n.subjectState ?? null,
       reason: n.reason,
+      prMerged: (n.prMerged ?? 0) === 1,
       createdAt: n.createdAt,
       isRead: n.isRead,
       isDone: n.isDone,
+      localUnread: n.localUnread === 1,
       sourceUrl: n.sourceUrl,
       due,
-      dueLabel: repo && due && repo.rhythm !== "immediate" ? "Digest due" : null,
+      dueLabel: repo && due && (repo.rhythm !== "immediate" || justPromoted) ? "Digest due" : null,
     };
     if (due) {
       mainFlow.push(item);
@@ -165,5 +209,5 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({ now, mainFlow, collapsedSection, facets });
+  return NextResponse.json({ now, lastSyncAt, stale, mainFlow, collapsedSection, facets });
 }

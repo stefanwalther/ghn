@@ -30,6 +30,7 @@ export async function GET() {
       nextDueLabel: formatDueDate(repo.nextDueAt),
       pendingCount,
       isDue: due,
+      unreachable: repo.unreachable === 1,
       snoozedUntil: repo.snoozedUntil,
       isSnoozed: isSnoozed(repo.snoozedUntil, now),
       snoozeLabel: formatSnoozeUntil(repo.snoozedUntil, now),

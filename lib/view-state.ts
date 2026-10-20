@@ -39,11 +39,56 @@ export function saveLastOpened(id: string): void {
     // ignore private-mode failures
   }
 }
-
 export function loadLastOpened(): string | null {
   try {
     return sessionStorage.getItem(LAST_OPENED_KEY);
   } catch {
     return null;
+  }
+}
+
+const DRAWER_WIDTH_KEY = "quiet-notifications:drawer-width";
+
+export const DRAWER_MIN_WIDTH = 480;
+export const DRAWER_MAX_WIDTH = 1120;
+export const DRAWER_DEFAULT_WIDTH = 896;
+
+export function clampDrawerWidth(px: number): number {
+  if (!Number.isFinite(px)) return DRAWER_DEFAULT_WIDTH;
+  return Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(px)));
+}
+
+export function loadDrawerWidth(): number {
+  try {
+    const raw = localStorage.getItem(DRAWER_WIDTH_KEY);
+    if (raw === null) return DRAWER_DEFAULT_WIDTH;
+    return clampDrawerWidth(Number.parseInt(raw, 10));
+  } catch {
+    return DRAWER_DEFAULT_WIDTH;
+  }
+}
+
+export function saveDrawerWidth(px: number): void {
+  try {
+    localStorage.setItem(DRAWER_WIDTH_KEY, String(clampDrawerWidth(px)));
+  } catch {
+    // ignore private-mode failures
+  }
+}
+
+export function previewFallbackKind(subjectType?: string | null): string {
+  switch (subjectType) {
+    case "Release":
+      return "releases";
+    case "Commit":
+      return "commits";
+    case "Discussion":
+      return "discussions";
+    case "CheckSuite":
+      return "check runs";
+    case "RepositoryDependabotAlertsThread":
+      return "security alerts";
+    default:
+      return "this item type";
   }
 }

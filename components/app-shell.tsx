@@ -3,27 +3,58 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, ExternalLink, Gauge, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
+import { DemoBanner } from "@/components/demo-banner";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
+import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
 
 const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
   { href: "/repos", label: "Repositories", icon: Settings2 },
+  { href: "/rate-limits", label: "Rate limits", icon: Gauge },
+];
+
+const GITHUB_NAV = [
+  {
+    href: "https://github.com/notifications",
+    label: "GitHub Notifications",
+    icon: ExternalLink,
+  },
+  {
+    href: "https://github.com/watching",
+    label: "Watched repositories",
+    icon: ExternalLink,
+  },
+  {
+    href: "https://github.com/notifications/subscriptions",
+    label: "Subscriptions",
+    icon: ExternalLink,
+  },
+  {
+    href: "https://github.com/settings/notifications",
+    label: "Notification settings",
+    icon: ExternalLink,
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
-  const [open, setOpen] = React.useState(
-    () => typeof window === "undefined" || window.innerWidth >= 768
-  );
+  // Render the server-consistent header until mounted: theme resolution and
+  // viewport width are client-only and must not fork the first render.
+  const [mounted, setMounted] = React.useState(false);
+  const [open, setOpen] = React.useState(true);
+  const [showHints, setShowHints] = React.useState(false);
 
   React.useEffect(() => {
+    setMounted(true);
     try {
       const saved = localStorage.getItem("quiet-notifications:sidebar");
       if (saved === "closed") setOpen(false);
+      else if (saved !== "open" && window.innerWidth < 768) setOpen(false);
     } catch {
       // ignore
     }
@@ -42,6 +73,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return !v;
     });
   }
+
+  const toggleRef = React.useRef(toggleSidebar);
+  toggleRef.current = toggleSidebar;
+
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (isAltHintKey(e)) {
+        setShowHints(true);
+        // Prevent the browser from shifting focus to its own menu while
+        // hints are visible (Windows Alt behavior).
+        e.preventDefault();
+        return;
+      }
+      if (isToggleSidebarEvent(e)) {
+        e.preventDefault();
+        toggleRef.current();
+      }
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (isAltHintKey(e) || !e.altKey) setShowHints(false);
+    }
+    function onBlur() {
+      setShowHints(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -76,34 +140,71 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <div className="mt-6 mb-1 px-3 text-xs font-medium text-muted-foreground">
+            GitHub
+          </div>
+          {GITHUB_NAV.map((item) => {
+            const Icon = item.icon;
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (window.innerWidth < 768) setOpen(false);
+                }}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+                {item.label}
+              </a>
+            );
+          })}
           </aside>
         </>
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
+        <DemoBanner />
         <header className="flex items-center gap-2 px-4 py-3">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label="Toggle sidebar"
-            title="Toggle sidebar (Cmd+B)"
-            onClick={toggleSidebar}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            ☰
-          </button>
+          <span className="relative inline-flex">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label="Toggle sidebar"
+              title="Toggle sidebar (Cmd+B)"
+              onClick={toggleSidebar}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
+            {showHints ? (
+              <Kbd
+                className="pointer-events-none absolute -top-2 -right-3 shadow-sm"
+              >
+                <span aria-hidden="true">⌘B</span>
+              </Kbd>
+            ) : null}
+          </span>
           <div className="min-w-0 flex-1 text-sm text-muted-foreground">
-            {pathname === "/repos" ? "Digest settings per repository" : "Triage with fewer clicks"}
+            {pathname === "/repos"
+              ? "Digest settings per repository"
+              : pathname === "/rate-limits"
+                ? "GitHub API buckets from response headers"
+                : "Triage with fewer clicks"}
           </div>
           <ContributionsChip />
           <button
             type="button"
             aria-label="Toggle theme"
-            aria-pressed={resolvedTheme === "dark"}
+            aria-pressed={mounted && resolvedTheme === "dark"}
             title="Toggle theme (Cmd+F12)"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {resolvedTheme === "dark" ? (
+            {mounted && resolvedTheme === "dark" ? (
               <Sun className="h-4 w-4" aria-hidden />
             ) : (
               <Moon className="h-4 w-4" aria-hidden />

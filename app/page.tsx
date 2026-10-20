@@ -8,11 +8,15 @@ import { DigestSection } from "@/components/inbox/digest-section";
 import { EmptyInbox, ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
 import { FilterSidebar, type RepoFacet, type TypeFacet } from "@/components/inbox/filter-sidebar";
 import { InboxFilters } from "@/components/inbox/inbox-filters";
+import { ItemDrawer } from "@/components/inbox/item-drawer";
+import type { ItemMenuAction } from "@/components/inbox/item-menu";
 import { NotificationList, type InboxItem } from "@/components/inbox/notification-list";
 import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { isEditableTarget } from "@/lib/shortcuts";
+import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
+import { copyText } from "@/lib/clipboard";
+import { isClosedItem, isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -35,11 +39,19 @@ function InboxView() {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [helpOpen, setHelpOpen] = React.useState(false);
+  const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = React.useState(false);
+  const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
+  const [stale, setStale] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+  const [pollSecs, setPollSecs] = React.useState(60);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const [conn, setConn] = React.useState<{ connected: boolean; reason?: string } | null>(null);
+  const [syncError, setSyncError] = React.useState<string | null>(null);
   const loadedRef = React.useRef(false);
   const reqRef = React.useRef(0);
 
@@ -59,6 +71,8 @@ function InboxView() {
       setCollapsed(data.collapsedSection ?? []);
       setTypeFacets(data.facets?.types ?? []);
       setRepoFacets(data.facets?.repos ?? []);
+      setLastSyncAt(typeof data.lastSyncAt === "number" ? data.lastSyncAt : null);
+      setStale(data.stale === true);
       loadedRef.current = true;
       setStatus("ready");
       setNotice(null);
@@ -95,6 +109,82 @@ function InboxView() {
     );
   }
 
+  React.useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/connection", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!cancelled && data) {
+          setConn({ connected: data.connected === true, reason: data.reason });
+        }
+      } catch {
+        // Connection probe is best-effort; the inbox still loads from cache.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function formatSyncTime(ts: number): string {
+    return new Date(ts).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function syncErrorMessage(reason: unknown): string {
+    if (reason === "auth") return "GitHub access missing. Run `gh auth login` on the server and refresh.";
+    if (reason === "rate_limited") return "GitHub rate limit reached. Retry shortly; cached inbox shown.";
+    if (reason === "network") return "GitHub unreachable. Showing cached inbox.";
+    return "Sync failed. Showing last loaded data.";
+  }
+
+  async function refresh() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => null);
+      if (data && typeof data.pollIntervalSecs === "number") setPollSecs(data.pollIntervalSecs);
+      if (data && typeof data.lastSyncAt === "number") setLastSyncAt(data.lastSyncAt);
+      if (data && data.fresh === false) {
+        setStale(true);
+        setSyncError(syncErrorMessage(data.reason));
+      } else {
+        setStale(false);
+        setSyncError(null);
+      }
+    } catch {
+      setSyncError("Sync failed. Showing last loaded data.");
+    } finally {
+      setSyncing(false);
+      try {
+        const connRes = await fetch("/api/connection", { cache: "no-store" });
+        const connData = await connRes.json().catch(() => null);
+        if (connData) {
+          setConn({ connected: connData.connected === true, reason: connData.reason });
+        }
+      } catch {
+        // Best-effort; banner state keeps its previous value.
+      }
+    }
+    await load();
+  }
+
+  const nextAllowedAt = lastSyncAt !== null ? lastSyncAt + pollSecs * 1000 : 0;
+  const inPollWindow = lastSyncAt !== null && nowMs < nextAllowedAt && !syncing;
+  const countdownSecs = inPollWindow ? Math.ceil((nextAllowedAt - nowMs) / 1000) : 0;
+
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
   }
@@ -116,7 +206,104 @@ function InboxView() {
   }
 
   function quickSelect(reason: string) {
+    if (reason === "release") {
+      setSelected(
+        new Set(
+          items
+            .filter((i) =>
+              isReleaseItem({ reason: i.reason, subject: i.subject, subjectType: i.subjectType ?? null })
+            )
+            .map((i) => i.id)
+        )
+      );
+      return;
+    }
+    if (reason === "merged") {
+      setSelected(
+        new Set(
+          items.filter((i) => isMergedItem({ reason: i.reason, prMerged: i.prMerged ?? false })).map((i) => i.id)
+        )
+      );
+      return;
+    }
+    if (reason === "closed") {
+      setSelected(
+        new Set(
+          items
+            .filter((i) =>
+              isClosedItem({
+                reason: i.reason,
+                prMerged: i.prMerged ?? false,
+                subjectState: i.subjectState ?? null,
+              })
+            )
+            .map((i) => i.id)
+        )
+      );
+      return;
+    }
     setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
+  }
+
+  function openDrawer(item: InboxItem) {
+    const idx = items.findIndex((i) => i.id === item.id);
+    if (idx >= 0) setFocusIdx(idx);
+    setDrawerItem(item);
+  }
+
+  async function menuAction(item: InboxItem, action: ItemMenuAction) {
+    if (action === "drawer") {
+      openDrawer(item);
+      return;
+    }
+    if (action === "copy") {
+      const ok = await copyText(item.sourceUrl);
+      setNotice(ok ? "Link copied to clipboard." : "Copy failed in this browser.");
+      return;
+    }
+    if (action === "open") {
+      saveLastOpened(item.id);
+      window.open(item.sourceUrl, "_blank", "noopener");
+      return;
+    }
+    if (action === "sync") {
+      await syncOne(item.id);
+      return;
+    }
+    void apply(action, [item.id]);
+  }
+
+  function drawerAction(item: InboxItem, action: ItemMenuAction) {
+    if (action === "done" || action === "unsubscribe") setDrawerItem(null);
+    menuAction(item, action);
+  }
+
+  async function syncOne(id: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/thread/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "sync failed");
+      if (data?.gone === true) {
+        setItems((prev) => prev.filter((i) => i.id !== id));
+        setDrawerItem((prev) => (prev?.id === id ? null : prev));
+        setNotice("Thread is gone on GitHub; marked done.");
+        return;
+      }
+      if (data?.item) {
+        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...data.item } : i)));
+        setDrawerItem((prev) => (prev?.id === id ? { ...prev, ...data.item } : prev));
+      }
+    } catch {
+      setNotice("Sync failed for this item.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function apply(action: BulkAction, ids?: string[]) {
@@ -126,6 +313,9 @@ function InboxView() {
     setNotice(null);
     const targetSet = new Set(targets);
     const prevItems = items;
+    if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
+      setDrawerItem(null);
+    }
     if (action === "done" || action === "unsubscribe") {
       setItems((prev) => prev.filter((i) => !targetSet.has(i.id)));
     } else if (action === "read") {
@@ -173,12 +363,47 @@ function InboxView() {
     });
   }
 
+  function stepDrawer(delta: number) {
+    if (items.length === 0) return;
+    const currentIdx = drawerItem
+      ? items.findIndex((i) => i.id === drawerItem.id)
+      : (focusIdx ?? -1);
+    const baseIdx = currentIdx >= 0 ? currentIdx : delta > 0 ? -1 : items.length;
+    const next = Math.min(items.length - 1, Math.max(0, baseIdx + delta));
+    setFocusIdx(next);
+    const nextItem = items[next];
+    if (nextItem) {
+      setDrawerItem(nextItem);
+      saveLastOpened(nextItem.id);
+    }
+    requestAnimationFrame(() => {
+      const id = items[next]?.id;
+      const el = id ? document.getElementById(`notification-${id}`) : null;
+      el?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  const drawerIdx = drawerItem ? items.findIndex((i) => i.id === drawerItem.id) : -1;
+  const drawerPositionLabel =
+    drawerItem && drawerIdx >= 0 ? `${drawerIdx + 1} of ${items.length}` : undefined;
+
+  React.useEffect(() => {
+    if (!drawerItem) return;
+    const fresh = items.find((i) => i.id === drawerItem.id);
+    if (fresh && (fresh.isRead !== drawerItem.isRead || fresh.subject !== drawerItem.subject)) {
+      setDrawerItem(fresh);
+    }
+  }, [items, drawerItem]);
+
   React.useEffect(() => {
     function onAltDown(e: KeyboardEvent) {
-      if (e.key === "Alt") setShowHints(true);
+      if (isAltHintKey(e)) {
+        setShowHints(true);
+        e.preventDefault();
+      }
     }
     function onAltUp(e: KeyboardEvent) {
-      if (e.key === "Alt") setShowHints(false);
+      if (isAltHintKey(e) || !e.altKey) setShowHints(false);
     }
     function onBlur() {
       setShowHints(false);
@@ -195,52 +420,86 @@ function InboxView() {
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
-        if (helpOpen) setHelpOpen(false);
+        if (drawerItem) setDrawerItem(null);
+        else if (helpOpen) setHelpOpen(false);
         else setSelected(new Set());
         return;
       }
+      if (isEditableTarget(e.target)) return;
       if (helpOpen) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const focusedId = focusIdx !== null ? items[focusIdx]?.id : undefined;
+      const drawerOpen = drawerItem !== null;
+      const activeId = drawerOpen ? drawerItem.id : focusIdx !== null ? items[focusIdx]?.id : undefined;
       if (e.key === "U" && e.shiftKey) {
         if (selected.size > 0) apply("unsubscribe");
-        else if (focusedId) apply("unsubscribe", [focusedId]);
+        else if (activeId) apply("unsubscribe", [activeId]);
         return;
       }
       switch (e.key) {
         case "j":
         case "ArrowDown":
           e.preventDefault();
-          moveFocus(1);
+          if (drawerOpen) stepDrawer(1);
+          else moveFocus(1);
           break;
         case "k":
         case "ArrowUp":
           e.preventDefault();
-          moveFocus(-1);
+          if (drawerOpen) stepDrawer(-1);
+          else moveFocus(-1);
+          break;
+        case "[":
+          if (drawerOpen) {
+            e.preventDefault();
+            stepDrawer(-1);
+          }
+          break;
+        case "]":
+          if (drawerOpen) {
+            e.preventDefault();
+            stepDrawer(1);
+          }
           break;
         case "x":
-          if (focusedId) toggle(focusedId);
+          if (activeId) toggle(activeId);
           break;
         case "e":
           if (selected.size > 0) apply("done");
-          else if (focusedId) apply("done", [focusedId]);
+          else if (activeId) apply("done", [activeId]);
           break;
         case "u":
           if (selected.size > 0) apply("unread");
-          else if (focusedId) apply("unread", [focusedId]);
+          else if (activeId) apply("unread", [activeId]);
           break;
         case "r":
           if (selected.size > 0) apply("read");
-          else if (focusedId) apply("read", [focusedId]);
+          else if (activeId) apply("read", [activeId]);
           break;
+        case "s": {
+          const targets = selected.size > 0 ? [...selected] : activeId ? [activeId] : [];
+          (async () => {
+            for (const id of targets) await syncOne(id);
+          })();
+          break;
+        }
         case "o": {
-          const item = focusIdx !== null ? items[focusIdx] : undefined;
+          const item = drawerOpen ? drawerItem : focusIdx !== null ? items[focusIdx] : undefined;
           if (item) {
             saveLastOpened(item.id);
             window.open(item.sourceUrl, "_blank", "noopener");
           }
+          break;
+        }
+        case "d": {
+          if (drawerOpen) break;
+          const item = focusIdx !== null ? items[focusIdx] : undefined;
+          if (item) openDrawer(item);
+          break;
+        }
+        case "c": {
+          const item = drawerOpen ? drawerItem : focusIdx !== null ? items[focusIdx] : undefined;
+          if (item) void menuAction(item, "copy");
           break;
         }
         case "a":
@@ -277,15 +536,22 @@ function InboxView() {
           <Button
             variant="ghost"
             size="sm"
-            title="Refresh inbox"
-            aria-label="Refresh inbox"
-            onClick={() => load()}
+            title={inPollWindow ? `Next refresh in ${countdownSecs}s` : "Refresh from GitHub"}
+            aria-label={inPollWindow ? `Next refresh in ${countdownSecs} seconds` : "Refresh inbox from GitHub"}
+            onClick={() => void refresh()}
+            disabled={syncing || refreshing || inPollWindow}
           >
             <RefreshCw
-              className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+              className={syncing || refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
               aria-hidden
             />
           </Button>
+          {lastSyncAt !== null ? (
+            <span className="text-xs text-muted-foreground" title={`Poll interval ${pollSecs}s`}>
+              {stale ? "Stale · " : ""}Synced {formatSyncTime(lastSyncAt)}
+              {inPollWindow ? ` · ${countdownSecs}s` : ""}
+            </span>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
@@ -296,16 +562,18 @@ function InboxView() {
           >
             Back to inbox top
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={async () => {
-              await fetch("/api/notifications/seed", { method: "POST" });
-              await load();
-            }}
-          >
-            Reseed demo data
-          </Button>
+          {lastSyncAt === null ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                await fetch("/api/notifications/seed", { method: "POST" });
+                await load();
+              }}
+            >
+              Reseed demo data
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-col gap-4 lg:flex-row">
@@ -333,6 +601,48 @@ function InboxView() {
               {notice}
             </p>
           ) : null}
+          {conn && !conn.connected ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/50 bg-card px-4 py-3 shadow-sm"
+            >
+              <p className="flex-1 text-sm">
+                <span className="font-medium">GitHub disconnected.</span>{" "}
+                <span className="text-muted-foreground">
+                  Cached inbox below
+                  {lastSyncAt !== null ? ` · last synced ${formatSyncTime(lastSyncAt)}` : ""}.
+                  Run `gh auth login` on the server, then retry.
+                </span>
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refresh()}
+                disabled={syncing}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          {conn?.connected !== false && (stale || syncError) ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-input bg-card px-4 py-3 shadow-sm"
+            >
+              <p className="flex-1 text-sm text-muted-foreground">
+                {syncError ?? "Data may be stale."}
+                {lastSyncAt !== null ? ` Last synced ${formatSyncTime(lastSyncAt)}.` : ""}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refresh()}
+                disabled={syncing || inPollWindow}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
           {status === "error" ? <ErrorInbox onRetry={load} /> : null}
           {status === "ready" && items.length === 0 && collapsed.length === 0 ? <EmptyInbox /> : null}
@@ -345,6 +655,8 @@ function InboxView() {
           onToggle={toggle}
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
+          onMenuAction={menuAction}
+          onOpen={(item) => openDrawer(item)}
         />
           ) : null}
           {status === "ready" && collapsed.length > 0 ? (
@@ -353,6 +665,18 @@ function InboxView() {
         </div>
       </div>
       {helpOpen ? <ShortcutsHelp onClose={() => setHelpOpen(false)} /> : null}
+      {drawerItem ? (
+        <ItemDrawer
+          item={drawerItem}
+          onClose={() => setDrawerItem(null)}
+          onAction={drawerAction}
+          onPrev={() => stepDrawer(-1)}
+          onNext={() => stepDrawer(1)}
+          hasPrev={drawerIdx > 0}
+          hasNext={drawerIdx >= 0 && drawerIdx < items.length - 1}
+          positionLabel={drawerPositionLabel}
+        />
+      ) : null}
     </div>
   );
 }

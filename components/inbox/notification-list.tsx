@@ -4,19 +4,24 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
-import { QUICK_SELECTS } from "@/lib/filters";
+import { QUICK_SELECTS, isClosedItem, isMergedItem } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
+import { ItemMenu, type ItemMenuAction } from "@/components/inbox/item-menu";
 
 export interface InboxItem {
   id: string;
   repositoryId: string;
   repositoryName: string;
   subject: string;
+  subjectType?: string | null;
+  subjectState?: string | null;
   reason: string;
+  prMerged?: boolean | null;
   createdAt: number;
   isRead: number;
   isDone: number;
+  localUnread?: boolean;
   sourceUrl: string;
   due: boolean;
   dueLabel: string | null;
@@ -24,9 +29,23 @@ export interface InboxItem {
 
 const FAILURE_REASONS = new Set(["action_failed", "ci_failed"]);
 
-function reasonTone(reason: string): "destructive" | "merged" | "muted" {
+export function reasonTone(reason: string): "destructive" | "merged" | "muted";
+export function reasonTone(item: {
+  reason: string;
+  prMerged?: boolean | null;
+  subjectState?: string | null;
+}): "destructive" | "merged" | "secondary" | "muted";
+export function reasonTone(
+  reasonOrItem: string | { reason: string; prMerged?: boolean | null; subjectState?: string | null }
+): "destructive" | "merged" | "secondary" | "muted" {
+  const reason = typeof reasonOrItem === "string" ? reasonOrItem : reasonOrItem.reason;
   if (FAILURE_REASONS.has(reason)) return "destructive";
   if (reason === "merged") return "merged";
+  if (typeof reasonOrItem !== "string") {
+    if (isMergedItem({ reason, prMerged: reasonOrItem.prMerged ?? false })) return "merged";
+    if (isClosedItem({ reason, prMerged: reasonOrItem.prMerged ?? false, subjectState: reasonOrItem.subjectState ?? null }))
+      return "secondary";
+  }
   return "muted";
 }
 
@@ -52,6 +71,8 @@ export function NotificationList({
   onToggle,
   onToggleAll,
   onQuickSelect,
+  onMenuAction,
+  onOpen,
 }: {
   items: InboxItem[];
   selected: Set<string>;
@@ -60,6 +81,8 @@ export function NotificationList({
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onQuickSelect: (reason: string) => void;
+  onMenuAction: (item: InboxItem, action: ItemMenuAction) => void;
+  onOpen: (item: InboxItem) => void;
 }) {
   const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
   return (
@@ -95,6 +118,13 @@ export function NotificationList({
       <ul className="divide-y divide-border/40">
         {items.map((item) => {
           const checked = selected.has(item.id);
+          const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
+          const closed = isClosedItem({
+            reason: item.reason,
+            prMerged: item.prMerged ?? false,
+            subjectState: item.subjectState ?? null,
+          });
+          const tone = merged ? "merged" : closed ? "secondary" : reasonTone(item.reason);
           return (
             <li
               key={item.id}
@@ -104,57 +134,78 @@ export function NotificationList({
                 item.isRead === 0 && "bg-accent/30",
                 focusedId === item.id && "ring-2 ring-inset ring-ring"
               )}
-              onClick={() => onToggle(item.id)}
+              onClick={() => onOpen(item)}
               onKeyDown={(e) => {
                 if ((e.target as HTMLElement).tagName === "INPUT") return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onToggle(item.id);
+                  onOpen(item);
                 }
               }}
               tabIndex={0}
             >
-              <span onClick={(e) => e.stopPropagation()} className="pt-0.5">
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle(item.id);
+                }}
+                title={`Select ${item.subject}`}
+                className="flex items-start gap-3 self-stretch py-0.5 pr-3"
+              >
                 <Checkbox
                   checked={checked}
-                  onChange={() => onToggle(item.id)}
+                  onChange={() => {}}
                   aria-label={`Select ${item.subject}`}
                 />
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "mt-2 h-2 w-2 shrink-0 rounded-full",
+                    item.isRead === 0 ? (merged ? "bg-merged" : reasonDot(item.reason)) : "bg-transparent"
+                  )}
+                />
               </span>
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "mt-2 h-2 w-2 shrink-0 rounded-full",
-                  item.isRead === 0 ? reasonDot(item.reason) : "bg-transparent"
-                )}
-              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="sr-only">{item.isRead === 0 ? "unread" : "read"}</span>
                   <span className="text-xs text-muted-foreground">{item.repositoryName}</span>
-                  <Badge variant={reasonTone(item.reason)}>
-                    {item.reason.replace("_", " ")}
+                  {item.subjectType === "PullRequest" ? (
+                    <Badge variant="outline">PR</Badge>
+                  ) : null}
+                  <Badge variant={tone}>
+                    {merged ? "merged" : closed ? "closed" : item.reason.replace("_", " ")}
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
+                  {item.localUnread ? (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title="Unread is local only; GitHub has no mark-unread endpoint"
+                    >
+                      local only
+                    </span>
+                  ) : null}
                   <span className="font-mono text-xs text-muted-foreground">
                     {ageLabel(item.createdAt)}
                   </span>
                 </div>
                 <p className="mt-1 truncate text-sm font-medium">{item.subject}</p>
               </div>
-              <a
-                href={item.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Open source for ${item.subject}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  saveLastOpened(item.id);
-                }}
-                className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden />
-              </a>
+              <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
+                <ItemMenu item={item} onAction={onMenuAction} />
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open source for ${item.subject}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveLastOpened(item.id);
+                  }}
+                  className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                </a>
+              </div>
             </li>
           );
         })}

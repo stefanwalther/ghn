@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Quiet Notifications",
+  title: "ghn - The better github notifications",
   description: "GitHub-style inbox with fewer clicks and per-repo digests",
 };
 
@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

@@ -21,20 +21,80 @@ export const AGE_FILTERS: { value: AgeFilter; label: string }[] = [
 
 export const TYPE_FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "All types" },
+  { value: "pull_request", label: "Pull requests" },
   { value: "mention", label: "Mention" },
+  { value: "team_mention", label: "Team mention" },
   { value: "review_requested", label: "Review requested" },
+  { value: "assign", label: "Assigned" },
+  { value: "author", label: "Author" },
+  { value: "comment", label: "Comment" },
+  { value: "ci_activity", label: "CI activity" },
   { value: "action_failed", label: "Action failed" },
   { value: "ci_failed", label: "CI failed" },
   { value: "release", label: "Release" },
   { value: "merged", label: "Merged" },
-  { value: "assigned", label: "Assigned" },
+  { value: "closed", label: "Closed" },
   { value: "subscribed", label: "Subscribed" },
+  { value: "manual", label: "Manual" },
+  { value: "invitation", label: "Invitation" },
+  { value: "state_change", label: "State change" },
+  { value: "security_advisory", label: "Security advisory" },
 ];
 
 export const QUICK_SELECTS: { value: string; label: string }[] = [
   { value: "release", label: "All releases" },
   { value: "merged", label: "All merged" },
+  { value: "closed", label: "All closed" },
 ];
+
+export function isReleaseItem(input: {
+  reason: string;
+  subject: string;
+  subjectType?: string | null;
+}): boolean {
+  if (input.reason === "release") return true;
+  if (input.subjectType === "Release") return true;
+  if (/^v\d+\.\d+/i.test(input.subject.trim())) return true;
+  if (/chore\(main\): release/i.test(input.subject)) return true;
+  return false;
+}
+
+export function isMergedItem(input: {
+  reason: string;
+  prMerged?: boolean | null;
+}): boolean {
+  if (input.reason === "merged") return true;
+  return input.prMerged === true;
+}
+
+export function isClosedItem(input: {
+  reason: string;
+  prMerged?: boolean | null;
+  subjectState?: string | null;
+}): boolean {
+  if (isMergedItem(input)) return false;
+  return input.subjectState === "closed";
+}
+
+export function matchesTypeFilter(
+  reason: string,
+  subjectType: string | null | undefined,
+  filter: string,
+  extra?: { prMerged?: boolean | null; subjectState?: string | null }
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "pull_request") return subjectType === "PullRequest";
+  if (filter === "merged") {
+    if (reason === "merged") return true;
+    return extra?.prMerged === true;
+  }
+  if (filter === "closed") {
+    if (extra?.subjectState !== "closed") return false;
+    if (reason === "merged" || extra?.prMerged === true) return false;
+    return true;
+  }
+  return reason === filter;
+}
 
 const DAY = 24 * 60 * 60 * 1000;
 

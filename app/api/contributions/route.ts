@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { contributionDays } from "@/db/schema";
+import { readSyncState } from "@/lib/sync";
 import {
   fetchDayCount,
   getViewerLogin,
@@ -22,21 +23,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "`date` must be YYYY-MM-DD" }, { status: 400 });
   }
 
+  const storedLogin = await readSyncState(db, "viewerLogin");
+  const login = resolveLogin(process.env.GHN_LOGIN, storedLogin ?? (await getViewerLogin()));
+
   const cached = (
     await db.select().from(contributionDays).where(eq(contributionDays.date, raw))
   )[0];
   if (cached && isFresh(cached.fetchedAt, now, raw, today)) {
-    return NextResponse.json({ date: raw, count: cached.count, cached: true });
+    return NextResponse.json({ date: raw, count: cached.count, cached: true, login });
   }
 
-  const login = resolveLogin(process.env.GHN_LOGIN, await getViewerLogin());
   if (!login) {
-    if (cached) return NextResponse.json({ date: raw, count: cached.count, cached: true });
+    if (cached)
+      return NextResponse.json({ date: raw, count: cached.count, cached: true, login: null });
     return NextResponse.json({ error: "github auth unavailable" }, { status: 503 });
   }
   const count = await fetchDayCount(login, raw);
   if (count === null) {
-    if (cached) return NextResponse.json({ date: raw, count: cached.count, cached: true });
+    if (cached)
+      return NextResponse.json({ date: raw, count: cached.count, cached: true, login });
     return NextResponse.json({ error: "github unreachable" }, { status: 503 });
   }
 
@@ -47,5 +52,5 @@ export async function GET(request: Request) {
       target: contributionDays.date,
       set: { count, fetchedAt: now },
     });
-  return NextResponse.json({ date: raw, count, cached: false });
+  return NextResponse.json({ date: raw, count, cached: false, login });
 }

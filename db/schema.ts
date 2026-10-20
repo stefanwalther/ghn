@@ -12,6 +12,7 @@ export const repositories = sqliteTable(
     lastPromotedAt: integer("last_promoted_at"),
     nextDueAt: integer("next_due_at"),
     snoozedUntil: integer("snoozed_until"),
+    unreachable: integer("unreachable").notNull().default(0),
     createdAt: integer("created_at").notNull(),
   },
   (t) => ({ rhythmIdx: index("repositories_rhythm_idx").on(t.rhythm) })
@@ -25,21 +26,15 @@ export const notifications = sqliteTable(
       .notNull()
       .references(() => repositories.id),
     subject: text("subject").notNull(),
-    reason: text("reason")
-      .notNull()
-      .$type<
-        | "mention"
-        | "review_requested"
-        | "action_failed"
-        | "ci_failed"
-        | "release"
-        | "merged"
-        | "assigned"
-        | "subscribed"
-      >(),
+    subjectType: text("subject_type"),
+    subjectState: text("subject_state"),
+    reason: text("reason").notNull(),
+    prMerged: integer("pr_merged").notNull().default(0),
     createdAt: integer("created_at").notNull(),
+    githubUpdatedAt: integer("github_updated_at"),
     isRead: integer("is_read").notNull().default(0),
     isDone: integer("is_done").notNull().default(0),
+    localUnread: integer("local_unread").notNull().default(0),
     sourceUrl: text("source_url").notNull(),
   },
   (t) => ({
@@ -52,6 +47,25 @@ export type Repository = typeof repositories.$inferSelect;
 export type NewRepository = typeof repositories.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+
+export const syncState = sqliteTable("sync_state", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
+export type SyncState = typeof syncState.$inferSelect;
+
+export const writebackQueue = sqliteTable("writeback_queue", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  threadId: text("thread_id").notNull(),
+  action: text("action").notNull().$type<"done" | "read" | "unsubscribe">(),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export type WritebackItem = typeof writebackQueue.$inferSelect;
+export type NewWritebackItem = typeof writebackQueue.$inferInsert;
 
 export const mutedSubjects = sqliteTable("muted_subjects", {
   repositoryId: text("repository_id").notNull(),

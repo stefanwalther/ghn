@@ -10,16 +10,16 @@ Returns the contribution count for one UTC calendar day.
 Response 200:
 
 ```json
-{ "date": "2026-10-16", "count": 30, "cached": true }
+{ "date": "2026-10-16", "count": 30, "cached": true, "login": "stefanwalther" }
 ```
 
 Rules:
 
 - `date` defaults to today (UTC). Invalid values return 400.
 - Counts persist in the `contribution_days` table. Past dates cache forever,
-  today refreshes after one hour.
+  today refreshes after five minutes.
 - Login resolves from `GHN_LOGIN` or the `gh`-authenticated viewer.
-- The profile tooltip can differ by one at day edges because it uses a
-  different day boundary than the UTC window queried here.
+- The profile tooltip can differ by a few at day edges because it buckets by
+  the viewer's local day while the API reports UTC calendar days.
 - Without auth or on failure, a stale cached row is served when present,
   otherwise 503. The UI renders a muted fallback and stays quiet.
