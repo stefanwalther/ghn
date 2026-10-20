@@ -4,9 +4,12 @@ import {
   fetchSubjectContent,
   fetchThreadComments,
   fetchWorkflowRuns,
+  findPinnedRun,
+  formatRunAge,
   parseBranchFromTitle,
   parsePullCoords,
   parseRepoCoords,
+  parseWorkflowNameFromTitle,
   subjectApiUrlFromHtml,
   subjectCommentsUrlFromHtml,
 } from "@/lib/github";
@@ -147,6 +150,56 @@ describe("parseBranchFromTitle", () => {
   test("returns null without a branch phrase", () => {
     expect(parseBranchFromTitle("Weekly digest")).toBeNull();
     expect(parseBranchFromTitle("")).toBeNull();
+  });
+});
+
+describe("parseWorkflowNameFromTitle", () => {
+  test("picks the workflow out of failure titles", () => {
+    expect(parseWorkflowNameFromTitle("Release Please workflow run failed for main branch")).toBe(
+      "Release Please"
+    );
+    expect(parseWorkflowNameFromTitle("tracing workflow run failed for t3/specify-recall-7843 branch")).toBe(
+      "tracing"
+    );
+  });
+
+  test("returns null without a workflow phrase", () => {
+    expect(parseWorkflowNameFromTitle("Weekly digest")).toBeNull();
+    expect(parseWorkflowNameFromTitle("")).toBeNull();
+  });
+});
+
+describe("findPinnedRun", () => {
+  const base = {
+    htmlUrl: "https://github.com/acme/web/actions/runs/1",
+    status: "completed",
+    branch: "main",
+  };
+  test("pins the matching run closest before the notification", () => {
+    const runs = [
+      { ...base, name: "tracing", conclusion: "success", createdAt: Date.parse("2026-10-19T18:14:22Z") },
+      { ...base, name: "tracing", conclusion: "failure", createdAt: Date.parse("2026-10-19T18:10:31Z") },
+      { ...base, name: "tracing", conclusion: "failure", createdAt: Date.parse("2026-10-19T18:10:24Z") },
+    ];
+    const pinned = findPinnedRun(runs, "tracing", Date.parse("2026-10-19T18:11:10Z"));
+    expect(pinned?.createdAt).toBe(Date.parse("2026-10-19T18:10:31Z"));
+  });
+
+  test("ignores runs created after the notification slack and null workflow", () => {
+    const runs = [
+      { ...base, name: "tracing", conclusion: "success", createdAt: Date.parse("2026-10-19T18:14:22Z") },
+    ];
+    expect(findPinnedRun(runs, "tracing", Date.parse("2026-10-19T18:11:10Z"))).toBeNull();
+    expect(findPinnedRun(runs, null, Date.parse("2026-10-19T18:11:10Z"))).toBeNull();
+  });
+});
+
+describe("formatRunAge", () => {
+  test("formats minutes hours and days", () => {
+    const now = Date.parse("2026-10-19T20:00:00Z");
+    expect(formatRunAge(now - 5 * 60000, now)).toBe("5m ago");
+    expect(formatRunAge(now - 3 * 3600000, now)).toBe("3h ago");
+    expect(formatRunAge(now - 48 * 3600000, now)).toBe("2d ago");
   });
 });
 

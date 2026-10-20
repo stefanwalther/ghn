@@ -8,6 +8,12 @@ import { Markdown } from "@/components/inbox/markdown";
 import { isMergedItem } from "@/lib/filters";
 import type { CheckSummary, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
 import {
+  findPinnedRun,
+  formatRunAge,
+  parseBranchFromTitle,
+  parseWorkflowNameFromTitle,
+} from "@/lib/github";
+import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
   clampDrawerWidth,
@@ -52,6 +58,13 @@ function TitleLink({ item }: { item: InboxItem }) {
   );
 }
 
+function runDotClass(conclusion: string | null): string {
+  if (conclusion === "success") return "h-2 w-2 shrink-0 rounded-full bg-primary";
+  if (conclusion === "failure" || conclusion === "timed_out" || conclusion === "action_required")
+    return "h-2 w-2 shrink-0 rounded-full bg-destructive";
+  return "h-2 w-2 shrink-0 rounded-full bg-muted";
+}
+
 export function ItemDrawer({
   item,
   onClose,
@@ -70,6 +83,22 @@ export function ItemDrawer({
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
   const repositoryUrl = `https://github.com/${item.repositoryName}`;
+  const branchFromTitle = parseBranchFromTitle(item.subject);
+  const workflowName = parseWorkflowNameFromTitle(item.subject);
+  const pinned = findPinnedRun(runs, workflowName, item.createdAt);
+  const latest = runs.slice(0, 5);
+  const latestBranch =
+    branchFromTitle ?? latest.find((r) => r.branch)?.branch ?? null;
+  const pinnedFailed =
+    !!pinned &&
+    (pinned.conclusion === "failure" ||
+      pinned.conclusion === "timed_out" ||
+      pinned.conclusion === "action_required");
+  const latestAllGreen =
+    latest.length > 0 && latest.every((r) => r.conclusion === "success");
+  const pinnedHidden =
+    !!pinned && !latest.some((r) => r.htmlUrl === pinned.htmlUrl);
+  const fixedSince = Boolean(pinnedFailed && latestAllGreen && pinnedHidden);
 
   function resizeTo(clientX: number): void {
     setWidth(clampDrawerWidth(window.innerWidth - clientX));
@@ -227,21 +256,47 @@ export function ItemDrawer({
           ) : null}
           {contentState === "unavailable" ||
           (contentState === "ready" && !content) ? (
-            <div className="flex flex-col items-center gap-2 rounded-lg bg-muted/40 px-6 py-10 text-center">
-              <EyeOff className="h-8 w-8 text-muted-foreground" aria-hidden />
-              <p className="font-semibold">
-                No preview for {previewFallbackKind(item.subjectType)}
-              </p>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                The preview drawer renders issues and pull requests. For
-                everything else, continue on GitHub.
-              </p>
-              {runs.length > 0 ? (
-                <div className="mt-2 flex w-full flex-col gap-1 text-left">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Recent workflow runs
+            runs.length > 0 ? (
+              <>
+                <div className="flex w-full flex-col gap-1 text-left">
+                  {pinned ? (
+                    <>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        This notification
+                      </p>
+                      <a
+                        key={pinned.htmlUrl}
+                        href={pinned.htmlUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm ring-1 ring-border transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span aria-hidden="true" className={runDotClass(pinned.conclusion)} />
+                        <span className="min-w-0 flex-1 truncate" title={pinned.name}>
+                          {pinned.name}
+                          {pinned.branch ? ` · ${pinned.branch}` : ""}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatRunAge(pinned.createdAt)}
+                        </span>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      </a>
+                    </>
+                  ) : workflowName ? (
+                    <p className="px-2 text-xs text-muted-foreground">
+                      The run that triggered this is older than the latest 20 on
+                      this branch.
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-xs font-medium text-muted-foreground">
+                    Latest{latestBranch ? ` on ${latestBranch}` : ""}
                   </p>
-                  {runs.map((run) => (
+                  {fixedSince ? (
+                    <p className="px-2 text-xs text-muted-foreground">
+                      Fixed since this failure. Latest runs are green.
+                    </p>
+                  ) : null}
+                  {latest.map((run) => (
                     <a
                       key={run.htmlUrl}
                       href={run.htmlUrl}
@@ -249,36 +304,51 @@ export function ItemDrawer({
                       rel="noopener noreferrer"
                       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span
-                        aria-hidden="true"
-                        className={
-                          run.conclusion === "success"
-                            ? "h-2 w-2 shrink-0 rounded-full bg-primary"
-                            : run.conclusion === "failure" || run.conclusion === "timed_out" || run.conclusion === "action_required"
-                              ? "h-2 w-2 shrink-0 rounded-full bg-destructive"
-                              : "h-2 w-2 shrink-0 rounded-full bg-muted"
-                        }
-                      />
+                      <span aria-hidden="true" className={runDotClass(run.conclusion)} />
                       <span className="min-w-0 flex-1 truncate" title={run.name}>
                         {run.name}
                         {run.branch ? ` · ${run.branch}` : ""}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {formatRunAge(run.createdAt)}
                       </span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </a>
                   ))}
                 </div>
-              ) : null}
-              <a
-                href={item.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => saveLastOpened(item.id)}
-                className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md bg-secondary px-4 py-2 text-sm text-secondary-foreground transition-colors duration-150 hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden />
-                Open in new window
-              </a>
-            </div>
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => saveLastOpened(item.id)}
+                  className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                  Open in new window
+                </a>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-2 rounded-lg bg-muted/40 px-6 py-10 text-center">
+                <EyeOff className="h-8 w-8 text-muted-foreground" aria-hidden />
+                <p className="font-semibold">
+                  No preview for {previewFallbackKind(item.subjectType)}
+                </p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  The preview drawer renders issues and pull requests. For
+                  everything else, continue on GitHub.
+                </p>
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => saveLastOpened(item.id)}
+                  className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md bg-secondary px-4 py-2 text-sm text-secondary-foreground transition-colors duration-150 hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                  Open in new window
+                </a>
+              </div>
+            )
           ) : null}
           {contentState === "ready" && content ? (
             <>
