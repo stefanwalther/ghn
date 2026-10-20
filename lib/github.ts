@@ -247,6 +247,12 @@ export async function setSubscriptionIgnored(
 
 function deriveFallbackUrl(thread: GhThread): string {
   if (thread.subjectApiUrl) {
+    const dependabot = thread.subjectApiUrl.match(
+      /\/repos\/([^/]+\/[^/]+)\/dependabot\/alerts\/(\d+)/
+    );
+    if (dependabot?.[1] && dependabot?.[2]) {
+      return `https://github.com/${dependabot[1]}/security/dependabot/${dependabot[2]}`;
+    }
     const match = thread.subjectApiUrl.match(
       /\/repos\/([^/]+\/[^/]+)\/(issues|pulls)\/(\d+)/
     );
@@ -281,10 +287,143 @@ export function readSubjectState(subjectApiUrl: string): string | null {
 }
 
 export function subjectApiUrlFromHtml(htmlUrl: string): string | null {
+  const dependabot = htmlUrl.match(
+    /^https:\/\/github\.com\/([^/]+\/[^/]+)\/security\/dependabot\/(\d+)/
+  );
+  if (dependabot?.[1] && dependabot?.[2]) {
+    return `https://api.github.com/repos/${dependabot[1]}/dependabot/alerts/${dependabot[2]}`;
+  }
   const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
   if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
   const kind = match[2] === "pull" ? "pulls" : "issues";
   return `https://api.github.com/repos/${match[1]}/${kind}/${match[3]}`;
+}
+
+export interface DependabotAlertCoords {
+  owner: string;
+  repo: string;
+  number: number;
+}
+
+export function parseDependabotAlertCoordsFromApi(apiUrl: string): DependabotAlertCoords | null {
+  const match = apiUrl.match(
+    /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/dependabot\/alerts\/(\d+)/
+  );
+  if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
+  return { owner: match[1], repo: match[2], number: Number.parseInt(match[3], 10) };
+}
+
+export function parseDependabotAlertCoordsFromHtml(htmlUrl: string): DependabotAlertCoords | null {
+  const match = htmlUrl.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/security\/dependabot\/(\d+)/
+  );
+  if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
+  return { owner: match[1], repo: match[2], number: Number.parseInt(match[3], 10) };
+}
+
+export function parseDependabotAlertCoords(input: string): DependabotAlertCoords | null {
+  return parseDependabotAlertCoordsFromApi(input) ?? parseDependabotAlertCoordsFromHtml(input);
+}
+
+export interface DependabotAlertDetails {
+  number: number;
+  state: string | null;
+  htmlUrl: string;
+  packageName: string | null;
+  ecosystem: string | null;
+  manifestPath: string | null;
+  scope: string | null;
+  severity: string | null;
+  summary: string | null;
+  description: string | null;
+  cveId: string | null;
+  ghsaId: string | null;
+  vulnerableRange: string | null;
+  patchedVersion: string | null;
+  createdAt: number | null;
+  fixedAt: number | null;
+  dismissedAt: number | null;
+  dismissedReason: string | null;
+}
+
+export async function fetchDependabotAlert(
+  token: string,
+  apiUrl: string
+): Promise<DependabotAlertDetails | null> {
+  try {
+    const res = await fetch(apiUrl, { headers: baseHeaders(token) });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as {
+      number?: unknown;
+      state?: unknown;
+      html_url?: unknown;
+      dependency?: unknown;
+      security_advisory?: unknown;
+      security_vulnerability?: unknown;
+      created_at?: unknown;
+      fixed_at?: unknown;
+      dismissed_at?: unknown;
+      dismissed_reason?: unknown;
+    };
+    if (typeof payload.number !== "number" || typeof payload.html_url !== "string") {
+      return null;
+    }
+    const dependency = payload.dependency as {
+      package?: { ecosystem?: unknown; name?: unknown };
+      manifest_path?: unknown;
+      scope?: unknown;
+    } | null | undefined;
+    const advisory = payload.security_advisory as {
+      summary?: unknown;
+      description?: unknown;
+      severity?: unknown;
+      cve_id?: unknown;
+      ghsa_id?: unknown;
+    } | null | undefined;
+    const vuln = payload.security_vulnerability as {
+      vulnerable_version_range?: unknown;
+      first_patched_version?: { identifier?: unknown } | null;
+    } | null | undefined;
+    const toMs = (v: unknown): number | null => {
+      if (typeof v !== "string") return null;
+      const ms = Date.parse(v);
+      return Number.isNaN(ms) ? null : ms;
+    };
+    return {
+      number: payload.number,
+      state: typeof payload.state === "string" ? payload.state : null,
+      htmlUrl: payload.html_url,
+      packageName:
+        typeof dependency?.package?.name === "string" ? dependency.package.name : null,
+      ecosystem:
+        typeof dependency?.package?.ecosystem === "string"
+          ? dependency.package.ecosystem
+          : null,
+      manifestPath:
+        typeof dependency?.manifest_path === "string" ? dependency.manifest_path : null,
+      scope: typeof dependency?.scope === "string" ? dependency.scope : null,
+      severity: typeof advisory?.severity === "string" ? advisory.severity : null,
+      summary: typeof advisory?.summary === "string" ? advisory.summary : null,
+      description: typeof advisory?.description === "string" ? advisory.description : null,
+      cveId: typeof advisory?.cve_id === "string" ? advisory.cve_id : null,
+      ghsaId: typeof advisory?.ghsa_id === "string" ? advisory.ghsa_id : null,
+      vulnerableRange:
+        typeof vuln?.vulnerable_version_range === "string"
+          ? vuln.vulnerable_version_range
+          : null,
+      patchedVersion:
+        typeof vuln?.first_patched_version?.identifier === "string"
+          ? vuln.first_patched_version.identifier
+          : null,
+      createdAt: toMs(payload.created_at),
+      fixedAt: toMs(payload.fixed_at),
+      dismissedAt: toMs(payload.dismissed_at),
+      dismissedReason:
+        typeof payload.dismissed_reason === "string" ? payload.dismissed_reason : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export interface SubjectContent {

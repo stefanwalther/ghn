@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   fetchCheckSummary,
+  fetchDependabotAlert,
   fetchSubjectContent,
   fetchThreadComments,
   fetchWorkflowRuns,
   parseBranchFromTitle,
+  parseDependabotAlertCoords,
+  parseDependabotAlertCoordsFromApi,
+  parseDependabotAlertCoordsFromHtml,
   parsePullCoords,
   parseRepoCoords,
   subjectApiUrlFromHtml,
@@ -83,9 +87,143 @@ describe("subjectApiUrlFromHtml", () => {
     );
   });
 
+  test("dependabot html maps to alerts api url", () => {
+    expect(subjectApiUrlFromHtml("https://github.com/acme/web/security/dependabot/34")).toBe(
+      "https://api.github.com/repos/acme/web/dependabot/alerts/34"
+    );
+  });
+
   test("unknown shapes return null", () => {
     expect(subjectApiUrlFromHtml("https://github.com/acme/web")).toBeNull();
     expect(subjectApiUrlFromHtml("not a url")).toBeNull();
+  });
+});
+
+describe("parseDependabotAlertCoords", () => {
+  test("parses api and html shapes", () => {
+    expect(
+      parseDependabotAlertCoordsFromApi("https://api.github.com/repos/acme/web/dependabot/alerts/34")
+    ).toEqual({ owner: "acme", repo: "web", number: 34 });
+    expect(
+      parseDependabotAlertCoordsFromHtml("https://github.com/acme/web/security/dependabot/34")
+    ).toEqual({ owner: "acme", repo: "web", number: 34 });
+    expect(parseDependabotAlertCoords("https://github.com/acme/web/security/dependabot/34")).toEqual({
+      owner: "acme",
+      repo: "web",
+      number: 34,
+    });
+  });
+
+  test("rejects non-alert urls", () => {
+    expect(parseDependabotAlertCoords("https://github.com/acme/web/pull/12")).toBeNull();
+    expect(parseDependabotAlertCoords("not a url")).toBeNull();
+  });
+});
+
+describe("fetchDependabotAlert", () => {
+  test("maps advisory, package, and timeline from fixture", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(
+          JSON.stringify({
+            number: 34,
+            state: "fixed",
+            html_url: "https://github.com/acme/web/security/dependabot/34",
+            dependency: {
+              package: { ecosystem: "npm", name: "sharp" },
+              manifest_path: "docs-site/package-lock.json",
+              scope: "runtime",
+            },
+            security_advisory: {
+              summary: "sharp RCE",
+              description: "Upgrade ASAP",
+              severity: "high",
+              cve_id: null,
+              ghsa_id: "GHSA-wq5f-xc86-pv6w",
+            },
+            security_vulnerability: {
+              vulnerable_version_range: "< 0.35.5",
+              first_patched_version: { identifier: "0.35.5" },
+            },
+            created_at: "2026-10-14T11:35:08Z",
+            fixed_at: "2026-10-14T11:51:33Z",
+            dismissed_at: null,
+            dismissed_reason: null,
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        ),
+    });
+    try {
+      const alert = await fetchDependabotAlert(
+        "token",
+        `http://localhost:${server.port}/repos/acme/web/dependabot/alerts/34`
+      );
+      expect(alert).toEqual({
+        number: 34,
+        state: "fixed",
+        htmlUrl: "https://github.com/acme/web/security/dependabot/34",
+        packageName: "sharp",
+        ecosystem: "npm",
+        manifestPath: "docs-site/package-lock.json",
+        scope: "runtime",
+        severity: "high",
+        summary: "sharp RCE",
+        description: "Upgrade ASAP",
+        cveId: null,
+        ghsaId: "GHSA-wq5f-xc86-pv6w",
+        vulnerableRange: "< 0.35.5",
+        patchedVersion: "0.35.5",
+        createdAt: Date.parse("2026-10-14T11:35:08Z"),
+        fixedAt: Date.parse("2026-10-14T11:51:33Z"),
+        dismissedAt: null,
+        dismissedReason: null,
+      });
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("tolerates missing optional fields", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(
+          JSON.stringify({
+            number: 101,
+            html_url: "https://github.com/acme/web/security/dependabot/101",
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        ),
+    });
+    try {
+      const alert = await fetchDependabotAlert(
+        "token",
+        `http://localhost:${server.port}/repos/acme/web/dependabot/alerts/101`
+      );
+      expect(alert?.number).toBe(101);
+      expect(alert?.packageName).toBeNull();
+      expect(alert?.severity).toBeNull();
+      expect(alert?.description).toBeNull();
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("returns null on non-ok or malformed payload", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response("{}", { status: 404 }),
+    });
+    try {
+      const alert = await fetchDependabotAlert(
+        "token",
+        `http://localhost:${server.port}/repos/acme/web/dependabot/alerts/999`
+      );
+      expect(alert).toBeNull();
+    } finally {
+      server.stop(true);
+    }
   });
 });
 
