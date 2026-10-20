@@ -148,9 +148,10 @@ export async function POST(request: Request) {
   }
 
   if (notModified) {
+    await writeSyncState(db, "lastSyncAt", String(now));
     return NextResponse.json({
       now,
-      lastSyncAt,
+      lastSyncAt: now,
       fresh: true,
       pollIntervalSecs: nextPoll,
       upserted: 0,
