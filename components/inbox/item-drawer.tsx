@@ -5,8 +5,9 @@ import { ChevronDown, ChevronUp, ExternalLink, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/inbox/markdown";
-import { isMergedItem } from "@/lib/filters";
-import type { CheckSummary, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
+import { isClosedItem, isMergedItem } from "@/lib/filters";
+import type { CheckSummary, DependabotAlertDetails, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
+import { SecurityAlertPreview } from "@/components/inbox/security-alert-preview";
 import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
@@ -72,11 +73,16 @@ export function ItemDrawer({
   positionLabel?: string;
 }) {
   const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
-  const [content, setContent] = React.useState<ThreadDetails | null>(null);
-  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
+  const closed = isClosedItem({
+    reason: item.reason,
+    prMerged: item.prMerged ?? false,
+    subjectState: item.subjectState ?? null,
+  });
+  const [content, setContent] = React.useState<ThreadDetails | null>(null);  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
     "loading"
   );
   const [runs, setRuns] = React.useState<WorkflowRun[]>([]);
+  const [alert, setAlert] = React.useState<DependabotAlertDetails | null>(null);
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
   const scrollRef = React.useRef<HTMLElement>(null);
@@ -103,6 +109,7 @@ export function ItemDrawer({
     let cancelled = false;
     setContent(null);
     setRuns([]);
+    setAlert(null);
     setContentState("loading");
     (async () => {
       try {
@@ -113,13 +120,20 @@ export function ItemDrawer({
         const data = (await res.json()) as ThreadDetails & {
           content?: SubjectContent | null;
           runs?: WorkflowRun[];
+          alert?: DependabotAlertDetails | null;
         };
         if (!cancelled) {
-          if ("content" in data && data.content === null) {
+          if (data.alert) {
+            setAlert(data.alert);
             setContent(null);
+            setRuns(Array.isArray(data.runs) ? data.runs : []);
+          } else if ("content" in data && data.content === null) {
+            setContent(null);
+            setAlert(null);
             setRuns(Array.isArray(data.runs) ? data.runs : []);
           } else {
             setContent(data as ThreadDetails);
+            setAlert(null);
             setRuns([]);
           }
           setContentState("ready");
@@ -218,9 +232,17 @@ export function ItemDrawer({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={merged ? "merged" : reasonTone(item.reason)}>
-            {merged ? "merged" : item.reason.replace("_", " ")}
-          </Badge>
+          {(() => {
+            const liveMerged = content?.merged === true;
+            const liveClosed = content?.state === "closed" && content?.merged !== true;
+            const showMerged = merged || liveMerged;
+            const showClosed = !showMerged && (closed || liveClosed);
+            return (
+              <Badge variant={showMerged ? "merged" : showClosed ? "secondary" : reasonTone(item)}>
+                {showMerged ? "merged" : showClosed ? "closed" : item.reason.replace("_", " ")}
+              </Badge>
+            );
+          })()}
           {content?.draft === true ? <Badge variant="secondary">draft</Badge> : null}
           {content?.checks ? (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -268,15 +290,18 @@ export function ItemDrawer({
               Loading thread…
             </p>
           ) : null}
+          {contentState === "ready" && alert ? (
+            <SecurityAlertPreview alert={alert} repositoryUrl={repositoryUrl} />
+          ) : null}
           {contentState === "unavailable" ||
-          (contentState === "ready" && !content) ? (
+          (contentState === "ready" && !content && !alert) ? (
             <div className="flex flex-col items-center gap-2 rounded-lg bg-muted/40 px-6 py-10 text-center">
               <EyeOff className="h-8 w-8 text-muted-foreground" aria-hidden />
               <p className="font-semibold">
                 No preview for {previewFallbackKind(item.subjectType)}
               </p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                The preview drawer renders issues and pull requests. For
+                The preview drawer renders issues, pull requests, and security alerts. For
                 everything else, continue on GitHub.
               </p>
               {runs.length > 0 ? (
@@ -352,7 +377,7 @@ export function ItemDrawer({
             </>
           ) : null}
         </div>
-        {contentState !== "unavailable" && content ? (
+        {contentState !== "unavailable" && (content || alert) ? (
           <a
             href={item.sourceUrl}
             target="_blank"

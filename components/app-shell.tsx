@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { Bell, Gauge, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
+import { DemoBanner } from "@/components/demo-banner";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
@@ -120,6 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </>
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
+        <DemoBanner />
         <header className="flex items-center gap-2 px-4 py-3">
           <span className="relative inline-flex">
             <button

@@ -12,6 +12,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row)" },
   { key: "u", label: "Unread", description: "Mark selection unread (or the focused row)" },
   { key: "r", label: "Read", description: "Mark selection read (or the focused row)" },
+  { key: "s", label: "Sync", description: "Refresh selection from GitHub (or the focused row)" },
   { key: "o", label: "Open", description: "Open the focused thread in a new tab" },
   { key: "c", label: "Copy", description: "Copy the focused thread link" },
   { key: "d", label: "Drawer", description: "Open the focused thread in the side drawer" },
