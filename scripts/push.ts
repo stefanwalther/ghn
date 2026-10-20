@@ -1,6 +1,9 @@
 import { Database } from "bun:sqlite";
+import { ensureParentDir, getDatabasePath } from "@/lib/config";
 
-const sqlite = new Database("./data/quiet-notifications.db", { create: true });
+const dbPath = getDatabasePath();
+ensureParentDir(dbPath);
+const sqlite = new Database(dbPath, { create: true });
 sqlite.exec("PRAGMA journal_mode = WAL;");
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS repositories (
