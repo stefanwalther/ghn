@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { ensureParentDir, getDatabasePath } from "@/lib/config";
 
 export function ensureSchema(sqlite: Database): void {
   sqlite.exec("PRAGMA journal_mode = WAL;");
@@ -83,7 +84,9 @@ CREATE TABLE IF NOT EXISTS writeback_queue (
 }
 
 function main(): void {
-  const sqlite = new Database("./data/quiet-notifications.db", { create: true });
+  const dbPath = getDatabasePath();
+  ensureParentDir(dbPath);
+  const sqlite = new Database(dbPath, { create: true });
   ensureSchema(sqlite);
   console.log(JSON.stringify({ pushed: true }));
 }
