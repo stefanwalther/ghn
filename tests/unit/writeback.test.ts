@@ -140,7 +140,12 @@ describe("write-back queue", () => {
       return { ok: true as const };
     });
     expect(applied).toEqual(["done:5001", "read:5002"]);
-    expect(drained).toEqual({ processed: 2, succeeded: 1, failed: 1 });
+    expect(drained).toEqual({
+      processed: 2,
+      succeeded: 1,
+      failed: 1,
+      succeededItems: [{ threadId: "5001", action: "done" }],
+    });
     expect(await queueDepth(db)).toBe(1);
     const remaining = await db.select().from(schema.writebackQueue);
     expect(remaining[0]?.threadId).toBe("5002");

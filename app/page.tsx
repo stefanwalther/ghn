@@ -337,7 +337,11 @@ function InboxView() {
         body: JSON.stringify({ ids: targets, action }),
       });
       if (!res.ok) throw new Error("bulk failed");
+      const data = await res.json().catch(() => null);
       await load();
+      if (data?.remote === "partial") {
+        setNotice("Hidden locally. GitHub sync pending, will retry automatically.");
+      }
     } catch {
       setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
