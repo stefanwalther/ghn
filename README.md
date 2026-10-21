@@ -67,6 +67,8 @@ Three pages, one local SQLite database, all sourced from the GitHub Notification
 
 Press `?` in the app for all keyboard shortcuts.
 
+Press `Cmd+K` anywhere for search and commands: threads, repos, filters, and navigation in one ranked list.
+
 ## ghn vs github.com/notifications
 
 | | GitHub | ghn |

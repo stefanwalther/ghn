@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, ExternalLink, Gauge, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, ExternalLink, Gauge, Moon, Search, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
 import { DemoBanner } from "@/components/demo-banner";
+import { CommandPalette } from "@/components/search/command-palette";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
@@ -107,8 +108,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  React.useEffect(() => {
+    function onToggle() {
+      toggleRef.current();
+    }
+    window.addEventListener("ghn:toggle-sidebar", onToggle);
+    return () => window.removeEventListener("ghn:toggle-sidebar", onToggle);
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
+      <CommandPalette />
       {open ? (
         <>
           <div
@@ -195,6 +205,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 ? "GitHub API buckets from response headers"
                 : "Triage with fewer clicks"}
           </div>
+          <button
+            type="button"
+            aria-label="Search and commands"
+            title="Search and commands (Cmd+K)"
+            onClick={() => window.dispatchEvent(new CustomEvent("ghn:open-palette"))}
+            className="hidden cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
+          >
+            <Search className="h-4 w-4" aria-hidden />
+            <span className="hidden lg:inline">Search or command…</span>
+            <Kbd>⌘K</Kbd>
+          </button>
+          <button
+            type="button"
+            aria-label="Search and commands"
+            title="Search and commands (Cmd+K)"
+            onClick={() => window.dispatchEvent(new CustomEvent("ghn:open-palette"))}
+            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+          >
+            <Search className="h-4 w-4" aria-hidden />
+          </button>
           <ContributionsChip />
           <button
             type="button"
