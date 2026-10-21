@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "@/db/schema";
-import { ensureSchema } from "@/scripts/push";
+import { ensureSchema } from "@/db/ensure-schema";
 import {
   drainQueue,
   enqueueWriteback,
