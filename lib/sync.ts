@@ -127,10 +127,22 @@ export async function upsertThreads(
   now: number,
   resolveUrl: (thread: GhThread) => Promise<string>
 ): Promise<UpsertSummary> {
+  // Paginated GitHub responses can repeat the same thread id on large first
+  // syncs. Dedupe by id up front (freshest updatedAt wins) so the insert loop
+  // below never attempts the same new id twice and throws
+  // UNIQUE constraint failed: notifications.id.
+  const deduped = new Map<string, GhThread>();
+  for (const thread of threads) {
+    const prev = deduped.get(thread.id);
+    if (!prev || thread.updatedAt >= prev.updatedAt) {
+      deduped.set(thread.id, thread);
+    }
+  }
+  const uniqueThreads = [...deduped.values()];
   let upserted = 0;
   const seenRepos = new Set<string>();
   const pending: { thread: GhThread; repoId: string }[] = [];
-  for (const thread of threads) {
+  for (const thread of uniqueThreads) {
     if (!thread.repoFullName) continue;
     const repoId = await ensureRepository(db, thread, viewerLogin, now);
     seenRepos.add(repoId);

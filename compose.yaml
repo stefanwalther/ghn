@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-21120}:21120"
+    env_file:
+      - .env
+    environment:
+      # Pinned: the container always listens on 21120. The host side is
+      # mapped via ${PORT} above, so a PORT override in .env or the shell
+      # cannot break the container's listen port. environment wins over
+      # env_file here on purpose.
+      - PORT=21120
+    volumes:
+      - ghn-data:/app/data
+
+volumes:
+  ghn-data:

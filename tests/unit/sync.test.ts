@@ -108,6 +108,38 @@ describe("thread-to-row mapping", () => {
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1005"));
     expect(rows[0]?.isDone).toBe(1);
   });
+
+  test("duplicate thread ids in one payload insert once instead of throwing", async () => {
+    const db = makeTestDb();
+    const summary = await upsertThreads(
+      db,
+      [thread({ id: "1006" }), thread({ id: "1006" })],
+      null,
+      1792000001000,
+      resolveUrl
+    );
+    expect(summary.upserted).toBe(1);
+    const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1006"));
+    expect(rows).toHaveLength(1);
+  });
+
+  test("duplicate thread ids keep the freshest updatedAt", async () => {
+    const db = makeTestDb();
+    await upsertThreads(
+      db,
+      [
+        thread({ id: "1007", updatedAt: 1792000000000, subjectTitle: "stale title" }),
+        thread({ id: "1007", updatedAt: 1792000005000, subjectTitle: "fresh title" }),
+      ],
+      null,
+      1792000001000,
+      resolveUrl
+    );
+    const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1007"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.subject).toBe("fresh title");
+    expect(rows[0]?.githubUpdatedAt).toBe(1792000005000);
+  });
 });
 
 describe("first-sync migration", () => {

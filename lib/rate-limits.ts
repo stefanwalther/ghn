@@ -1,4 +1,4 @@
-import { getStoredToken } from "@/lib/github";
+import { apiBases, getStoredToken } from "@/lib/github";
 import {
   RATE_LIMIT_BUCKETS,
   type RateLimitBucketId,
@@ -30,26 +30,6 @@ export interface RateLimitsError {
 }
 
 const PROBE_TIMEOUT_MS = 10_000;
-
-function apiBases(): { restBase: string; graphqlUrl: string } {
-  const override = (process.env.GHN_API_BASE ?? "").trim().replace(/\/+$/, "");
-  if (override) {
-    // Same source of truth as lib/github.ts. Derive the GraphQL URL from the
-    // REST base so GHES hosts stay consistent between sync and rate limits.
-    const graphqlUrl = override.endsWith("/api/v3")
-      ? override.replace(/\/api\/v3$/, "/api/graphql")
-      : `${override}/graphql`;
-    return { restBase: override, graphqlUrl };
-  }
-  const host = (process.env.GH_HOST ?? "github.com").trim() || "github.com";
-  if (host === "github.com") {
-    return {
-      restBase: "https://api.github.com",
-      graphqlUrl: "https://api.github.com/graphql",
-    };
-  }
-  return { restBase: `https://${host}/api/v3`, graphqlUrl: `https://${host}/api/graphql` };
-}
 
 function toIsoFromReset(reset: string | null): string | null {
   if (!reset) return null;
@@ -149,7 +129,7 @@ export async function fetchRateLimits(
       return {
         ok: false,
         error: {
-          error: "GitHub auth rejected (HTTP 401). Run `gh auth login` to refresh the token.",
+          error: "GitHub auth rejected (HTTP 401). Check GH_TOKEN or run `gh auth login` to refresh.",
           reason: "auth",
         },
       };
@@ -193,7 +173,7 @@ export async function getRateLimits(): Promise<
     return {
       ok: false,
       error: {
-        error: "GitHub auth unavailable (`gh auth login` on the server).",
+        error: "GitHub auth unavailable (set GH_TOKEN or run `gh auth login` on the server).",
         reason: "auth",
       },
     };

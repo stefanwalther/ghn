@@ -19,7 +19,7 @@ AT_RELEASE_TAG := $(shell test -n '$(MANIFEST_VERSION)' && test -z '$(SOURCE_DIR
 SOURCE_VERSION := $(if $(AT_RELEASE_TAG),$(MANIFEST_VERSION),$(if $(and $(MANIFEST_VERSION),$(SOURCE_REVISION)),$(MANIFEST_VERSION)+g$(SOURCE_REVISION)$(SOURCE_DIRTY)))
 VERSION ?= $(SOURCE_VERSION)
 
-.PHONY: help version build check test test-e2e test-help test-build-version dev web-open web-serve web-dev install uninstall clean fmt-fix fmt-check fmt lint-check lint-fix lint
+.PHONY: help version build check test test-e2e test-help test-build-version dev web-open web-serve web-dev install uninstall clean fmt-fix fmt-check fmt lint-check lint-fix lint up down logs
 
 help: ## Show available Make targets.
 	@awk 'BEGIN {FS = ":.*## "; print "Available targets:"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -72,6 +72,17 @@ web-serve: build ## Build and serve production in the foreground (per-workspace 
 	$(BUN) run start
 
 web-dev: dev ## Deprecated alias for dev (foreground dev server).
+
+up: ## Build and start the container in the background (needs .env with GH_TOKEN).
+	@if [ ! -f .env ]; then echo "Missing .env. Copy .env.example to .env and set GH_TOKEN first."; exit 1; fi
+	docker compose up --build -d
+	@echo "App: http://localhost:$(PORT)"
+
+down: ## Stop the container (keeps the ghn-data volume).
+	docker compose down
+
+logs: ## Follow container logs (useful to tell app-down apart from auth errors).
+	docker compose logs -f app
 
 install: ## Install dependencies (bun install); idempotent, repairs a clean checkout in place.
 	$(BUN) install
