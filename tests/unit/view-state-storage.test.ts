@@ -116,7 +116,7 @@ describe("the stored drawer width", () => {
   // used instead.
   test("a stored width that is not a number falls back to the default", () => {
     setGlobal("localStorage", fakeStorage());
-    localStorage.setItem("quiet-notifications:drawer-width", "wide");
+    localStorage.setItem("ghn:drawer-width", "wide");
     expect(loadDrawerWidth()).toBe(DRAWER_DEFAULT_WIDTH);
   });
 
