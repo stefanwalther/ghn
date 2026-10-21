@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { eq } from "drizzle-orm";
 import { repositories } from "@/db/schema";
 import { computeNextDueAt, formatDueDate, type Rhythm } from "@/lib/digest";
@@ -17,7 +18,7 @@ export async function PATCH(
   const body = await request.json().catch(() => null);
   const rhythm: unknown = body?.rhythm;
   const snoozedUntil: unknown = body?.snoozedUntil;
-  const now = Date.now();
+  const now = nowMs();
   if (rhythm !== undefined && (typeof rhythm !== "string" || !(RHYTHMS as string[]).includes(rhythm))) {
     return NextResponse.json(
       { error: "`rhythm` must be `immediate`, `weekly`, `biweekly`, or `monthly`" },

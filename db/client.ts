@@ -11,9 +11,13 @@ let db: BunSQLiteDatabase<typeof schema>;
 
 declare global {
   var __quietDb: BunSQLiteDatabase<typeof schema> | undefined;
+  var __quietDbPath: string | undefined;
 }
 
-if (globalThis.__quietDb) {
+// The cache is keyed on the resolved path. Keying it on nothing would hand
+// back a handle to a different file whenever the configured location
+// changes, which is exactly what the test suite does between runs.
+if (globalThis.__quietDb && globalThis.__quietDbPath === url) {
   db = globalThis.__quietDb;
 } else {
   const sqlite = new Database(url, { create: true });
@@ -21,6 +25,7 @@ if (globalThis.__quietDb) {
   sqlite.exec("PRAGMA journal_mode = WAL;");
   db = drizzle(sqlite, { schema });
   globalThis.__quietDb = db;
+  globalThis.__quietDbPath = url;
 }
 
 export { db };

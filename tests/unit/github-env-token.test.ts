@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import { getStoredToken } from "@/lib/github";
 
 const KEYS = ["GH_TOKEN", "GITHUB_TOKEN"] as const;

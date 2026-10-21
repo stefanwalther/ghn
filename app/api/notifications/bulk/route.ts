@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { inArray } from "drizzle-orm";
 import { mutedSubjects, notifications } from "@/db/schema";
 import { validateBulkInput } from "@/lib/bulk";
@@ -10,8 +11,14 @@ import {
   type GhResult,
 } from "@/lib/github";
 import { enqueueWriteback, type WritebackAction } from "@/lib/queue";
+import { mapWithLimit } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
+
+// Remote write-back runs with bounded concurrency: a large selection used to
+// fan out one GitHub call at a time, holding the request (and the UI's busy
+// state) for minutes, with one stalled call hanging it forever.
+const REMOTE_CONCURRENCY = 8;
 
 export async function POST(request: Request) {
   const { db } = await import("@/db/client");
@@ -37,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unknown notification id" }, { status: 422 });
   }
 
-  const now = Date.now();
+  const now = nowMs();
 
   if (action === "unread") {
     await db
@@ -64,15 +71,17 @@ export async function POST(request: Request) {
     const token = await getStoredToken();
     let queued = 0;
     if (token) {
-      for (const n of pairs.values()) {
-        const remote = await setSubscriptionIgnored(token, n.id, true);
-        if (!remote.ok) {
-          await enqueueWriteback(db, n.id, "unsubscribe", remote.reason ?? "unknown", now);
-          queued += 1;
-        }
+      const remotes = await mapWithLimit(existing, REMOTE_CONCURRENCY, (n) =>
+        setSubscriptionIgnored(token, n.id, true)
+      );
+      for (const [idx, remote] of remotes.entries()) {
+        if (remote.ok) continue;
+        const n = existing[idx] as (typeof existing)[number];
+        await enqueueWriteback(db, n.id, "unsubscribe", remote.reason ?? "unknown", now);
+        queued += 1;
       }
     } else {
-      for (const n of pairs.values()) {
+      for (const n of existing) {
         await enqueueWriteback(db, n.id, "unsubscribe", "auth", now);
         queued += 1;
       }
@@ -87,13 +96,16 @@ export async function POST(request: Request) {
   const applyRemote =
     action === "done" ? markThreadDone : markThreadRead;
   const token = await getStoredToken();
+  const remotes = await mapWithLimit(cleanIds, REMOTE_CONCURRENCY, (id) =>
+    token
+      ? applyRemote(token, id)
+      : Promise.resolve({ ok: false, reason: "auth" } as GhResult<void>)
+  );
   const succeeded: string[] = [];
   let queued = 0;
   let firstError: GhResult<void> | null = null;
-  for (const id of cleanIds) {
-    const remote = token
-      ? await applyRemote(token, id)
-      : ({ ok: false, reason: "auth" } as GhResult<void>);
+  for (const [idx, remote] of remotes.entries()) {
+    const id = cleanIds[idx] as string;
     if (remote.ok) {
       succeeded.push(id);
     } else {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { ThemeProvider } from "next-themes";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";

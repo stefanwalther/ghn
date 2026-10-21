@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
+import { ErrorRateLimits, LoadingRateLimits } from "@/components/inbox/empty-states";
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,10 +88,10 @@ export default function RateLimitsPage() {
         </Button>
       </div>
 
-      {status === "loading" ? <LoadingInbox /> : null}
+      {status === "loading" ? <LoadingRateLimits /> : null}
       {status === "error" ? (
         <>
-          <ErrorInbox onRetry={load} />
+          <ErrorRateLimits onRetry={load} />
           {error ? (
             <p role="alert" className="text-xs text-destructive">
               {error}

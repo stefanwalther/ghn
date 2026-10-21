@@ -1,4 +1,5 @@
 import { apiBases, getStoredToken } from "@/lib/github";
+import { nowMs as currentTime } from "@/lib/clock";
 import {
   RATE_LIMIT_BUCKETS,
   type RateLimitBucketId,
@@ -47,7 +48,7 @@ function resetsInSecsFromReset(reset: string | null, nowMs: number): number | nu
 
 export function parseRateLimitHeaders(
   headers: Headers,
-  nowMs: number = Date.now()
+  nowMs: number = currentTime()
 ): RateLimitBucket | null {
   const get = (name: string): string | null => headers.get(name) ?? headers.get(name.toLowerCase());
   const limit = Number.parseInt(get("x-ratelimit-limit") ?? "", 10);
@@ -94,7 +95,7 @@ export async function fetchRateLimits(
   const restBase = opts.restBase ?? defaults.restBase;
   const graphqlUrl = opts.graphqlUrl ?? defaults.graphqlUrl;
   const fetchFn = opts.fetchFn ?? fetch;
-  const nowMs = opts.nowMs ?? Date.now();
+  const nowMs = opts.nowMs ?? currentTime();
   const timeoutMs = opts.timeoutMs ?? PROBE_TIMEOUT_MS;
   const probes = probesFor(restBase, graphqlUrl);
   const usage: Partial<Record<RateLimitBucketId, RateLimitBucket>> = {};

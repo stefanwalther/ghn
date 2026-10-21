@@ -1,6 +1,27 @@
-import type { Database } from "bun:sqlite";
+/**
+ * The subset of the SQLite API this module needs.
+ *
+ * The production client speaks `bun:sqlite` and the test client speaks
+ * `node:sqlite`. Both satisfy this shape, so the schema has one definition
+ * and the test suite does not have to keep its own copy of the DDL.
+ */
+export interface SqliteLike {
+  exec(sql: string): void;
+  query?(sql: string): { all(...params: unknown[]): unknown[] };
+  prepare?(sql: string): { all(...params: unknown[]): unknown[] };
+}
 
-export function ensureSchema(sqlite: Database): void {
+function tableInfo(sqlite: SqliteLike, table: string): string[] {
+  const sql = `PRAGMA table_info(${table})`;
+  const rows = sqlite.query
+    ? sqlite.query(sql).all()
+    : sqlite.prepare
+      ? sqlite.prepare(sql).all()
+      : [];
+  return rows.map((row) => (row as { name: string }).name);
+}
+
+export function ensureSchema(sqlite: SqliteLike): void {
   sqlite.exec("PRAGMA journal_mode = WAL;");
   sqlite.exec(`
 CREATE TABLE IF NOT EXISTS repositories (
@@ -47,37 +68,33 @@ CREATE TABLE IF NOT EXISTS writeback_queue (
   created_at INTEGER NOT NULL
 );
 `);
-  const repoCols = sqlite.query("PRAGMA table_info(repositories)").all() as {
-    name: string;
-  }[];
-  if (!repoCols.some((c) => c.name === "snoozed_until")) {
+  const repoCols = tableInfo(sqlite, "repositories");
+  if (!repoCols.includes("snoozed_until")) {
     sqlite.exec("ALTER TABLE repositories ADD COLUMN snoozed_until INTEGER");
   }
-  if (!repoCols.some((c) => c.name === "unreachable")) {
+  if (!repoCols.includes("unreachable")) {
     sqlite.exec(
       "ALTER TABLE repositories ADD COLUMN unreachable INTEGER NOT NULL DEFAULT 0"
     );
   }
-  const notifCols = sqlite.query("PRAGMA table_info(notifications)").all() as {
-    name: string;
-  }[];
-  if (!notifCols.some((c) => c.name === "subject_type")) {
+  const notifCols = tableInfo(sqlite, "notifications");
+  if (!notifCols.includes("subject_type")) {
     sqlite.exec("ALTER TABLE notifications ADD COLUMN subject_type TEXT");
   }
-  if (!notifCols.some((c) => c.name === "github_updated_at")) {
+  if (!notifCols.includes("github_updated_at")) {
     sqlite.exec("ALTER TABLE notifications ADD COLUMN github_updated_at INTEGER");
   }
-  if (!notifCols.some((c) => c.name === "local_unread")) {
+  if (!notifCols.includes("local_unread")) {
     sqlite.exec(
       "ALTER TABLE notifications ADD COLUMN local_unread INTEGER NOT NULL DEFAULT 0"
     );
   }
-  if (!notifCols.some((c) => c.name === "pr_merged")) {
+  if (!notifCols.includes("pr_merged")) {
     sqlite.exec(
       "ALTER TABLE notifications ADD COLUMN pr_merged INTEGER NOT NULL DEFAULT 0"
     );
   }
-  if (!notifCols.some((c) => c.name === "subject_state")) {
+  if (!notifCols.includes("subject_state")) {
     sqlite.exec("ALTER TABLE notifications ADD COLUMN subject_state TEXT");
   }
 }
