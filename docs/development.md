@@ -27,8 +27,10 @@ make web-open    # start server if down, then open it (bash only)
 |-----|---------|---------|
 | `PORT` | `21120` | Dev and prod server port |
 | `GHN_API_BASE` | `https://api.github.com` | Override for GitHub Enterprise or mocks |
+| `GHN_DB_PATH` | `./data/ghn.db` | Database location, highest precedence |
+| `GHN_CONFIG_PATH` | `$XDG_CONFIG_HOME/ghn/config.json` | Override the config file location |
 
-The database lives at `data/quiet-notifications.db` and is gitignored. Auth shells out to `gh auth token` on each sync, so there are no secret files.
+The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth shells out to `gh auth token` on each sync, so there are no secret files.
 
 ## Layout
 

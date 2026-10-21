@@ -1,11 +1,11 @@
 import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureParentDir, getDatabasePath } from "@/lib/config";
 import * as schema from "./schema";
 import { ensureSchema } from "./ensure-schema";
 
-const url = "./data/quiet-notifications.db";
+const url = getDatabasePath();
+ensureParentDir(url);
 
 let db: BunSQLiteDatabase<typeof schema>;
 
@@ -16,7 +16,6 @@ declare global {
 if (globalThis.__quietDb) {
   db = globalThis.__quietDb;
 } else {
-  mkdirSync(dirname(url), { recursive: true });
   const sqlite = new Database(url, { create: true });
   ensureSchema(sqlite);
   sqlite.exec("PRAGMA journal_mode = WAL;");

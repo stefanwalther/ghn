@@ -535,6 +535,37 @@ export function parseBranchFromTitle(title: string): string | null {
   return match?.[1] ?? null;
 }
 
+export function parseWorkflowNameFromTitle(title: string): string | null {
+  const match = title.match(/^(.*) workflow run .* for .* branch$/);
+  const name = match?.[1]?.trim();
+  return name ? name : null;
+}
+
+export function findPinnedRun(
+  runs: WorkflowRun[],
+  workflowName: string | null,
+  notificationTime: number
+): WorkflowRun | null {
+  if (!workflowName) return null;
+  const wanted = workflowName.toLowerCase();
+  const slackMs = 120_000;
+  let best: WorkflowRun | null = null;
+  for (const run of runs) {
+    if (run.name.toLowerCase() !== wanted) continue;
+    if (run.createdAt > notificationTime + slackMs) continue;
+    if (!best || run.createdAt > best.createdAt) best = run;
+  }
+  return best;
+}
+
+export function formatRunAge(createdAt: number, now: number = Date.now()): string {
+  const mins = Math.max(1, Math.round((now - createdAt) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 export interface WorkflowRun {
   name: string;
   htmlUrl: string;
@@ -550,7 +581,7 @@ export async function fetchWorkflowRuns(
 ): Promise<WorkflowRun[]> {
   try {
     const base = input.apiBase ?? "https://api.github.com";
-    const params = new URLSearchParams({ per_page: "5" });
+    const params = new URLSearchParams({ per_page: "20" });
     if (input.branch) params.set("branch", input.branch);
     const res = await fetch(
       `${base}/repos/${input.owner}/${input.repo}/actions/runs?${params.toString()}`,
