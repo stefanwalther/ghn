@@ -89,9 +89,11 @@ export async function GET(request: Request) {
   let pullRequestCount = 0;
   let mergedCount = 0;
   let closedCount = 0;
+  let totalMain = 0;
   for (const n of rows) {
     if (!matchBase(n, "type")) continue;
     if (placement(n) !== "main") continue;
+    totalMain += 1;
     typeCounts.set(n.reason, (typeCounts.get(n.reason) ?? 0) + 1);
     if (n.subjectType === "PullRequest") pullRequestCount += 1;
     const prMerged = (n.prMerged ?? 0) === 1;
@@ -108,17 +110,19 @@ export async function GET(request: Request) {
   }
 
   const facets = {
-    types: TYPE_FILTERS.filter((t) => t.value !== "all").map((t) => ({
+    types: TYPE_FILTERS.map((t) => ({
       value: t.value,
       label: t.label,
       count:
-        t.value === "pull_request"
-          ? pullRequestCount
-          : t.value === "merged"
-            ? mergedCount
-            : t.value === "closed"
-              ? closedCount
-              : (typeCounts.get(t.value) ?? 0),
+        t.value === "all"
+          ? totalMain
+          : t.value === "pull_request"
+            ? pullRequestCount
+            : t.value === "merged"
+              ? mergedCount
+              : t.value === "closed"
+                ? closedCount
+                : (typeCounts.get(t.value) ?? 0),
     })),
     repos: repos.map((r) => ({
       id: r.id,

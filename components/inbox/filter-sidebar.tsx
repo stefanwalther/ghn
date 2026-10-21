@@ -118,20 +118,37 @@ export function FilterSidebar({
         </button>
         {collapsed.types ? null : (
         <div className="flex flex-col gap-0.5">
-          {types.map((t) => {
-            const active = activeType === t.value;
+          {(() => {
+            const allFacet = types.find((t) => t.value === "all");
+            const rest = types.filter((t) => t.value !== "all");
+            const allActive = activeType === "all";
             return (
-              <SidebarButton
-                key={t.value}
-                active={active}
-                label={`Filter by ${t.label}`}
-                onClick={() => onType(active ? "all" : t.value)}
-              >
-                <span className="truncate">{t.label}</span>
-                <Badge variant="muted">{t.count}</Badge>
-              </SidebarButton>
+              <>
+                <SidebarButton
+                  active={allActive}
+                  label="Show all"
+                  onClick={() => onType("all")}
+                >
+                  <span className="truncate">All</span>
+                  <Badge variant="muted">{allFacet?.count ?? 0}</Badge>
+                </SidebarButton>
+                {rest.map((t) => {
+                  const active = activeType === t.value;
+                  return (
+                    <SidebarButton
+                      key={t.value}
+                      active={active}
+                      label={`Filter by ${t.label}`}
+                      onClick={() => onType(active ? "all" : t.value)}
+                    >
+                      <span className="truncate">{t.label}</span>
+                      <Badge variant="muted">{t.count}</Badge>
+                    </SidebarButton>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
         </div>
         )}
       </section>
