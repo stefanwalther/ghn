@@ -20,7 +20,7 @@ export const AGE_FILTERS: { value: AgeFilter; label: string }[] = [
 ];
 
 export const TYPE_FILTERS: { value: string; label: string }[] = [
-  { value: "all", label: "All types" },
+  { value: "all", label: "All" },
   { value: "pull_request", label: "Pull requests" },
   { value: "mention", label: "Mention" },
   { value: "team_mention", label: "Team mention" },
