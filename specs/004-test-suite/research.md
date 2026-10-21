@@ -270,12 +270,35 @@ The design above was the plan. Building it produced a few corrections, recorded 
 
 | Plan said | Reality | Why |
 |---|---|---|
-| `coverage.all` defaults to true | The option was removed in Vitest 5 | `coverage.include` alone enumerates every file, tested or not. Verified: all 66 source files listed, 10 of them explicitly at 0%. |
-| The source tree holds 58 files | 66 | Six files were added: `lib/clock.ts`, `lib/api-base.ts`, `lib/inbox-state.ts`, `lib/sync-errors.ts`, `lib/seed-data.ts`, `db/schema-sql.ts`, plus `scripts/compare-coverage.ts` and `scripts/e2e-reset.ts`. |
+| `coverage.all` defaults to true | The option was removed in Vitest 5 | `coverage.include` alone enumerates every file, tested or not. Verified: every source file listed, the untested ones explicitly at 0%. |
+| The source tree holds 58 files | 70 | Eight files were added: `lib/clock.ts`, `lib/inbox-state.ts`, `lib/sync-errors.ts`, `lib/seed-data.ts`, plus `scripts/compare-coverage.ts` and `scripts/e2e-reset.ts`, and two more that `main` had already grown since the branch started. |
 | `lib/clock.ts` exports `now()` | It exports `nowMs()` | The routes bind the result to a local `now`, and the name would have shadowed it in every one of them. |
 | The frozen instant is `2026-06-15T12:00:00Z` | `2026-01-15T12:00:00Z` | Every other part of the suite was already pinned to January, and two hundred verified checks depended on it. The cost is that the dataset keeps seven items in the band between the application's two calendar filters. That band is the application's own behaviour rather than a fixture defect, so it is now pinned by a check instead of avoided. |
 | The reset script drops the tables and reseeds | It also writes `seedReposPruned` | Without it, the one-shot prune deletes every seeded repository and the sync recreates them all as watched, which collapses the whole inbox. With it, a sync against the stand-in leaves the dataset unchanged. Verified end to end: the inbox shows the same thirty rows after a full sync. |
 | The stand-in answers one subject payload | It answers one payload per item | The sync reads the merged flag and the state out of those payloads and writes them into the database. A single default payload silently reset both. |
+
+### The rebase onto main
+
+The work was built on an older commit. When it came time to publish, `main`
+had moved on by eleven commits, and several of them solved parts of this
+feature better than the branch did. The branch was rebased onto `main` and
+adapted rather than merged, because a merge would have left the branch
+reverting eleven commits of features.
+
+| The branch had | `main` had | What the rebase did |
+|---|---|---|
+| `GHN_DB_PATH` in `db/client.ts` | `lib/config.ts` with `GHN_DB_PATH`, a config file, `~` and `$VAR` expansion, and automatic parent directory creation | Dropped the branch's version. The branch's path-keyed global cache was kept, because `main`'s cache was keyed on nothing. |
+| `db/schema-sql.ts` | `db/ensure-schema.ts` | Dropped the branch's copy. `main`'s was made runtime agnostic, so one schema definition serves both the Bun client and the Node test client. |
+| `make test` runs every layer | `make test` runs the unit suite only, and `make check` is the gate | Kept `main`'s meanings. `make test-all` runs every layer, and the new fast layers joined `make check`. |
+| `package.json` `start` takes a port | `scripts/serve.sh` with per-workspace ports | Dropped the branch's change. The end-to-end layer sets `PORT` and the script honours it. |
+| Fixed end-to-end ports 21140 and 21141 | A per-workspace port resolver over 21120-21219 | The end-to-end pair moved a hundred above the workspace's dev port, so it never lands on a dev port and two worktrees never land on each other. |
+| A separate `lib/api-base.ts` | `apiBases()` in `lib/github.ts` | Dropped the branch's module. `apiBase()` now delegates to `apiBases()`, so the two agree on an empty override and on an enterprise host. |
+| `lib/contributions.ts` always used the API | An API path with a `gh` helper fallback | Kept the fallback for production and added `tokenDisabled()`, so an empty `GHN_TOKEN` stops the fallback. Without it the suite would have reached the real GitHub. |
+| The unit suite ran under `bun test` | The unit suite ran under `bun test`, with four newer files still importing `bun:test` | The runner moved to Vitest and the four newer files were migrated with it. |
+
+Two of `main`'s own test files needed adapting: the dependabot checks used
+`Bun.serve`, and the shortcut list grew a row, so the component checks that
+matched the old wording were updated to the current one.
 
 ### Defects found and fixed
 
@@ -283,7 +306,7 @@ The design above was the plan. Building it produced a few corrections, recorded 
 |---|---|
 | `fetchCheckSummary` and `fetchWorkflowRuns` hardcoded `https://api.github.com` | They use the shared base. Before the fix, opening the drawer for a pull request made a real request to the real GitHub with the stand-in's credential. |
 | `lib/github.ts` called the number counter twice per item in the seed | The subject path and the source URL disagreed, so the preview drawer read the payload of a different item. |
-| `lib/rate-limits.ts` and `lib/api-base.ts` resolved the base URL differently | One resolver now serves both, including the enterprise host. |
+| `lib/rate-limits.ts` and `lib/github.ts` resolved the base URL differently | One resolver now serves both, including the enterprise host. |
 | The clipboard fallback left its textarea behind when the copy command threw | The removal is in a `finally`. |
 | The keydown listener was removed and re-added on every render | The handler lives in a ref, so the listener is registered once and still sees the current state. |
 

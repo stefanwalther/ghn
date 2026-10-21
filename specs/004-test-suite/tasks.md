@@ -48,10 +48,10 @@ description: "Task list for the automated test suite"
 - [x] T005 Create `lib/clock.ts` exporting `nowMs(): number`, which reads `GHN_NOW` and parses it as milliseconds first then as a date string, falling back to `Date.now()` when unset or unparseable
 - [x] T006 Update `db/client.ts` to read the path from `GHN_DB_PATH` with the default `./data/quiet-notifications.db`, and key the `globalThis.__quietDb` cache on the resolved path so a changed path cannot return a handle to a different file
 - [x] T007 Update `scripts/push.ts` so `main()` opens the path from `GHN_DB_PATH` with the same default
-- [x] T008 Create `lib/api-base.ts` exporting `apiBase(): string` and `graphqlUrl(): string`, both honouring `GHN_API_BASE` with an empty value treated as unset, and `apiBase()` defaulting to `https://api.github.com`
-- [x] T009 Update `lib/github.ts` to move the credential lookup into `readToken` with a `GHN_TOKEN` override where an explicitly empty value resolves to `null` and never falls back to the `gh` helper; make `subjectApiUrlFromHtml` and `subjectCommentsUrlFromHtml` build their URLs from `apiBase()`; re-export `apiBase` and `graphqlUrl` from `lib/api-base.ts`
+- [x] T008 Resolve the GitHub base URL in one place, honouring `GHN_API_BASE` with an empty value treated as unset and `GH_HOST` for an enterprise host
+- [x] T009 Update `lib/github.ts` to move the credential lookup into `readToken` with a `GHN_TOKEN` override where an explicitly empty value resolves to `null` and never falls back to the `gh` helper; make `subjectApiUrlFromHtml` and `subjectCommentsUrlFromHtml` build their URLs from `apiBase()`; and make `apiBase()` agree with `apiBases()`
 - [x] T010 Rewrite `lib/contributions.ts` so `getViewerLogin` and `fetchDayCount` use `fetch` against `apiBase()` and `graphqlUrl()` instead of shelling out to `gh api user` and `gh api graphql`, sending the GraphQL variables as `{ query, variables: { login, from, to } }`
-- [x] T011 Update `lib/rate-limits.ts` to import `graphqlUrl` from `lib/api-base.ts` instead of deriving the GraphQL URL locally
+- [x] T011 Update `lib/rate-limits.ts` to use the shared base resolver instead of deriving the GraphQL URL locally
 - [x] T012 Replace `Date.now()` with `nowMs()` from `lib/clock.ts` in `app/api/notifications/route.ts`, `app/api/repositories/route.ts`, `app/api/repositories/[id]/route.ts`, `app/api/notifications/bulk/route.ts`, `app/api/sync/route.ts`, and `app/api/contributions/route.ts`
 
 ### Shared test infrastructure
@@ -138,14 +138,14 @@ description: "Task list for the automated test suite"
 
 **Goal**: The coverage view names every part of the application, including the parts with no checks, and the merge-time run fails when coverage drops below the merge base.
 
-**Independent Test**: Run `make test-coverage` and confirm the report lists all 66 source files, then lower the coverage and confirm `make coverage-check` exits non-zero.
+**Independent Test**: Run `make test-coverage` and confirm the report lists all 70 source files, then lower the coverage and confirm `make coverage-check` exits non-zero.
 
 ### Implementation for User Story 4
 
 - [x] T041 [US4] Configure the coverage block in `vitest.config.mts` with `provider: "v8"`, `include` globs for `app/**`, `lib/**`, `components/**`, `db/**` and `scripts/**`, and the `text`, `html`, `lcov` and `json-summary` reporters
 - [x] T042 [US4] Create `scripts/compare-coverage.ts` that reads two `coverage-summary.json` files, compares `total.lines.pct`, prints `pass`, `fail` or `not-evaluable`, and exits `1` only on `fail` and `2` when called incorrectly
 - [x] T043 [US4] Add the merge-base coverage step to `.github/workflows/ci.yml`: resolve the merge base, add it as a detached worktree, install and run the coverage suite there with its own database path and the same frozen clock, then run `scripts/compare-coverage.ts` against the two summaries
-- [x] T044 [US4] Verify the coverage report lists all 66 source files, including the ones at zero percent, and that the count matches `find app lib components db scripts -type f \( -name '*.ts' -o -name '*.tsx' \) | wc -l`
+- [x] T044 [US4] Verify the coverage report lists all 70 source files, including the ones at zero percent, and that the count matches `find app lib components db scripts -type f \( -name '*.ts' -o -name '*.tsx' \) | wc -l`
 - [x] T045 [US4] Add a check in `tests/unit/compare-coverage.test.ts` covering the pass, fail, not-evaluable and missing-argument outcomes of `scripts/compare-coverage.ts`
 
 **Checkpoint**: The coverage map is complete and the ratchet works. User Story 4 is independently demonstrable.
@@ -235,7 +235,7 @@ description: "Task list for the automated test suite"
 ### Parallel Opportunities
 
 - All Setup tasks marked `[P]` can run in parallel
-- The four seam groups in Phase 2 that touch different files can run in parallel: `lib/clock.ts` and `lib/api-base.ts`, `db/client.ts` with `scripts/push.ts`, `lib/github.ts` with `lib/rate-limits.ts`, `lib/contributions.ts`
+- The four seam groups in Phase 2 that touch different files can run in parallel: `lib/clock.ts`, `db/client.ts` with `scripts/push.ts`, `lib/github.ts` with `lib/rate-limits.ts`, `lib/contributions.ts`
 - All test files in the same story marked `[P]` can run in parallel
 - User Stories 1, 2 and 3 can be worked on in parallel once Foundational completes
 - The breadth checks in Phase 9 marked `[P]` can run in parallel
@@ -297,7 +297,7 @@ With multiple developers:
 
 All 65 tasks are done. The suite runs 639 checks across the three fast layers and 25 across the end-to-end layer.
 
-The validation pass confirmed: ten consecutive runs of the fast layers give identical verdicts, three consecutive end-to-end runs agree, no `data/` directory is created, and the `gh` credential helper is never invoked. The coverage view names all 66 source files, 10 of which have no check yet.
+The validation pass confirmed: ten consecutive runs of the fast layers give identical verdicts, three consecutive end-to-end runs agree, no `data/` directory is created, and the `gh` credential helper is never invoked. The coverage view names all 70 source files, 10 of which have no check yet.
 
 A review of the finished suite, with mutations applied to the implementation to see which checks noticed, found five checks that passed without proving anything. All five are fixed and each fix is verified against the mutation that used to slip through. The one production defect it surfaced is parked as issue 35.
 

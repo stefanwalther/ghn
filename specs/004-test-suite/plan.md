@@ -32,7 +32,7 @@ Two further changes are not optional extras but correctness fixes that the suite
 
 **Constraints**: the suite MUST run with no network access and no authenticated GitHub session (FR-009); it MUST never mutate a real GitHub account (FR-007); it MUST NOT touch the maintainer's real database (FR-021); local and CI runs MUST execute the same checks (FR-025)
 
-**Scale/Scope**: 66 source files across `app/`, `lib/`, `components/`, `db/`, `scripts/`; 11 API routes; 20 library modules; 23 components; 6 user-facing views; 3 layers plus end-to-end; 1 maintainer
+**Scale/Scope**: 70 source files across `app/`, `lib/`, `components/`, `db/`, `scripts/`; 11 API routes; 21 library modules; 24 components; 6 user-facing views; 3 layers plus end-to-end; 1 maintainer
 
 ## Constitution Check
 
@@ -191,7 +191,7 @@ The gates in the specification map to checks in the following way. Every one of 
 | FR-007, FR-008, FR-009 | The stand-in serves every endpoint; `GHN_TOKEN=""` yields no credential; the suite passes with the network disabled |
 | FR-011, FR-012, FR-013, FR-015 | Ten consecutive runs give identical verdicts; a check that cannot run is reported as not run; a crashing check does not stop the rest |
 | FR-014 | A deliberately broken rule produces a failure naming the behaviour and its location |
-| FR-016, FR-017 | The coverage report lists all 66 source files including the 10 with no check; the artifact is uploaded from the CI job |
+| FR-016, FR-017 | The coverage report lists all 70 source files including the ones with no check; the artifact is uploaded from the CI job |
 | FR-018, FR-019, FR-020 | The e2e layer asserts exact counts against the frozen dataset, with the conditional assertions in `tests/e2e/inbox.spec.ts` replaced |
 | FR-021, FR-024 | The suite runs against `GHN_DB_PATH` in a temporary directory; `bun run db:seed` still works against the real database |
 | FR-023 | The full local suite completes in under 5 minutes |

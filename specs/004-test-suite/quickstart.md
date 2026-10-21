@@ -154,7 +154,7 @@ Then undo the change.
 make test-coverage
 ```
 
-Expected: the report lists all 66 source files, including the ones with no checks, which appear at zero percent.
+Expected: the report lists all 70 source files, including the ones with no checks, which appear at zero percent.
 
 The number to compare against is the file count in `app/`, `lib/`, `components/`, `db/` and `scripts/`:
 
