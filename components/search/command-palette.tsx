@@ -13,7 +13,7 @@ import {
   type PaletteSection,
 } from "@/lib/palette-commands";
 import { rankSearch } from "@/lib/search";
-import { saveLastOpened } from "@/lib/view-state";
+import { repoFilterHref, saveLastOpened } from "@/lib/view-state";
 
 interface ThreadRow {
   id: string;
@@ -94,7 +94,7 @@ export function CommandPalette() {
     (async () => {
       try {
         const [nRes, rRes] = await Promise.all([
-          fetch("/api/notifications?state=all", { cache: "no-store" }),
+          fetch("/api/notifications?state=all&limit=400", { cache: "no-store" }),
           fetch("/api/repositories", { cache: "no-store" }),
         ]);
         if (nRes.ok) {
@@ -192,13 +192,13 @@ export function CommandPalette() {
       // On the inbox the event opens the drawer directly. From other
       // pages fall back to navigation so scroll-restoration finds it.
       if (pathname !== "/") {
-        router.push(`/?repo=${encodeURIComponent(a.repositoryId)}`);
+        router.push(repoFilterHref(window.location.search, a.repositoryId));
       }
       return;
     }
     if (a.type === "repo-filter") {
       close();
-      router.push(`/?repo=${encodeURIComponent(a.repositoryId)}`);
+      router.push(repoFilterHref(window.location.search, a.repositoryId));
       return;
     }
   }

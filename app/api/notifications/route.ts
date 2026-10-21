@@ -3,6 +3,7 @@ import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
 import { isClosedItem, isMergedItem, matchAge, matchesTypeFilter, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
+import { parsePaletteLimit } from "@/lib/view-state";
 import { readSyncState } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   const ageFilter: AgeFilter = (AGES as readonly string[]).includes(rawAge)
     ? (rawAge as AgeFilter)
     : "all";
+  const limit = parsePaletteLimit(url.searchParams.get("limit"));
   const now = Date.now();
 
   const repos = await db.select().from(repositories);
@@ -209,5 +211,5 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({ now, lastSyncAt, stale, mainFlow, collapsedSection, facets });
+  return NextResponse.json({ now, lastSyncAt, stale, mainFlow: limit !== null ? mainFlow.slice(0, limit) : mainFlow, collapsedSection, facets });
 }
