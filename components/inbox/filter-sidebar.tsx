@@ -89,7 +89,7 @@ export function FilterSidebar({
   const activeTypeLabel = types.find((t) => t.value === activeType)?.label;
   const activeRepoName = repos.find((r) => r.id === activeRepo)?.fullName;
   const visibleRepos = repos.filter(
-    (r) => r.id === activeRepo || r.main > 0
+    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
   );
 
   return (

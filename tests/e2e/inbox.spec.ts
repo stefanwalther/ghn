@@ -77,7 +77,9 @@ test.describe("live github sync smoke", () => {
       const text = (await button.innerText()).trim();
       const badge = text.split(/\s+/).pop();
       const active = await button.getAttribute("aria-current");
-      if (active !== "true") expect(badge).not.toBe("0");
+      // Quiet-only repos (main 0, quiet > 0) stay visible; only
+      // fully-empty repos (no main and no quiet) are hidden.
+      if (active !== "true") expect(badge !== "0" || text.includes("+")).toBe(true);
     }
   });
 
