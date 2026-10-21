@@ -49,12 +49,10 @@ function TitleLink({ item }: { item: InboxItem }) {
       className="cursor-pointer rounded-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {item.subject}{" "}
-      {active ? (
-        <ExternalLink
-          aria-hidden
-          style={{ display: "inline-block", verticalAlign: "middle", width: "1rem", height: "1rem" }}
-        />
-      ) : null}
+      <ExternalLink
+        aria-hidden
+        style={{ display: "inline-block", verticalAlign: "middle", width: "1rem", height: "1rem" }}
+      />
     </a>
   );
 }
@@ -447,18 +445,6 @@ export function ItemDrawer({
             </>
           ) : null}
         </div>
-        {contentState !== "unavailable" && (content || alert) ? (
-          <a
-            href={item.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => saveLastOpened(item.id)}
-            className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ExternalLink className="h-4 w-4" aria-hidden />
-            Open in new window
-          </a>
-        ) : null}
       </aside>
     </div>
   );
