@@ -17,6 +17,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { key: "c", label: "Copy", description: "Copy the focused thread link" },
   { key: "d", label: "Drawer", description: "Open the focused thread in the side drawer" },
   { key: "a", label: "All", description: "Select or clear all visible rows" },
+  { key: "Cmd+K", label: "Search", description: "Search threads, repos, commands, and filters" },
   { key: "Cmd+B", label: "Sidebar", description: "Show or hide the main menu" },
   { key: "Alt", label: "Hints", description: "Hold to reveal key hints" },
   { key: "Esc", label: "Clear", description: "Clear selection, or close this help" },
