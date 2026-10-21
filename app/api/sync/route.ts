@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { inArray } from "drizzle-orm";
 import { notifications, repositories } from "@/db/schema";
 import {
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
   const { db } = await import("@/db/client");
   const body = await request.json().catch(() => null);
   const forceFull = body?.full === true;
-  const now = Date.now();
+  const now = nowMs();
 
   const probe = await probeConnection();
   if (!probe.connected) {

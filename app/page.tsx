@@ -16,7 +16,16 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { copyText } from "@/lib/clipboard";
-import { isClosedItem, isMergedItem, isReleaseItem } from "@/lib/filters";
+import { describeBulkResult } from "@/lib/bulk";
+import { selectByQuickFilter } from "@/lib/filters";
+import {
+  applyLocalAction,
+  nextFocusIndex,
+  nextSelection,
+  pollWindow,
+  toggleAllSelection,
+} from "@/lib/inbox-state";
+import { syncErrorMessage } from "@/lib/sync-errors";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -26,6 +35,27 @@ interface CollapsedGroup {
   nextDueAt: number | null;
   nextDueLabel: string;
   pendingCount: number;
+}
+
+// Client-side request bounds. Bulk triage fans out over many threads
+// server-side, so it gets the longest leash; everything else must settle
+// fast so the busy state (which gates the triage buttons) can never stick.
+const REQUEST_TIMEOUT_MS = 30_000;
+const BULK_REQUEST_TIMEOUT_MS = 120_000;
+const SYNC_REQUEST_TIMEOUT_MS = 120_000;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit | undefined,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function InboxView() {
@@ -44,7 +74,17 @@ function InboxView() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
-  const [busy, setBusy] = React.useState(false);
+  // In-flight triage/sync operations. A counter (not a boolean) so
+  // overlapping requests cannot re-enable the buttons while work remains,
+  // and timeouts below guarantee it always drains back to zero.
+  const [busyCount, setBusyCount] = React.useState(0);
+  const busy = busyCount > 0;
+  function startBusy() {
+    setBusyCount((n) => n + 1);
+  }
+  function endBusy() {
+    setBusyCount((n) => Math.max(0, n - 1));
+  }
   const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
   const [stale, setStale] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
@@ -63,7 +103,7 @@ function InboxView() {
     else setRefreshing(true);
     const my = ++reqRef.current;
     try {
-      const res = await fetch(`/api/notifications${query}`, { cache: "no-store" });
+      const res = await fetchWithTimeout(`/api/notifications${query}`, { cache: "no-store" }, REQUEST_TIMEOUT_MS);
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
       if (reqRef.current !== my) return;
@@ -139,21 +179,18 @@ function InboxView() {
     });
   }
 
-  function syncErrorMessage(reason: unknown): string {
-    if (reason === "auth") return "GitHub access missing. Set GH_TOKEN or run `gh auth login` on the server and refresh.";
-    if (reason === "rate_limited") return "GitHub rate limit reached. Retry shortly; cached inbox shown.";
-    if (reason === "network") return "GitHub unreachable. Showing cached inbox.";
-    return "Sync failed. Showing last loaded data.";
-  }
-
   async function refresh() {
     setSyncing(true);
     try {
-      const res = await fetch("/api/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
+      const res = await fetchWithTimeout(
+        "/api/sync",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        SYNC_REQUEST_TIMEOUT_MS
+      );
       const data = await res.json().catch(() => null);
       if (data && typeof data.pollIntervalSecs === "number") setPollSecs(data.pollIntervalSecs);
       if (data && typeof data.lastSyncAt === "number") setLastSyncAt(data.lastSyncAt);
@@ -181,68 +218,24 @@ function InboxView() {
     await load();
   }
 
-  const nextAllowedAt = lastSyncAt !== null ? lastSyncAt + pollSecs * 1000 : 0;
-  const inPollWindow = lastSyncAt !== null && nowMs < nextAllowedAt && !syncing;
-  const countdownSecs = inPollWindow ? Math.ceil((nextAllowedAt - nowMs) / 1000) : 0;
+  const poll = pollWindow(lastSyncAt, pollSecs, nowMs);
+  const inPollWindow = poll.inWindow && !syncing;
+  const countdownSecs = poll.countdownSecs;
 
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
   }
 
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((prev) => nextSelection(items, prev, id));
   }
 
   function toggleAll() {
-    setSelected((prev) => {
-      if (items.every((i) => prev.has(i.id))) return new Set();
-      return new Set(items.map((i) => i.id));
-    });
+    setSelected((prev) => toggleAllSelection(items, prev));
   }
 
   function quickSelect(reason: string) {
-    if (reason === "release") {
-      setSelected(
-        new Set(
-          items
-            .filter((i) =>
-              isReleaseItem({ reason: i.reason, subject: i.subject, subjectType: i.subjectType ?? null })
-            )
-            .map((i) => i.id)
-        )
-      );
-      return;
-    }
-    if (reason === "merged") {
-      setSelected(
-        new Set(
-          items.filter((i) => isMergedItem({ reason: i.reason, prMerged: i.prMerged ?? false })).map((i) => i.id)
-        )
-      );
-      return;
-    }
-    if (reason === "closed") {
-      setSelected(
-        new Set(
-          items
-            .filter((i) =>
-              isClosedItem({
-                reason: i.reason,
-                prMerged: i.prMerged ?? false,
-                subjectState: i.subjectState ?? null,
-              })
-            )
-            .map((i) => i.id)
-        )
-      );
-      return;
-    }
-    setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
+    setSelected(new Set(selectByQuickFilter(items, reason)));
   }
 
   function openDrawer(item: InboxItem) {
@@ -279,14 +272,18 @@ function InboxView() {
   }
 
   async function syncOne(id: string) {
-    setBusy(true);
+    startBusy();
     setNotice(null);
     try {
-      const res = await fetch("/api/thread/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
+      const res = await fetchWithTimeout(
+        "/api/thread/sync",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        },
+        REQUEST_TIMEOUT_MS
+      );
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "sync failed");
       if (data?.gone === true) {
@@ -302,58 +299,57 @@ function InboxView() {
     } catch {
       setNotice("Sync failed for this item.");
     } finally {
-      setBusy(false);
+      endBusy();
     }
   }
 
   async function apply(action: BulkAction, ids?: string[]) {
     const targets = ids ?? [...selected];
     if (targets.length === 0) return;
-    setBusy(true);
+    startBusy();
     setNotice(null);
     const targetSet = new Set(targets);
     const prevItems = items;
     if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
       setDrawerItem(null);
     }
-    if (action === "done" || action === "unsubscribe") {
-      setItems((prev) => prev.filter((i) => !targetSet.has(i.id)));
-    } else if (action === "read") {
-      setItems((prev) =>
-        prev.map((i) => (targetSet.has(i.id) ? { ...i, isRead: 1 } : i))
-      );
-    } else {
-      setItems((prev) =>
-        prev.map((i) =>
-          targetSet.has(i.id) ? { ...i, isDone: 0, isRead: 0 } : i
-        )
-      );
-    }
+    setItems((prev) => applyLocalAction(prev, targets, action));
     setSelected(new Set());
     try {
-      const res = await fetch("/api/notifications/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: targets, action }),
-      });
+      const res = await fetchWithTimeout(
+        "/api/notifications/bulk",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: targets, action }),
+        },
+        BULK_REQUEST_TIMEOUT_MS
+      );
       if (!res.ok) throw new Error("bulk failed");
+      const body = await res.json().catch(() => null);
       await load();
+      // A partial remote failure queues write-backs server-side while the
+      // affected rows stay (or return) in the inbox. Say so explicitly:
+      // without this, triage looks like a silent no-op.
+      const queued = typeof body?.queued === "number" ? body.queued : 0;
+      const updated = typeof body?.updated === "number" ? body.updated : targets.length;
+      const queuedNotice = describeBulkResult(action, {
+        updated,
+        queued,
+        error: typeof body?.error === "string" ? body.error : null,
+      });
+      if (queuedNotice) setNotice(queuedNotice);
     } catch {
       setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
     } finally {
-      setBusy(false);
+      endBusy();
     }
   }
 
   function moveFocus(delta: number) {
-    if (items.length === 0) return;
-    const next =
-      focusIdx === null
-        ? delta > 0
-          ? 0
-          : items.length - 1
-        : Math.min(items.length - 1, Math.max(0, focusIdx + delta));
+    const next = nextFocusIndex(items.length, focusIdx, delta);
+    if (next === null) return;
     setFocusIdx(next);
     requestAnimationFrame(() => {
       const id = items[next]?.id;
@@ -459,6 +455,11 @@ function InboxView() {
     };
   }, []);
 
+  // The keyboard handler reads the current items and the current selection,
+  // so it has to see the latest state on every keystroke. The ref keeps it
+  // current without removing and re-adding the listener on every render.
+  const keyHandlerRef = React.useRef<(e: KeyboardEvent) => void>(() => {});
+
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -551,9 +552,16 @@ function InboxView() {
           break;
       }
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    keyHandlerRef.current = onKey;
   });
+
+  React.useEffect(() => {
+    function listener(e: KeyboardEvent) {
+      keyHandlerRef.current(e);
+    }
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">

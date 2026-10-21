@@ -1,0 +1,367 @@
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { eq, inArray } from "drizzle-orm";
+import { db } from "../support/db-client.node";
+import { seedTestDataset } from "../support/fixtures";
+import { startGitHubStandIn, type StandIn } from "../support/github-stand-in";
+import { withEnv } from "../support/test-env";
+import { mutedSubjects, notifications, writebackQueue } from "@/db/schema";
+
+vi.mock("@/db/client", async () => {
+  const mod = await import("../support/db-client.node");
+  return { db: mod.db };
+});
+
+/**
+ * `POST /api/notifications/bulk`.
+ *
+ * The bulk handler is the one place where a local change and a remote change
+ * have to agree. Every action changes the database first and then tries to
+ * tell GitHub about it. When the remote call fails, the work is queued for a
+ * later retry instead of being lost, and the response says so.
+ */
+
+const NOW = Date.parse("2026-01-15T12:00:00Z");
+const TOKEN = "test-token";
+
+let standIn: StandIn;
+let restoreEnv: (() => void) | null = null;
+
+async function bulk(
+  payload: unknown
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { POST } = await import("@/app/api/notifications/bulk/route");
+  const res = await POST(
+    new Request("http://localhost/api/notifications/bulk", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  );
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+async function row(id: string) {
+  const rows = await db.select().from(notifications).where(eq(notifications.id, id));
+  return rows[0];
+}
+
+async function queueRows() {
+  return db.select().from(writebackQueue);
+}
+
+beforeAll(async () => {
+  standIn = await startGitHubStandIn({ token: TOKEN });
+});
+
+afterAll(async () => {
+  await standIn.close();
+});
+
+beforeEach(async () => {
+  standIn.reset();
+  restoreEnv = withEnv({
+    GHN_TOKEN: TOKEN,
+    GHN_API_BASE: standIn.url,
+    GHN_NOW: String(NOW),
+  });
+  await db.delete(writebackQueue);
+  await db.delete(mutedSubjects);
+  await db.delete(notifications);
+  await seedTestDataset(db, NOW);
+});
+
+afterEach(() => {
+  restoreEnv?.();
+  restoreEnv = null;
+});
+
+describe("the bulk input validation", () => {
+  test("a missing id list is refused", async () => {
+    const { status, body } = await bulk({ action: "done" });
+    expect(status).toBe(400);
+    expect(body.error).toBe(
+      "ids must be non-empty and action one of done, unsubscribe, unread, read"
+    );
+  });
+
+  test("an empty id list is refused", async () => {
+    const { status } = await bulk({ ids: [], action: "done" });
+    expect(status).toBe(400);
+  });
+
+  test("an id list that is not an array is refused", async () => {
+    const { status } = await bulk({ ids: "n_001", action: "done" });
+    expect(status).toBe(400);
+  });
+
+  test("an id list without a single string is refused", async () => {
+    const { status } = await bulk({ ids: [1, 2, null], action: "done" });
+    expect(status).toBe(400);
+  });
+
+  test("an unknown action is refused", async () => {
+    const { status, body } = await bulk({ ids: ["n_001"], action: "explode" });
+    expect(status).toBe(400);
+    expect(body.error).toBe(
+      "ids must be non-empty and action one of done, unsubscribe, unread, read"
+    );
+  });
+
+  test("a missing action is refused", async () => {
+    const { status } = await bulk({ ids: ["n_001"] });
+    expect(status).toBe(400);
+  });
+
+  test("a refused request changes nothing", async () => {
+    await bulk({ ids: [], action: "done" });
+    expect(await queueRows()).toHaveLength(0);
+    expect((await row("n_001"))?.isDone).toBe(0);
+  });
+});
+
+describe("the bulk unknown id rejection", () => {
+  test("an id that is not in the database is refused", async () => {
+    const { status, body } = await bulk({
+      ids: ["n_001", "does-not-exist"],
+      action: "done",
+    });
+    expect(status).toBe(422);
+    expect(body.error).toBe("unknown notification id");
+  });
+
+  test("a refused request changes nothing", async () => {
+    await bulk({ ids: ["does-not-exist"], action: "done" });
+    expect((await row("n_001"))?.isDone).toBe(0);
+    expect(await queueRows()).toHaveLength(0);
+  });
+
+  test("duplicate ids are collapsed into one", async () => {
+    const { status, body } = await bulk({
+      ids: ["n_001", "n_001"],
+      action: "unread",
+    });
+    expect(status).toBe(200);
+    expect(body.updated).toBe(1);
+  });
+});
+
+describe("the done action", () => {
+  test("it marks the notification done and tells GitHub", async () => {
+    const { status, body } = await bulk({ ids: ["n_001"], action: "done" });
+    expect(status).toBe(200);
+    expect(body).toEqual({ updated: 1, action: "done" });
+    expect(body.remote).toBeUndefined();
+
+    const updated = await row("n_001");
+    expect(updated?.isDone).toBe(1);
+    expect(updated?.localUnread).toBe(0);
+
+    const requests = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(requests.map((r) => r.path)).toEqual([
+      "/notifications/threads/n_001",
+    ]);
+    expect(await queueRows()).toHaveLength(0);
+  });
+
+  test("it marks every notification of the batch", async () => {
+    const { body } = await bulk({ ids: ["n_001", "n_002"], action: "done" });
+    expect(body.updated).toBe(2);
+    expect((await row("n_001"))?.isDone).toBe(1);
+    expect((await row("n_002"))?.isDone).toBe(1);
+  });
+});
+
+describe("the read action", () => {
+  test("it marks the notification read and tells GitHub", async () => {
+    const { status, body } = await bulk({ ids: ["n_001"], action: "read" });
+    expect(status).toBe(200);
+    expect(body).toEqual({ updated: 1, action: "read" });
+
+    const updated = await row("n_001");
+    expect(updated?.isRead).toBe(1);
+    expect(updated?.localUnread).toBe(0);
+    expect(updated?.isDone).toBe(0);
+
+    const requests = standIn.requests.filter((r) => r.method === "PATCH");
+    expect(requests.map((r) => r.path)).toEqual([
+      "/notifications/threads/n_001",
+    ]);
+  });
+});
+
+describe("the unread action", () => {
+  test("it marks the notification unread locally and asks nothing of GitHub", async () => {
+    const { status, body } = await bulk({ ids: ["n_001"], action: "unread" });
+    expect(status).toBe(200);
+    expect(body).toEqual({ updated: 1, action: "unread" });
+
+    const updated = await row("n_001");
+    expect(updated?.isRead).toBe(0);
+    expect(updated?.isDone).toBe(0);
+    expect(updated?.localUnread).toBe(1);
+    expect(standIn.requests).toHaveLength(0);
+  });
+});
+
+describe("the unsubscribe action", () => {
+  test("it marks the notification done and ignores the subscription", async () => {
+    const { status, body } = await bulk({ ids: ["n_001"], action: "unsubscribe" });
+    expect(status).toBe(200);
+    expect(body).toEqual({ updated: 1, action: "unsubscribe" });
+    expect(body.remote).toBeUndefined();
+
+    expect((await row("n_001"))?.isDone).toBe(1);
+    const muted = await db
+      .select()
+      .from(mutedSubjects)
+      .where(eq(mutedSubjects.repositoryId, "acme--web"));
+    expect(muted.map((m) => m.subject)).toEqual(["Fix flaky login redirect"]);
+
+    const requests = standIn.requests.filter((r) => r.method === "PUT");
+    expect(requests.map((r) => r.path)).toEqual([
+      "/notifications/threads/n_001/subscription",
+    ]);
+    expect(requests[0]?.body).toBe(JSON.stringify({ ignored: true }));
+    expect(await queueRows()).toHaveLength(0);
+  });
+
+  test("two repositories produce two remote calls", async () => {
+    const { body } = await bulk({ ids: ["n_001", "n_002"], action: "unsubscribe" });
+    expect(body.updated).toBe(2);
+    const requests = standIn.requests.filter((r) => r.method === "PUT");
+    expect(requests.map((r) => r.path).sort()).toEqual([
+      "/notifications/threads/n_001/subscription",
+      "/notifications/threads/n_002/subscription",
+    ]);
+  });
+});
+
+describe("the remote failure path", () => {
+  test("a failing done call leaves the notification open and queues the work", async () => {
+    standIn.setScenario("/notifications/threads/n_001", { status: 500 });
+    const { status, body } = await bulk({ ids: ["n_001"], action: "done" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: 0,
+      action: "done",
+      remote: "partial",
+      queued: 1,
+      error: "unknown",
+    });
+
+    expect((await row("n_001"))?.isDone).toBe(0);
+    const queued = await queueRows();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.threadId).toBe("n_001");
+    expect(queued[0]?.action).toBe("done");
+    expect(queued[0]?.lastError).toBe("unknown");
+    expect(queued[0]?.attempts).toBe(0);
+    expect(queued[0]?.createdAt).toBe(NOW);
+  });
+
+  test("a failing subscription call queues the unsubscribe", async () => {
+    standIn.setScenario("/notifications/threads/n_001/subscription", {
+      status: 500,
+    });
+    const { status, body } = await bulk({
+      ids: ["n_001"],
+      action: "unsubscribe",
+    });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: 1,
+      action: "unsubscribe",
+      remote: "partial",
+      queued: 1,
+    });
+    const queued = await queueRows();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.action).toBe("unsubscribe");
+    expect(queued[0]?.lastError).toBe("unknown");
+  });
+
+  test("a rejected credential queues the work with an auth reason", async () => {
+    standIn.setScenario("/notifications/threads/n_001", { status: 401 });
+    const { body } = await bulk({ ids: ["n_001"], action: "done" });
+    expect(body).toMatchObject({
+      updated: 0,
+      remote: "partial",
+      queued: 1,
+      error: "auth",
+    });
+    const queued = await queueRows();
+    expect(queued[0]?.lastError).toBe("auth");
+  });
+});
+
+describe("the write-back queue fallback", () => {
+  test("without a credential the work is queued instead of lost", async () => {
+    restoreEnv?.();
+    restoreEnv = withEnv({
+      GHN_TOKEN: "",
+      GHN_API_BASE: standIn.url,
+      GHN_NOW: String(NOW),
+    });
+    const { status, body } = await bulk({ ids: ["n_001"], action: "done" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: 0,
+      action: "done",
+      remote: "partial",
+      queued: 1,
+      error: "auth",
+    });
+    expect(standIn.requests).toHaveLength(0);
+    expect((await row("n_001"))?.isDone).toBe(0);
+
+    const queued = await queueRows();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.threadId).toBe("n_001");
+    expect(queued[0]?.action).toBe("done");
+    expect(queued[0]?.lastError).toBe("auth");
+  });
+
+  test("without a credential an unsubscribe is queued as well", async () => {
+    restoreEnv?.();
+    restoreEnv = withEnv({
+      GHN_TOKEN: "",
+      GHN_API_BASE: standIn.url,
+      GHN_NOW: String(NOW),
+    });
+    const { body } = await bulk({ ids: ["n_001"], action: "unsubscribe" });
+    expect(body).toMatchObject({
+      updated: 1,
+      remote: "partial",
+      queued: 1,
+    });
+    expect(standIn.requests).toHaveLength(0);
+    const queued = await queueRows();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.action).toBe("unsubscribe");
+  });
+
+  test("without a credential the unread action stays local", async () => {
+    restoreEnv?.();
+    restoreEnv = withEnv({
+      GHN_TOKEN: "",
+      GHN_API_BASE: standIn.url,
+      GHN_NOW: String(NOW),
+    });
+    const { body } = await bulk({ ids: ["n_001"], action: "unread" });
+    expect(body).toEqual({ updated: 1, action: "unread" });
+    expect(await queueRows()).toHaveLength(0);
+    expect((await row("n_001"))?.localUnread).toBe(1);
+  });
+
+  test("the queued work names the notifications it belongs to", async () => {
+    standIn.setScenario("/notifications/threads/n_001", { status: 500 });
+    standIn.setScenario("/notifications/threads/n_002", { status: 500 });
+    await bulk({ ids: ["n_001", "n_002"], action: "done" });
+    const queued = await queueRows();
+    expect(queued.map((q) => q.threadId).sort()).toEqual(["n_001", "n_002"]);
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(inArray(notifications.id, ["n_001", "n_002"]));
+    expect(rows.every((r) => r.isDone === 0)).toBe(true);
+  });
+});

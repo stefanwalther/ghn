@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { eq } from "drizzle-orm";
 import { contributionDays } from "@/db/schema";
 import { getStoredToken } from "@/lib/github";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const { db } = await import("@/db/client");
   const url = new URL(request.url);
-  const now = Date.now();
+  const now = nowMs();
   const today = todayUTC();
   const raw = url.searchParams.get("date") || today;
   if (!isValidDay(raw)) {
