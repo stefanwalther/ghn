@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { RefreshCw } from "lucide-react";
 import * as React from "react";
 import { BulkBar, type BulkAction } from "@/components/inbox/bulk-bar";
 import { DigestSection } from "@/components/inbox/digest-section";
@@ -13,6 +12,7 @@ import type { ItemMenuAction } from "@/components/inbox/item-menu";
 import { NotificationList, type InboxItem } from "@/components/inbox/notification-list";
 import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
+import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { copyText } from "@/lib/clipboard";
@@ -45,6 +45,7 @@ function InboxView() {
   const [notice, setNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = React.useState(false);
+  const [syncingIds, setSyncingIds] = React.useState<Set<string>>(new Set());
   const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
   const [stale, setStale] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
@@ -279,7 +280,7 @@ function InboxView() {
   }
 
   async function syncOne(id: string) {
-    setBusy(true);
+    setSyncingIds((prev) => new Set(prev).add(id));
     setNotice(null);
     try {
       const res = await fetch("/api/thread/sync", {
@@ -302,7 +303,11 @@ function InboxView() {
     } catch {
       setNotice("Sync failed for this item.");
     } finally {
-      setBusy(false);
+      setSyncingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -582,10 +587,7 @@ function InboxView() {
             onClick={() => void refresh()}
             disabled={syncing || refreshing || inPollWindow}
           >
-            <RefreshCw
-              className={syncing || refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
-              aria-hidden
-            />
+            <SyncSpinner spinning={syncing || refreshing} />
           </Button>
           {lastSyncAt !== null ? (
             <span className="text-xs text-muted-foreground" title={`Poll interval ${pollSecs}s`}>
@@ -693,6 +695,7 @@ function InboxView() {
           selected={selected}
           focusedId={focusIdx !== null ? items[focusIdx]?.id : undefined}
           showHints={showHints}
+          syncingIds={syncingIds}
           onToggle={toggle}
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
@@ -709,6 +712,7 @@ function InboxView() {
       {drawerItem ? (
         <ItemDrawer
           item={drawerItem}
+          syncing={syncingIds.has(drawerItem.id)}
           onClose={() => setDrawerItem(null)}
           onAction={drawerAction}
           onPrev={() => stepDrawer(-1)}
