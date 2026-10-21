@@ -339,6 +339,25 @@ These need a decision that is not the test suite's to make.
 | `muted_subjects` has no primary key and no unique index | `db/schema.ts` | `onConflictDoNothing` cannot deduplicate, so the table can accumulate duplicates. |
 | The `data/` directory is not created by any script | `db/client.ts:5` | A fresh clone fails to open the database. |
 
+### What the review of the finished suite found
+
+A review of the merged work, with mutations applied to the implementation to see which checks noticed, found nine mutations that nothing caught, spread over six files. The ones that mattered were the guarantees the suite advertises.
+
+| Gap | Why it mattered | Fix |
+|---|---|---|
+| The end-to-end reset compared a raw path against a resolved one, so the guard did not block the application's own database | A relative path or a redundant segment walked past the guard, and the script drops tables in the real inbox | Both sides are resolved before they are compared |
+| The unit layer had no setup file, so it inherited `GH_TOKEN` from the environment | A machine with the documented production variable exported would hand the suite a real credential | The unit layer clears the credential variables the way the integration layer already did |
+| Nothing checked that an empty token never falls back, or that `tokenDisabled()` does anything | The fallback would find a real credential on a machine that has one | Checks for both, with the helper mocked so the difference is observable |
+| The coverage gate failed open on every baseline problem | A flaky baseline silently turned the gate off | A missing baseline is reported, and a broken baseline is an error |
+| The gate compared the two runs' whole totals | A file that went from fully covered to not covered at all passed, and a change to the coverage list moved the number on its own | The comparison is over the files both runs measured, matched by their path relative to the repository |
+| The CI passed the base branch's head where the script wanted the merge base | The baseline was measured at a different commit than the gate is named after | The script resolves the merge base itself |
+| The gate's exit path was never executed, and the npm script pointed at the wrong thing | The gate would have exited zero without comparing anything, and the script always printed usage | The direct run is detected by comparing paths, and the exit path is checked by running the command |
+| The rate limit clock, the read branch of the optimistic triage, the dataset's read balance and the collapsed ages were not pinned | The suite claims every count is predictable, and these were not | Checks for each |
+
+Two more were left alone as cleanups rather than defects: an unused parameter on the seed subject builder, and the three separate runner invocations in `make check`.
+
+The review also found that the production database client cannot run under the Node runtime the suite uses, because it speaks `bun:sqlite`. The rule it exists for, that a handle is cached per resolved path, moved into a small helper that both clients use, so it is covered.
+
 ### The coverage gate is advisory, not enforced
 
 FR-006 says a failing automated run must block the merge of the pull request

@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "test:coverage": "vitest run --coverage",
     "test:all": "vitest run && playwright test",
-    "coverage:check": "bun run scripts/compare-coverage.ts",
+    "coverage:check": "bash scripts/coverage-ratchet.sh",
     "db:push": "bun run scripts/push.ts",
     "db:seed": "bun run scripts/seed.ts"
   },
