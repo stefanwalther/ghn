@@ -19,6 +19,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { key: "a", label: "All", description: "Select or clear all visible rows" },
   { key: "Cmd+K", label: "Search", description: "Search threads, repos, commands, and filters" },
   { key: "Cmd+B", label: "Sidebar", description: "Show or hide the main menu" },
+  { key: "Cmd+F12", label: "Theme", description: "Cycle light / dark / system" },
   { key: "Alt", label: "Hints", description: "Hold to reveal key hints" },
   { key: "Esc", label: "Clear", description: "Clear selection, or close this help" },
   { key: "?", label: "Help", description: "Show this shortcut list" },
@@ -31,6 +32,13 @@ export function isToggleSidebarEvent(e: KeyboardEvent): boolean {
   if (e.altKey || e.shiftKey) return false;
   if (!e.metaKey && !e.ctrlKey) return false;
   return typeof e.key === "string" && e.key.toLowerCase() === "b";
+}
+
+export function isCycleThemeEvent(e: KeyboardEvent): boolean {
+  // Cmd+F12 on macOS, Ctrl+F12 elsewhere. Ignore Alt and Shift combos.
+  if (e.altKey || e.shiftKey) return false;
+  if (!e.metaKey && !e.ctrlKey) return false;
+  return e.key === "F12";
 }
 
 export function isAltHintKey(e: KeyboardEvent): boolean {

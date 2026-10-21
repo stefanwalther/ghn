@@ -5,7 +5,9 @@ import {
   DRAWER_MIN_WIDTH,
   clampDrawerWidth,
   loadDrawerWidth,
+  parsePaletteLimit,
   previewFallbackKind,
+  repoFilterHref,
   saveDrawerWidth,
 } from "@/lib/view-state";
 
@@ -39,5 +41,30 @@ describe("previewFallbackKind", () => {
     expect(previewFallbackKind("Issue")).toBe("this item type");
     expect(previewFallbackKind(null)).toBe("this item type");
     expect(previewFallbackKind(undefined)).toBe("this item type");
+  });
+});
+
+describe("repoFilterHref", () => {
+  test("preserves state, type, and age while swapping repo", () => {
+    expect(repoFilterHref("?state=all&type=merged&age=7d&repo=old", "new")).toBe(
+      "/?repo=new&state=all&type=merged&age=7d"
+    );
+  });
+
+  test("builds repo-only href from empty search", () => {
+    expect(repoFilterHref("", "r1")).toBe("/?repo=r1");
+  });
+});
+
+describe("parsePaletteLimit", () => {
+  test("returns null when absent so inbox stays unbounded", () => {
+    expect(parsePaletteLimit(null)).toBeNull();
+  });
+
+  test("clamps into 1 to 400 and falls back on garbage", () => {
+    expect(parsePaletteLimit("400")).toBe(400);
+    expect(parsePaletteLimit("9999")).toBe(400);
+    expect(parsePaletteLimit("0")).toBe(1);
+    expect(parsePaletteLimit("oops")).toBe(400);
   });
 });

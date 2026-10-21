@@ -347,7 +347,9 @@ describe("the facet counts", () => {
 
   test("the type facets carry a label for every filter", async () => {
     const body = await load();
-    expect(body.facets.types.map((t) => t.value)).not.toContain("all");
+    // "All" is the first type filter, and it counts the whole main flow.
+    expect(body.facets.types[0]?.value).toBe("all");
+    expect(body.facets.types[0]?.count).toBe(body.mainFlow.length);
     for (const facet of body.facets.types) {
       expect(facet.label.length).toBeGreaterThan(0);
     }
