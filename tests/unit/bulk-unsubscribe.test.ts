@@ -10,7 +10,7 @@ type TestDb = BunSQLiteDatabase<typeof schema>;
 const sqlite = new Database(":memory:");
 ensureSchema(sqlite);
 const testDb: TestDb = drizzle(sqlite, { schema });
-(globalThis as Record<string, unknown>).__quietDb = testDb;
+(globalThis as Record<string, unknown>).__ghnDb = testDb;
 
 process.env.GH_TOKEN = "test-token";
 

@@ -11,7 +11,7 @@ export PORT
 # paths and the Next.js output. No executable ships from this repo (web app),
 # so there is no link/unlink; install/uninstall provision the local app env.
 VERSION_FILE := .release-please-manifest.json
-PACKAGE_TAG := quiet-notifications
+PACKAGE_TAG := ghn
 MANIFEST_VERSION := $(shell python3 -c 'import json; print(json.load(open("$(VERSION_FILE)"))["."])' 2>/dev/null)
 SOURCE_REVISION := $(shell git rev-parse --short=12 HEAD 2>/dev/null)
 SOURCE_DIRTY := $(shell test -z "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" || printf '.dirty')
