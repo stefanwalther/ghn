@@ -73,13 +73,13 @@ Reports how the server reaches GitHub, backing the disconnected banner and the r
 Response 200:
 
 ```json
-{ "connected": true, "viewerLogin": "stefanwalther", "lastSyncAt": 1729000000000 }
+{ "connected": true, "viewerLogin": "stefanwalther", "lastSyncAt": 1729000000000, "pollIntervalSecs": 60, "stale": false }
 ```
 
 Response 200 (disconnected):
 
 ```json
-{ "connected": false, "reason": "missing_auth", "hint": "Run `gh auth login` on the server and refresh." }
+{ "connected": false, "reason": "missing_auth", "hint": "Run `gh auth login` on the server and refresh.", "lastSyncAt": 1729000000000, "pollIntervalSecs": 60, "stale": true }
 ```
 
 `reason` is `missing_auth` | `revoked` | `rate_limited` | `network`. The UI never presents cached rows as fresh when `connected` is false; it shows last-synced time with retry.

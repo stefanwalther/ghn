@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
+import { announceSync } from "@/lib/sync-events";
 import { copyText } from "@/lib/clipboard";
 import { describeBulkResult } from "@/lib/bulk";
 import { selectByQuickFilter } from "@/lib/filters";
@@ -101,8 +102,10 @@ function InboxView() {
 
   const load = React.useCallback(async () => {
     const silent = loadedRef.current;
-    if (!silent) setStatus("loading");
-    else setRefreshing(true);
+    if (!silent) {
+      setStatus("loading");
+      announceSync(true);
+    } else setRefreshing(true);
     const my = ++reqRef.current;
     try {
       const res = await fetchWithTimeout(`/api/notifications${query}`, { cache: "no-store" }, REQUEST_TIMEOUT_MS);
@@ -123,7 +126,10 @@ function InboxView() {
       if (!loadedRef.current) setStatus("error");
       else setNotice("Refresh failed. Showing last loaded data.");
     } finally {
-      if (reqRef.current === my) setRefreshing(false);
+      if (reqRef.current === my) {
+        setRefreshing(false);
+        if (!silent) announceSync(false);
+      }
     }
   }, [query]);
 
@@ -183,6 +189,7 @@ function InboxView() {
 
   async function refresh() {
     setSyncing(true);
+    announceSync(true);
     try {
       const res = await fetchWithTimeout(
         "/api/sync",
@@ -207,6 +214,7 @@ function InboxView() {
       setSyncError("Sync failed. Showing last loaded data.");
     } finally {
       setSyncing(false);
+      announceSync(false);
       try {
         const connRes = await fetch("/api/connection", { cache: "no-store" });
         const connData = await connRes.json().catch(() => null);

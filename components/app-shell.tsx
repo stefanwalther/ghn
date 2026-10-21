@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Bell, ExternalLink, Gauge, Github, Search, Settings2 } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
+import { BrandMark } from "@/components/brand-mark";
 import { DemoBanner } from "@/components/demo-banner";
 import { CommandPalette } from "@/components/search/command-palette";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -123,7 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="fixed inset-0 z-30 cursor-pointer bg-background/80 md:hidden"
           />
           <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 overflow-y-auto bg-sidebar p-4 shadow-md md:sticky md:top-0 md:z-auto md:h-screen md:shadow-none">
-          <div className="mb-4 px-2 text-sm font-semibold">ghn</div>
+          <BrandMark />
           {NAV.map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);

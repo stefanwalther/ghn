@@ -1,6 +1,13 @@
-# ghn - the better GitHub notification UI
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/wordmark-dark.svg">
+    <img src="docs/logo/wordmark-light.svg" alt="ghn." width="160">
+  </picture>
 
-Clear 20 GitHub notifications in under 5 minutes with half the clicks.
+  # ghn. — the better GitHub notification UI
+
+  Clear 20 GitHub notifications in under 5 minutes with half the clicks.
+</div>
 
 Zero friction. If `gh` works, ghn works. No tokens, no env files.
 
