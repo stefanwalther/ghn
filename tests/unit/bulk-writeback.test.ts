@@ -1,20 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { describe, expect, test } from "vitest";
 import { eq } from "drizzle-orm";
+import { createMemoryDb } from "../support/db-client.node";
 import * as schema from "@/db/schema";
-import { ensureSchema } from "@/db/ensure-schema";
 import { enqueueWriteback } from "@/lib/queue";
 import { reapplyPendingReads, upsertThreads } from "@/lib/sync";
 import type { GhThread } from "@/lib/github";
-
-type TestDb = BunSQLiteDatabase<typeof schema>;
-
-function makeTestDb(): TestDb {
-  const sqlite = new Database(":memory:");
-  ensureSchema(sqlite);
-  return drizzle(sqlite, { schema });
-}
 
 function thread(overrides: Partial<GhThread> = {}): GhThread {
   return {
@@ -37,7 +27,7 @@ const resolveUrl = async () => "https://github.com/acme/web/pull/12";
 
 describe("pending read preservation across sync", () => {
   test("reapply restores a queued read that upsert reverted", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ unread: false })], null, 1792000000000, resolveUrl);
     await enqueueWriteback(db, "9001", "read", "network", 1792000000000);
     // GitHub still reports unread while the PATCH retry is pending.
@@ -62,7 +52,7 @@ describe("pending read preservation across sync", () => {
   });
 
   test("reapply respects an explicit local unread", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ unread: false })], null, 1792000000000, resolveUrl);
     await enqueueWriteback(db, "9001", "read", "network", 1792000000000);
     await db

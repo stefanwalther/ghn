@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { serve } from "../support/http-stub";
 import {
   fetchCheckSummary,
   fetchDependabotAlert,
@@ -20,8 +21,7 @@ import {
 
 describe("fetchThread", () => {
   test("returns a single parsed thread from fixture", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify({
@@ -45,7 +45,7 @@ describe("fetchThread", () => {
         ),
     });
     const prior = process.env.GHN_API_BASE;
-    process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+    process.env.GHN_API_BASE = `${server.url}`;
     try {
       const { fetchThread } = await import("@/lib/github");
       const result = await fetchThread("token", "1001");
@@ -56,17 +56,16 @@ describe("fetchThread", () => {
     } finally {
       if (prior === undefined) delete process.env.GHN_API_BASE;
       else process.env.GHN_API_BASE = prior;
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("surfaces the status when the thread is gone", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () => new Response("{}", { status: 404 }),
     });
     const prior = process.env.GHN_API_BASE;
-    process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+    process.env.GHN_API_BASE = `${server.url}`;
     try {
       const { fetchThread } = await import("@/lib/github");
       const result = await fetchThread("token", "missing");
@@ -75,7 +74,7 @@ describe("fetchThread", () => {
     } finally {
       if (prior === undefined) delete process.env.GHN_API_BASE;
       else process.env.GHN_API_BASE = prior;
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
@@ -125,42 +124,40 @@ describe("parseDependabotAlertCoords", () => {
 
 describe("fetchDependabotAlert", () => {
   test("maps advisory, package, and timeline from fixture", async () => {
-    const server = Bun.serve({
-      port: 0,
-      fetch: () =>
-        new Response(
-          JSON.stringify({
-            number: 34,
-            state: "fixed",
-            html_url: "https://github.com/acme/web/security/dependabot/34",
-            dependency: {
-              package: { ecosystem: "npm", name: "sharp" },
-              manifest_path: "docs-site/package-lock.json",
-              scope: "runtime",
-            },
-            security_advisory: {
-              summary: "sharp RCE",
-              description: "Upgrade ASAP",
-              severity: "high",
-              cve_id: null,
-              ghsa_id: "GHSA-wq5f-xc86-pv6w",
-            },
-            security_vulnerability: {
-              vulnerable_version_range: "< 0.35.5",
-              first_patched_version: { identifier: "0.35.5" },
-            },
-            created_at: "2026-10-14T11:35:08Z",
-            fixed_at: "2026-10-14T11:51:33Z",
-            dismissed_at: null,
-            dismissed_reason: null,
-          }),
-          { headers: { "Content-Type": "application/json" } }
-        ),
-    });
+    const server = await serve(() =>
+      new Response(
+        JSON.stringify({
+          number: 34,
+          state: "fixed",
+          html_url: "https://github.com/acme/web/security/dependabot/34",
+          dependency: {
+            package: { ecosystem: "npm", name: "sharp" },
+            manifest_path: "docs-site/package-lock.json",
+            scope: "runtime",
+          },
+          security_advisory: {
+            summary: "sharp RCE",
+            description: "Upgrade ASAP",
+            severity: "high",
+            cve_id: null,
+            ghsa_id: "GHSA-wq5f-xc86-pv6w",
+          },
+          security_vulnerability: {
+            vulnerable_version_range: "< 0.35.5",
+            first_patched_version: { identifier: "0.35.5" },
+          },
+          created_at: "2026-10-14T11:35:08Z",
+          fixed_at: "2026-10-14T11:51:33Z",
+          dismissed_at: null,
+          dismissed_reason: null,
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
+    );
     try {
       const alert = await fetchDependabotAlert(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/dependabot/alerts/34`
+        `${server.url}/repos/acme/web/dependabot/alerts/34`
       );
       expect(alert).toEqual({
         number: 34,
@@ -183,57 +180,51 @@ describe("fetchDependabotAlert", () => {
         dismissedReason: null,
       });
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("tolerates missing optional fields", async () => {
-    const server = Bun.serve({
-      port: 0,
-      fetch: () =>
-        new Response(
-          JSON.stringify({
-            number: 101,
-            html_url: "https://github.com/acme/web/security/dependabot/101",
-          }),
-          { headers: { "Content-Type": "application/json" } }
-        ),
-    });
+    const server = await serve(() =>
+      new Response(
+        JSON.stringify({
+          number: 101,
+          html_url: "https://github.com/acme/web/security/dependabot/101",
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
+    );
     try {
       const alert = await fetchDependabotAlert(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/dependabot/alerts/101`
+        `${server.url}/repos/acme/web/dependabot/alerts/101`
       );
       expect(alert?.number).toBe(101);
       expect(alert?.packageName).toBeNull();
       expect(alert?.severity).toBeNull();
       expect(alert?.description).toBeNull();
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("returns null on non-ok or malformed payload", async () => {
-    const server = Bun.serve({
-      port: 0,
-      fetch: () => new Response("{}", { status: 404 }),
-    });
+    const server = await serve(() => new Response("{}", { status: 404 }));
     try {
       const alert = await fetchDependabotAlert(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/dependabot/alerts/999`
+        `${server.url}/repos/acme/web/dependabot/alerts/999`
       );
       expect(alert).toBeNull();
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
 
 describe("fetchSubjectContent", () => {
   test("returns title body state author from fixture", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify({
@@ -249,36 +240,34 @@ describe("fetchSubjectContent", () => {
     try {
       const content = await fetchSubjectContent(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/pulls/12`
+        `${server.url}/repos/acme/web/pulls/12`
       );
       expect(content?.title).toBe("Fix it");
       expect(content?.body).toBe("Details here");
       expect(content?.state).toBe("open");
       expect(content?.authorLogin).toBe("octo");
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("returns null on missing subject", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () => new Response("{}", { headers: { "Content-Type": "application/json" } }),
     });
     try {
       const content = await fetchSubjectContent(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/pulls/99`
+        `${server.url}/repos/acme/web/pulls/99`
       );
       expect(content).toBeNull();
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("pull payload carries draft and merged flags", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify({
@@ -296,12 +285,12 @@ describe("fetchSubjectContent", () => {
     try {
       const content = await fetchSubjectContent(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/pulls/12`
+        `${server.url}/repos/acme/web/pulls/12`
       );
       expect(content?.draft).toBe(true);
       expect(content?.merged).toBe(false);
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
@@ -406,8 +395,7 @@ describe("formatRunAge", () => {
 describe("fetchWorkflowRuns", () => {
   test("maps recent runs from fixture", async () => {
     let seenUrl = "";
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: (req) => {
         seenUrl = new URL(req.url).pathname + new URL(req.url).search;
         return new Response(
@@ -441,7 +429,7 @@ describe("fetchWorkflowRuns", () => {
         owner: "acme",
         repo: "web",
         branch: "main",
-        apiBase: `http://localhost:${server.port}`,
+        apiBase: `${server.url}`,
       });
       expect(runs).toHaveLength(2);
       expect(runs[0]).toEqual({
@@ -455,14 +443,13 @@ describe("fetchWorkflowRuns", () => {
       expect(runs[1]?.conclusion).toBeNull();
       expect(seenUrl).toContain("branch=main");
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("omits the branch param when unknown", async () => {
     let seenUrl = "";
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: (req) => {
         seenUrl = new URL(req.url).pathname + new URL(req.url).search;
         return new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), {
@@ -475,19 +462,18 @@ describe("fetchWorkflowRuns", () => {
         owner: "acme",
         repo: "web",
         branch: null,
-        apiBase: `http://localhost:${server.port}`,
+        apiBase: `${server.url}`,
       });
       expect(runs).toEqual([]);
       expect(seenUrl).not.toContain("branch=");
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
 
 describe("fetchThreadComments", () => {  test("returns author body timestamp from fixture", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify([
@@ -500,7 +486,7 @@ describe("fetchThreadComments", () => {  test("returns author body timestamp fro
     try {
       const comments = await fetchThreadComments(
         "token",
-        `http://localhost:${server.port}/repos/acme/web/issues/12/comments`
+        `${server.url}/repos/acme/web/issues/12/comments`
       );
       expect(comments).toHaveLength(1);
       expect(comments[0]).toEqual({
@@ -509,7 +495,7 @@ describe("fetchThreadComments", () => {  test("returns author body timestamp fro
         createdAt: Date.parse("2026-10-16T10:00:00Z"),
       });
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
@@ -531,8 +517,7 @@ describe("parsePullCoords", () => {
 
 describe("fetchCheckSummary", () => {
   test("counts passing and failing contexts from fixture", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify({
@@ -551,17 +536,16 @@ describe("fetchCheckSummary", () => {
         owner: "acme",
         repo: "web",
         sha: "abc123",
-        apiBase: `http://localhost:${server.port}`,
+        apiBase: `${server.url}`,
       });
       expect(summary).toEqual({ state: "failure", passing: 1, total: 3 });
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("no statuses means no checks", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(JSON.stringify({ state: "pending", statuses: [] }), {
           headers: { "Content-Type": "application/json" },
@@ -572,17 +556,16 @@ describe("fetchCheckSummary", () => {
         owner: "acme",
         repo: "web",
         sha: "abc123",
-        apiBase: `http://localhost:${server.port}`,
+        apiBase: `${server.url}`,
       });
       expect(summary).toEqual({ state: "pending", passing: 0, total: 0 });
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("check runs merge with commit statuses", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: (req) => {
         if (req.url.includes("/check-runs")) {
           return new Response(
@@ -606,11 +589,11 @@ describe("fetchCheckSummary", () => {
         owner: "acme",
         repo: "web",
         sha: "abc123",
-        apiBase: `http://localhost:${server.port}`,
+        apiBase: `${server.url}`,
       });
       expect(summary).toEqual({ state: "failure", passing: 1, total: 2 });
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });

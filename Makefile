@@ -11,7 +11,7 @@ export PORT
 # paths and the Next.js output. No executable ships from this repo (web app),
 # so there is no link/unlink; install/uninstall provision the local app env.
 VERSION_FILE := .release-please-manifest.json
-PACKAGE_TAG := quiet-notifications
+PACKAGE_TAG := ghn
 MANIFEST_VERSION := $(shell python3 -c 'import json; print(json.load(open("$(VERSION_FILE)"))["."])' 2>/dev/null)
 SOURCE_REVISION := $(shell git rev-parse --short=12 HEAD 2>/dev/null)
 SOURCE_DIRTY := $(shell test -z "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" || printf '.dirty')
@@ -19,7 +19,7 @@ AT_RELEASE_TAG := $(shell test -n '$(MANIFEST_VERSION)' && test -z '$(SOURCE_DIR
 SOURCE_VERSION := $(if $(AT_RELEASE_TAG),$(MANIFEST_VERSION),$(if $(and $(MANIFEST_VERSION),$(SOURCE_REVISION)),$(MANIFEST_VERSION)+g$(SOURCE_REVISION)$(SOURCE_DIRTY)))
 VERSION ?= $(SOURCE_VERSION)
 
-.PHONY: help version build check test test-e2e test-help test-build-version dev web-open web-serve web-dev install uninstall clean fmt-fix fmt-check fmt lint-check lint-fix lint up down logs
+.PHONY: help version build check test test-integration test-component test-all test-coverage coverage-check test-e2e test-help test-build-version dev web-open web-serve web-dev install uninstall clean fmt-fix fmt-check fmt lint-check lint-fix lint up down logs
 
 help: ## Show available Make targets.
 	@awk 'BEGIN {FS = ":.*## "; print "Available targets:"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -31,12 +31,27 @@ version: ## Print the computed release version (manifest + git SHA + .dirty).
 build: install ## Install deps and build the production Next.js bundle (.next/).
 	$(BUN) run build
 
-check: fmt-check lint-check test test-help test-build-version ## Run the local verification gate (test-e2e stays out).
+check: fmt-check lint-check test test-integration test-component test-help test-build-version ## Run the local verification gate (test-e2e stays out).
 
-test: ## Run the unit suite only (bun test tests/unit). No lint, no build, no infra.
-	$(BUN) test tests/unit
+test: ## Run the unit suite only (vitest run --project unit). No lint, no build, no infra.
+	$(BUN) run test:unit
 
-test-e2e: ## Run Playwright end-to-end tests (starts its own server; needs Playwright browsers; stays out of every gate).
+test-integration: ## Run the integration suite (request handlers, database and GitHub client together).
+	$(BUN) run test:integration
+
+test-component: ## Run the component suite (React client components in a DOM).
+	$(BUN) run test:component
+
+test-all: ## Run every layer: unit, integration, component and end-to-end.
+	$(BUN) run test:all
+
+test-coverage: ## Run the fast layers with coverage and write the merged view to coverage/.
+	$(BUN) run test:coverage
+
+coverage-check: ## Compare the current coverage against the merge base; a drop fails, a missing baseline is reported.
+	bash scripts/coverage-ratchet.sh
+
+test-e2e: ## Run Playwright end-to-end tests (needs the build and Playwright browsers; stays out of every gate).
 	$(BUN) x playwright test
 
 test-help: ## Verify make and make help show project target help.

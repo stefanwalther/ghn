@@ -9,7 +9,7 @@ export interface InboxFilters {
   age: AgeFilter;
 }
 
-const LAST_OPENED_KEY = "quiet-notifications:last-opened";
+const LAST_OPENED_KEY = "ghn:last-opened";
 const AGES: AgeFilter[] = ["all", "24h", "48h", "7d", "14d", "30d", "year", "older"];
 
 export function parseInboxFilters(params: URLSearchParams): InboxFilters {
@@ -66,7 +66,7 @@ export function loadLastOpened(): string | null {
   }
 }
 
-const DRAWER_WIDTH_KEY = "quiet-notifications:drawer-width";
+const DRAWER_WIDTH_KEY = "ghn:drawer-width";
 
 export const DRAWER_MIN_WIDTH = 480;
 export const DRAWER_MAX_WIDTH = 1120;

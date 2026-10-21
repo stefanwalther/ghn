@@ -1,16 +1,9 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { describe, expect, test, beforeEach, afterEach } from "vitest";
+import { serve } from "../support/http-stub";
 import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { ensureSchema } from "@/db/ensure-schema";
-
-type TestDb = BunSQLiteDatabase<typeof schema>;
-
-const sqlite = new Database(":memory:");
-ensureSchema(sqlite);
-const testDb: TestDb = drizzle(sqlite, { schema });
-(globalThis as Record<string, unknown>).__quietDb = testDb;
+import { db } from "../support/db-client.node";
+import { enqueueWriteback } from "@/lib/queue";
 
 process.env.GH_TOKEN = "test-token";
 
@@ -19,34 +12,31 @@ const { POST } = await import("@/app/api/notifications/bulk/route");
 let ignoredThreads: string[];
 let stopApi: (() => void) | null = null;
 
-function stubSubscriptionApi(): void {
+async function stubSubscriptionApi(): Promise<void> {
   ignoredThreads = [];
-  const server = Bun.serve({
-    port: 0,
-    fetch: (req) => {
-      const url = new URL(req.url);
-      if (req.method === "PUT" && url.pathname.endsWith("/subscription")) {
-        const parts = url.pathname.split("/");
-        ignoredThreads.push(parts[parts.length - 2] ?? "");
-        return Response.json({ ignored: true });
-      }
-      return new Response("unexpected call", { status: 500 });
-    },
+  const server = await serve((req) => {
+    const url = new URL(req.url);
+    if (req.method === "PUT" && url.pathname.endsWith("/subscription")) {
+      const parts = url.pathname.split("/");
+      ignoredThreads.push(parts[parts.length - 2] ?? "");
+      return Response.json({ ignored: true });
+    }
+    return new Response("unexpected call", { status: 500 });
   });
-  process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+  process.env.GHN_API_BASE = server.url;
   stopApi = () => {
     delete process.env.GHN_API_BASE;
-    server.stop(true);
+    void server.stop(true);
     stopApi = null;
   };
 }
 
 async function seedSameSubjectPair(): Promise<void> {
-  await testDb.delete(schema.writebackQueue);
-  await testDb.delete(schema.mutedSubjects);
-  await testDb.delete(schema.notifications);
-  await testDb.delete(schema.repositories);
-  await testDb.insert(schema.repositories).values({
+  await db.delete(schema.writebackQueue);
+  await db.delete(schema.mutedSubjects);
+  await db.delete(schema.notifications);
+  await db.delete(schema.repositories);
+  await db.insert(schema.repositories).values({
     id: "acme-web",
     fullName: "acme/web",
     ownership: "owned",
@@ -54,7 +44,7 @@ async function seedSameSubjectPair(): Promise<void> {
     createdAt: 1792000000000,
   });
   for (const id of ["1001", "1002"]) {
-    await testDb.insert(schema.notifications).values({
+    await db.insert(schema.notifications).values({
       id,
       repositoryId: "acme-web",
       subject: "CI failed on main",
@@ -68,37 +58,34 @@ async function seedSameSubjectPair(): Promise<void> {
 describe("bulk local-first write-back", () => {
   beforeEach(async () => {
     stopApi?.();
-    const server = Bun.serve({
-      port: 0,
-      fetch: (req) => {
-        const url = new URL(req.url);
-        if (
-          (req.method === "DELETE" || req.method === "PATCH") &&
-          url.pathname.startsWith("/notifications/threads/")
-        ) {
-          return new Response("boom", { status: 500 });
-        }
-        return new Response("unexpected call", { status: 500 });
-      },
+    const server = await serve((req) => {
+      const url = new URL(req.url);
+      if (
+        (req.method === "DELETE" || req.method === "PATCH") &&
+        url.pathname.startsWith("/notifications/threads/")
+      ) {
+        return new Response("boom", { status: 500 });
+      }
+      return new Response("unexpected call", { status: 500 });
     });
-    process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+    process.env.GHN_API_BASE = server.url;
     stopApi = () => {
       delete process.env.GHN_API_BASE;
-      server.stop(true);
+      void server.stop(true);
       stopApi = null;
     };
-    await testDb.delete(schema.writebackQueue);
-    await testDb.delete(schema.mutedSubjects);
-    await testDb.delete(schema.notifications);
-    await testDb.delete(schema.repositories);
-    await testDb.insert(schema.repositories).values({
+    await db.delete(schema.writebackQueue);
+    await db.delete(schema.mutedSubjects);
+    await db.delete(schema.notifications);
+    await db.delete(schema.repositories);
+    await db.insert(schema.repositories).values({
       id: "acme-web",
       fullName: "acme/web",
       ownership: "owned",
       rhythm: "immediate",
       createdAt: 1792000000000,
     });
-    await testDb.insert(schema.notifications).values({
+    await db.insert(schema.notifications).values({
       id: "9001",
       repositoryId: "acme-web",
       subject: "Fix flaky login",
@@ -130,12 +117,12 @@ describe("bulk local-first write-back", () => {
       remote: "partial",
       queued: 1,
     });
-    const rows = await testDb
+    const rows = await db
       .select()
       .from(schema.notifications)
       .where(eq(schema.notifications.id, "9001"));
     expect(rows[0]?.isDone).toBe(1);
-    expect(await testDb.select().from(schema.writebackQueue)).toHaveLength(1);
+    expect(await db.select().from(schema.writebackQueue)).toHaveLength(1);
   });
 
   test("read stays marked locally when the remote call fails", async () => {
@@ -152,7 +139,7 @@ describe("bulk local-first write-back", () => {
       remote: "partial",
       queued: 1,
     });
-    const rows = await testDb
+    const rows = await db
       .select()
       .from(schema.notifications)
       .where(eq(schema.notifications.id, "9001"));
@@ -160,8 +147,7 @@ describe("bulk local-first write-back", () => {
   });
 
   test("unread cancels superseded queued retries", async () => {
-    const { enqueueWriteback } = await import("@/lib/queue");
-    await enqueueWriteback(testDb, "9001", "done", "network", 1792000000000);
+    await enqueueWriteback(db, "9001", "done", "network", 1792000000000);
     const res = await POST(
       new Request("http://localhost/api/notifications/bulk", {
         method: "POST",
@@ -169,18 +155,18 @@ describe("bulk local-first write-back", () => {
       })
     );
     expect(res.status).toBe(200);
-    const rows = await testDb
+    const rows = await db
       .select()
       .from(schema.notifications)
       .where(eq(schema.notifications.id, "9001"));
     expect(rows[0]?.isDone).toBe(0);
     expect(rows[0]?.localUnread).toBe(1);
-    expect(await testDb.select().from(schema.writebackQueue)).toHaveLength(0);
+    expect(await db.select().from(schema.writebackQueue)).toHaveLength(0);
   });
 });
 describe("bulk unsubscribe with shared repository and subject", () => {
   beforeEach(async () => {
-    stubSubscriptionApi();
+    await stubSubscriptionApi();
     await seedSameSubjectPair();
   });
 
@@ -199,11 +185,11 @@ describe("bulk unsubscribe with shared repository and subject", () => {
     expect(await res.json()).toEqual({ updated: 2, action: "unsubscribe" });
     expect([...ignoredThreads].sort()).toEqual(["1001", "1002"]);
 
-    const muted = await testDb.select().from(schema.mutedSubjects);
+    const muted = await db.select().from(schema.mutedSubjects);
     expect(muted).toHaveLength(1);
 
     for (const id of ["1001", "1002"]) {
-      const rows = await testDb
+      const rows = await db
         .select()
         .from(schema.notifications)
         .where(eq(schema.notifications.id, id));

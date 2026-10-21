@@ -81,7 +81,7 @@ Press `Cmd+K` anywhere for search and commands: threads, repos, filters, and nav
 
 ## Development
 
-See [docs/development.md](docs/development.md) for gates, commands, and layout.
+See [docs/development.md](docs/development.md) for gates, commands, the test layers, and layout.
 
 ## Docker (optional token-based run)
 
@@ -108,7 +108,7 @@ The app authenticates to GitHub with `GH_TOKEN` (fallback `GITHUB_TOKEN`) when s
 
 ## Contributing
 
-Issues and small PRs welcome. See [open issues](https://github.com/stefanwalther/ghn/issues) for starters. CI runs typecheck, lint, and unit tests on every PR.
+Issues and small PRs welcome. See [open issues](https://github.com/stefanwalther/ghn/issues) for starters. CI runs typecheck, lint, the unit, integration and component suites, and the end-to-end layer on every PR.
 
 ## License
 

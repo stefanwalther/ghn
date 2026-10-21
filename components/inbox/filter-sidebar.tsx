@@ -67,7 +67,7 @@ export function FilterSidebar({
 
   React.useEffect(() => {
     try {
-      const saved = localStorage.getItem("quiet-notifications:filter-sections");
+      const saved = localStorage.getItem("ghn:filter-sections");
       if (saved) setCollapsed({ types: false, repos: false, ...JSON.parse(saved) });
     } catch {
       // ignore corrupt prefs and keep both sections open
@@ -78,7 +78,7 @@ export function FilterSidebar({
     setCollapsed((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       try {
-        localStorage.setItem("quiet-notifications:filter-sections", JSON.stringify(next));
+        localStorage.setItem("ghn:filter-sections", JSON.stringify(next));
       } catch {
         // ignore private-mode writes; collapsing still works for the session
       }
