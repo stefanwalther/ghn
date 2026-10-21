@@ -105,12 +105,15 @@ test.describe("inbox load", () => {
     }
   });
 
-  test("lists only the repositories that have visible items", async ({ page }) => {
+  test("lists every repository that has pending items", async ({ page }) => {
     await page.goto("/");
 
     const repositories = page.locator('section[aria-label="Repository filters"]');
     const entries = repositories.getByRole("button", { name: /^Filter by / });
-    await expect(entries).toHaveCount(3);
+    // The three immediate repositories have visible items and the other seven
+    // are waiting for their digest. All ten are listed, and the count on each
+    // says which is which.
+    await expect(entries).toHaveCount(10);
     expect(
       await entries.evaluateAll((elements) =>
         elements.map((element) => element.getAttribute("aria-label"))
@@ -119,6 +122,13 @@ test.describe("inbox load", () => {
       "Filter by acme/web",
       "Filter by acme/api",
       "Filter by acme/mobile",
+      "Filter by vendor/slow-dep",
+      "Filter by vendor/ui-kit",
+      "Filter by oss/router",
+      "Filter by oss/bundler",
+      "Filter by oss/linter",
+      "Filter by vendor/analytics",
+      "Filter by oss/docs",
     ]);
 
     const all = repositories.getByRole("button", { name: "Show all repositories" });

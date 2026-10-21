@@ -56,6 +56,7 @@ const typeFacets: TypeFacet[] = [
 const repoFacets: RepoFacet[] = [
   { id: "acme--web", fullName: "acme/web", main: 3, quiet: 1, isSnoozed: false },
   { id: "acme--api", fullName: "acme/api", main: 0, quiet: 4, isSnoozed: true },
+  { id: "acme--empty", fullName: "acme/empty", main: 0, quiet: 0, isSnoozed: false },
 ];
 
 /**
@@ -514,10 +515,14 @@ describe("FilterSidebar", () => {
     expect(screen.getByRole("button", { name: "Show all repositories" })).toBeInTheDocument();
   });
 
-  test("hides a repository that has no open items", () => {
+  test("hides a repository that has no items at all", () => {
     renderSidebar();
 
-    expect(screen.queryByRole("button", { name: "Filter by acme/api" })).not.toBeInTheDocument();
+    // A repository waiting for its digest is still listed, because its items
+    // are only hidden until the digest is due. One with nothing in either
+    // bucket is not worth a row.
+    expect(screen.getByRole("button", { name: "Filter by acme/api" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Filter by acme/empty" })).not.toBeInTheDocument();
   });
 
   test("reports the repository that was chosen", () => {
