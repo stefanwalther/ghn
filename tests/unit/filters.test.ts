@@ -1,5 +1,14 @@
-import { describe, expect, test } from "bun:test";
-import { isMergedItem, isReleaseItem, matchAge, matchesTypeFilter, QUICK_SELECTS, startOfYear, TYPE_FILTERS } from "@/lib/filters";
+import { describe, expect, test } from "vitest";
+import {
+  isMergedItem,
+  isReleaseItem,
+  matchAge,
+  matchesTypeFilter,
+  QUICK_SELECTS,
+  selectByQuickFilter,
+  startOfYear,
+  TYPE_FILTERS,
+} from "@/lib/filters";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -92,8 +101,7 @@ describe("quick selects on live data", () => {
   });
 });
 
-describe("matchesTypeFilter", () => {
-  test("all passes everything", () => {
+describe("matchesTypeFilter", () => {  test("all passes everything", () => {
     expect(matchesTypeFilter("subscribed", "Issue", "all")).toBe(true);
   });
 
@@ -107,5 +115,63 @@ describe("matchesTypeFilter", () => {
   test("other values keep matching the reason", () => {
     expect(matchesTypeFilter("mention", "Issue", "mention")).toBe(true);
     expect(matchesTypeFilter("subscribed", "Issue", "mention")).toBe(false);
+  });
+});
+
+describe("selectByQuickFilter", () => {
+  const items = [
+    {
+      id: "release",
+      reason: "release",
+      subject: "v2.4.0 released",
+      subjectType: "Release",
+      subjectState: null,
+      prMerged: false,
+    },
+    {
+      id: "merged",
+      reason: "subscribed",
+      subject: "chore(main): release 1.27.4",
+      subjectType: "PullRequest",
+      subjectState: "closed",
+      prMerged: true,
+    },
+    {
+      id: "closed",
+      reason: "subscribed",
+      subject: "Docs update",
+      subjectType: "PullRequest",
+      subjectState: "closed",
+      prMerged: false,
+    },
+    {
+      id: "mention",
+      reason: "mention",
+      subject: "Fix flaky login redirect",
+      subjectType: "Issue",
+      subjectState: "open",
+      prMerged: false,
+    },
+  ];
+
+  test("the release quick select reads the subject", () => {
+    expect(selectByQuickFilter(items, "release")).toEqual(["release", "merged"]);
+  });
+
+  test("the merged quick select reads the merged flag", () => {
+    expect(selectByQuickFilter(items, "merged")).toEqual(["merged"]);
+  });
+
+  test("the closed quick select skips the merged items", () => {
+    expect(selectByQuickFilter(items, "closed")).toEqual(["closed"]);
+  });
+
+  test("every other reason matches on the reason", () => {
+    expect(selectByQuickFilter(items, "mention")).toEqual(["mention"]);
+    expect(selectByQuickFilter(items, "subscribed")).toEqual(["merged", "closed"]);
+  });
+
+  test("an unknown reason selects nothing", () => {
+    expect(selectByQuickFilter(items, "nope")).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import packageJson from "../../package.json";
 import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/app-meta";
 

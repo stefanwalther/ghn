@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { computeNextDueAt, isDue, splitInbox } from "@/lib/digest";
 
 describe("digest boundaries", () => {

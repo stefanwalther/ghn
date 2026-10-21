@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { inArray } from "drizzle-orm";
 import { mutedSubjects, notifications } from "@/db/schema";
 import { validateBulkInput } from "@/lib/bulk";
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unknown notification id" }, { status: 422 });
   }
 
-  const now = Date.now();
+  const now = nowMs();
 
   if (action === "unread") {
     await db
