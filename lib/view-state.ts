@@ -32,6 +32,25 @@ export function serializeInboxFilters(filters: InboxFilters): string {
   return s ? `?${s}` : "";
 }
 
+export function repoFilterHref(currentSearch: string, repositoryId: string): string {
+  try {
+    const current = parseInboxFilters(new URLSearchParams(currentSearch));
+    return `/${serializeInboxFilters({ ...current, repo: repositoryId })}`;
+  } catch {
+    return `/?repo=${encodeURIComponent(repositoryId)}`;
+  }
+}
+
+export const PALETTE_LIMIT_DEFAULT = 400;
+export const PALETTE_LIMIT_MAX = 400;
+
+export function parsePaletteLimit(raw: string | null): number | null {
+  if (raw === null) return null;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return PALETTE_LIMIT_DEFAULT;
+  return Math.min(PALETTE_LIMIT_MAX, Math.max(1, parsed));
+}
+
 export function saveLastOpened(id: string): void {
   try {
     sessionStorage.setItem(LAST_OPENED_KEY, id);
