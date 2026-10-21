@@ -3,7 +3,7 @@ import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
 import { isClosedItem, isMergedItem, matchAge, matchesTypeFilter, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
-import { readSyncState } from "@/lib/sync";
+import { readSyncStatus } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +23,7 @@ export async function GET(request: Request) {
 
   const repos = await db.select().from(repositories);
   const reposById = new Map(repos.map((r) => [r.id, r]));
-  const lastSyncRaw = await readSyncState(db, "lastSyncAt");
-  const pollRaw = await readSyncState(db, "pollIntervalSecs");
-  const lastSyncAt = lastSyncRaw ? Number.parseInt(lastSyncRaw, 10) : null;
-  const pollIntervalSecs = Number.parseInt(pollRaw ?? "60", 10) || 60;
-  const stale = lastSyncAt !== null && now - lastSyncAt > 2 * pollIntervalSecs * 1000;
+  const { lastSyncAt, stale } = await readSyncStatus(db, now);
 
   const rows = await db.select().from(notifications);
   const repoName = (id: string) => reposById.get(id)?.fullName ?? id;

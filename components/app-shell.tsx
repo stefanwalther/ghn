@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { Bell, ExternalLink, Gauge, Moon, Settings2, Sun } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
+import { BrandMark } from "@/components/brand-mark";
 import { DemoBanner } from "@/components/demo-banner";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
@@ -117,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="fixed inset-0 z-30 cursor-pointer bg-background/80 md:hidden"
           />
           <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 bg-sidebar p-4 shadow-md md:static md:z-auto md:shadow-none">
-          <div className="mb-4 px-2 text-sm font-semibold">Quiet Notifications</div>
+          <BrandMark />
           {NAV.map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);

@@ -21,6 +21,23 @@ export async function writeSyncState(db: Db, key: string, value: string): Promis
     .onConflictDoUpdate({ target: syncState.key, set: { value } });
 }
 
+export interface SyncStatus {
+  lastSyncAt: number | null;
+  pollIntervalSecs: number;
+  stale: boolean;
+}
+
+/** Single source for last-sync bookkeeping shared by the API routes. */
+export async function readSyncStatus(db: Db, nowMs = Date.now()): Promise<SyncStatus> {
+  const lastSyncRaw = await readSyncState(db, "lastSyncAt");
+  const pollRaw = await readSyncState(db, "pollIntervalSecs");
+  const lastSyncAt = lastSyncRaw ? Number.parseInt(lastSyncRaw, 10) : null;
+  const pollIntervalSecs = Number.parseInt(pollRaw ?? "60", 10) || 60;
+  const stale =
+    lastSyncAt !== null && nowMs - lastSyncAt > 2 * pollIntervalSecs * 1000;
+  return { lastSyncAt, pollIntervalSecs, stale };
+}
+
 const urlCache = new Map<string, string>();
 
 export function clearUrlCache(): void {

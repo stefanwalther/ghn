@@ -15,6 +15,7 @@ import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
+import { announceSync } from "@/lib/sync-events";
 import { copyText } from "@/lib/clipboard";
 import { isClosedItem, isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
@@ -59,8 +60,10 @@ function InboxView() {
 
   const load = React.useCallback(async () => {
     const silent = loadedRef.current;
-    if (!silent) setStatus("loading");
-    else setRefreshing(true);
+    if (!silent) {
+      setStatus("loading");
+      announceSync(true);
+    } else setRefreshing(true);
     const my = ++reqRef.current;
     try {
       const res = await fetch(`/api/notifications${query}`, { cache: "no-store" });
@@ -81,7 +84,10 @@ function InboxView() {
       if (!loadedRef.current) setStatus("error");
       else setNotice("Refresh failed. Showing last loaded data.");
     } finally {
-      if (reqRef.current === my) setRefreshing(false);
+      if (reqRef.current === my) {
+        setRefreshing(false);
+        if (!silent) announceSync(false);
+      }
     }
   }, [query]);
 
@@ -148,6 +154,7 @@ function InboxView() {
 
   async function refresh() {
     setSyncing(true);
+    announceSync(true);
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
@@ -168,6 +175,7 @@ function InboxView() {
       setSyncError("Sync failed. Showing last loaded data.");
     } finally {
       setSyncing(false);
+      announceSync(false);
       try {
         const connRes = await fetch("/api/connection", { cache: "no-store" });
         const connData = await connRes.json().catch(() => null);
