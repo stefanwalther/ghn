@@ -206,7 +206,7 @@ export default function RateLimitsPage() {
 
           <p className="text-xs text-muted-foreground">
             Fetched {new Date(data.fetchedAt).toLocaleTimeString()} · source: api.github.com X-RateLimit
-            headers, token from `gh auth login`.
+            headers, token from `GH_TOKEN` or `gh auth login`.
           </p>
         </>
       ) : null}

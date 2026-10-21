@@ -140,7 +140,7 @@ function InboxView() {
   }
 
   function syncErrorMessage(reason: unknown): string {
-    if (reason === "auth") return "GitHub access missing. Run `gh auth login` on the server and refresh.";
+    if (reason === "auth") return "GitHub access missing. Set GH_TOKEN or run `gh auth login` on the server and refresh.";
     if (reason === "rate_limited") return "GitHub rate limit reached. Retry shortly; cached inbox shown.";
     if (reason === "network") return "GitHub unreachable. Showing cached inbox.";
     return "Sync failed. Showing last loaded data.";
@@ -611,7 +611,7 @@ function InboxView() {
                 <span className="text-muted-foreground">
                   Cached inbox below
                   {lastSyncAt !== null ? ` · last synced ${formatSyncTime(lastSyncAt)}` : ""}.
-                  Run `gh auth login` on the server, then retry.
+                  Set GH_TOKEN or run `gh auth login` on the server, then retry.
                 </span>
               </p>
               <Button

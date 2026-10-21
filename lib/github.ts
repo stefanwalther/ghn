@@ -1,6 +1,26 @@
 function apiBase(): string {
   return process.env.GHN_API_BASE ?? "https://api.github.com";
 }
+
+export interface ApiBases {
+  restBase: string;
+  graphqlUrl: string;
+}
+
+export function apiBases(): ApiBases {
+  const override = (process.env.GHN_API_BASE ?? "").trim().replace(/\/+$/, "");
+  if (override) {
+    const graphqlUrl = override.endsWith("/api/v3")
+      ? override.replace(/\/api\/v3$/, "/api/graphql")
+      : `${override}/graphql`;
+    return { restBase: override, graphqlUrl };
+  }
+  const host = (process.env.GH_HOST ?? "github.com").trim() || "github.com";
+  if (host === "github.com") {
+    return { restBase: "https://api.github.com", graphqlUrl: "https://api.github.com/graphql" };
+  }
+  return { restBase: `https://${host}/api/v3`, graphqlUrl: `https://${host}/api/graphql` };
+}
 const API_VERSION = "2022-11-28";
 
 export interface GhThread {
@@ -45,7 +65,17 @@ export function classifyStatus(status: number, res?: Response): SyncFailureReaso
   return "unknown";
 }
 
+function envToken(): string | null {
+  for (const key of ["GH_TOKEN", "GITHUB_TOKEN"]) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 async function readToken(): Promise<string | null> {
+  const fromEnv = envToken();
+  if (fromEnv) return fromEnv;
   try {
     const { $ } = await import("bun");
     const out = await $`gh auth token`.quiet().nothrow().text();
