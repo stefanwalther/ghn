@@ -140,7 +140,7 @@ function InboxView() {
   }
 
   function syncErrorMessage(reason: unknown): string {
-    if (reason === "auth") return "GitHub access missing. Run `gh auth login` on the server and refresh.";
+    if (reason === "auth") return "GitHub access missing. Set GH_TOKEN or run `gh auth login` on the server and refresh.";
     if (reason === "rate_limited") return "GitHub rate limit reached. Retry shortly; cached inbox shown.";
     if (reason === "network") return "GitHub unreachable. Showing cached inbox.";
     return "Sync failed. Showing last loaded data.";
@@ -395,6 +395,47 @@ function InboxView() {
     }
   }, [items, drawerItem]);
 
+  const itemsRef = React.useRef(items);
+  itemsRef.current = items;
+  const refreshRef = React.useRef(refresh);
+  refreshRef.current = refresh;
+
+  React.useEffect(() => {
+    function onOpenThread(e: Event) {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      const found = itemsRef.current.find((i) => i.id === id);
+      if (found) {
+        const idx = itemsRef.current.findIndex((i) => i.id === id);
+        if (idx >= 0) setFocusIdx(idx);
+        setDrawerItem(found);
+      }
+      // When absent (different filter or page), the palette already saved
+      // last-opened and navigated to the repo filter, so the existing
+      // scroll-restoration effect brings it into view after load.
+    }
+    function onShowHelp() {
+      setHelpOpen(true);
+    }
+    function onRefresh() {
+      void refreshRef.current();
+    }
+    function onScrollTop() {
+      setSelected(new Set());
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+    window.addEventListener("ghn:open-thread", onOpenThread);
+    window.addEventListener("ghn:show-help", onShowHelp);
+    window.addEventListener("ghn:refresh", onRefresh);
+    window.addEventListener("ghn:scroll-top", onScrollTop);
+    return () => {
+      window.removeEventListener("ghn:open-thread", onOpenThread);
+      window.removeEventListener("ghn:show-help", onShowHelp);
+      window.removeEventListener("ghn:refresh", onRefresh);
+      window.removeEventListener("ghn:scroll-top", onScrollTop);
+    };
+  }, []);
+
   React.useEffect(() => {
     function onAltDown(e: KeyboardEvent) {
       if (isAltHintKey(e)) {
@@ -611,7 +652,7 @@ function InboxView() {
                 <span className="text-muted-foreground">
                   Cached inbox below
                   {lastSyncAt !== null ? ` · last synced ${formatSyncTime(lastSyncAt)}` : ""}.
-                  Run `gh auth login` on the server, then retry.
+                  Set GH_TOKEN or run `gh auth login` on the server, then retry.
                 </span>
               </p>
               <Button

@@ -30,7 +30,7 @@ make web-open    # start server if down, then open it (bash only)
 | `GHN_DB_PATH` | `./data/ghn.db` | Database location, highest precedence |
 | `GHN_CONFIG_PATH` | `$XDG_CONFIG_HOME/ghn/config.json` | Override the config file location |
 
-The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth shells out to `gh auth token` on each sync, so there are no secret files.
+The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
 
 ## Layout
 
