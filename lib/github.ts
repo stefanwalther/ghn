@@ -23,6 +23,12 @@ export function apiBases(): ApiBases {
 }
 const API_VERSION = "2022-11-28";
 
+// Upper bound for a single GitHub mutating/read call issued from a bulk or
+// sync fan-out. Without this, one stalled connection hangs the whole batch
+// (and the UI busy state with it); a timeout surfaces as "network" so the
+// caller can queue the write-back for retry.
+const WRITE_TIMEOUT_MS = 10_000;
+
 export interface GhThread {
   id: string;
   unread: boolean;
@@ -234,6 +240,7 @@ export async function fetchThread(
   try {
     const res = await fetch(`${apiBase()}/notifications/threads/${threadId}`, {
       headers: baseHeaders(token),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
     if (!res.ok) {
       return { ok: false, reason: classifyStatus(res.status, res), status: res.status };
@@ -258,6 +265,9 @@ async function writeThread(
     const res = await fetch(`${apiBase()}/notifications/threads/${threadId}`, {
       method,
       headers: baseHeaders(token),
+      // Bound each write so one stalled connection cannot hang a bulk
+      // triage (which would leave the UI's busy state stuck on).
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
     if (res.status === 205 || res.status === 204 || res.status === 200) {
       return { ok: true };
@@ -286,6 +296,7 @@ export async function setSubscriptionIgnored(
       method: "PUT",
       headers: { ...baseHeaders(token), "Content-Type": "application/json" },
       body: JSON.stringify({ ignored }),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
     if (res.ok) return { ok: true };
     return { ok: false, reason: classifyStatus(res.status, res), status: res.status };
