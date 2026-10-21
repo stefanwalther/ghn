@@ -3,9 +3,9 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "bun --bun next dev -p 21120",
+    "dev": "./scripts/dev.sh",
     "build": "next build",
-    "start": "bun --bun next start -p 21120",
+    "start": "./scripts/serve.sh",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app lib db components tests --ext .ts,.tsx",
     "test": "bun test tests/unit",

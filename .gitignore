@@ -8,7 +8,7 @@ out/
 dist/
 build/
 *.log
-data/quiet-notifications.db
+data/ghn.db
 data/*.db-shm
 data/*.db-wal
 tsconfig.tsbuildinfo
