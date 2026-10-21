@@ -1,5 +1,5 @@
-import { eq, inArray, sql } from "drizzle-orm";
-import { notifications, repositories, syncState } from "@/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { notifications, repositories, syncState, writebackQueue } from "@/db/schema";
 import type { Db } from "@/db/client";
 import { computeNextDueAt } from "@/lib/digest";
 import type { GhThread } from "@/lib/github";
@@ -144,10 +144,22 @@ export async function upsertThreads(
   now: number,
   resolveUrl: (thread: GhThread) => Promise<string>
 ): Promise<UpsertSummary> {
+  // Paginated GitHub responses can repeat the same thread id on large first
+  // syncs. Dedupe by id up front (freshest updatedAt wins) so the insert loop
+  // below never attempts the same new id twice and throws
+  // UNIQUE constraint failed: notifications.id.
+  const deduped = new Map<string, GhThread>();
+  for (const thread of threads) {
+    const prev = deduped.get(thread.id);
+    if (!prev || thread.updatedAt >= prev.updatedAt) {
+      deduped.set(thread.id, thread);
+    }
+  }
+  const uniqueThreads = [...deduped.values()];
   let upserted = 0;
   const seenRepos = new Set<string>();
   const pending: { thread: GhThread; repoId: string }[] = [];
-  for (const thread of threads) {
+  for (const thread of uniqueThreads) {
     if (!thread.repoFullName) continue;
     const repoId = await ensureRepository(db, thread, viewerLogin, now);
     seenRepos.add(repoId);
@@ -243,4 +255,17 @@ export async function applyRemoteDone(
 
 export async function markRepoUnreachable(db: Db, repoId: string): Promise<void> {
   await db.update(repositories).set({ unreachable: 1 }).where(eq(repositories.id, repoId));
+}
+
+export async function reapplyPendingReads(db: Db): Promise<{ restored: number }> {
+  const queued = await db
+    .select({ threadId: writebackQueue.threadId, action: writebackQueue.action })
+    .from(writebackQueue);
+  const readIds = queued.filter((r) => r.action === "read").map((r) => r.threadId);
+  if (readIds.length === 0) return { restored: 0 };
+  await db
+    .update(notifications)
+    .set({ isRead: 1 })
+    .where(and(inArray(notifications.id, readIds), eq(notifications.localUnread, 0)));
+  return { restored: readIds.length };
 }

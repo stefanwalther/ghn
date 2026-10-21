@@ -1,8 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { describe, expect, test } from "vitest";
+import { createMemoryDb } from "../support/db-client.node";
+import { serve } from "../support/http-stub";
 import * as schema from "@/db/schema";
-import { ensureSchema } from "@/db/ensure-schema";
 import {
   drainQueue,
   enqueueWriteback,
@@ -10,30 +9,22 @@ import {
   queueDepth,
 } from "@/lib/queue";
 
-type TestDb = BunSQLiteDatabase<typeof schema>;
 
-function makeTestDb(): TestDb {
-  const sqlite = new Database(":memory:");
-  ensureSchema(sqlite);
-  return drizzle(sqlite, { schema });
-}
-
-function stubApi(handler: (req: Request) => Response | Promise<Response>) {
-  const server = Bun.serve({
-    port: 0,
+async function stubApi(handler: (req: Request) => Response | Promise<Response>) {
+  const server = await serve({
     fetch: handler,
   });
-  process.env.GHN_API_BASE = `http://localhost:${server.port}`;
-  return () => {
+  process.env.GHN_API_BASE = `${server.url}`;
+  return async () => {
     delete process.env.GHN_API_BASE;
-    server.stop(true);
+    await server.stop(true);
   };
 }
 
 describe("write-back transport mapping", () => {
   test("done issues DELETE, read issues PATCH, unsubscribe mutes plus ignores", async () => {
     const calls: { method: string; path: string; body: string | null }[] = [];
-    const stop = stubApi(async (req) => {
+    const stop = await stubApi(async (req) => {
       calls.push({ method: req.method, path: new URL(req.url).pathname, body: await req.text().catch(() => null) });
       if (req.method === "DELETE") return new Response(null, { status: 204 });
       if (req.method === "PATCH") return new Response(null, { status: 205 });
@@ -54,12 +45,12 @@ describe("write-back transport mapping", () => {
         { method: "PUT", path: "/notifications/threads/113/subscription", body: '{"ignored":true}' },
       ]);
     } finally {
-      stop();
+      await stop();
     }
   });
 
   test("auth failures classify as auth, 403 with exhausted limit as rate_limited", async () => {
-    const stop = stubApi((req) => {
+    const stop = await stubApi((req) => {
       const path = new URL(req.url).pathname;
       if (path.endsWith("/401")) return new Response("{}", { status: 401 });
       return new Response("{}", {
@@ -76,13 +67,13 @@ describe("write-back transport mapping", () => {
       expect(limited.ok).toBe(false);
       expect(limited.reason).toBe("rate_limited");
     } finally {
-      stop();
+      await stop();
     }
   });
 
   test("list parses threads and follows pagination with since", async () => {
     const seen: string[] = [];
-    const stop = stubApi((req) => {
+    const stop = await stubApi((req) => {
       const url = new URL(req.url);
       seen.push(url.search);
       const page = url.searchParams.get("page") ?? "1";
@@ -119,14 +110,14 @@ describe("write-back transport mapping", () => {
       expect(seen[0]).toContain("since=");
       expect(result.data?.lastModified).toBe("Fri, 16 Oct 2026 15:33:32 GMT");
     } finally {
-      stop();
+      await stop();
     }
   });
 });
 
 describe("write-back queue", () => {
   test("enqueue, depth, queued ids, and FIFO drain with retry accounting", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     expect(await queueDepth(db)).toBe(0);
     await enqueueWriteback(db, "5001", "done", "network", 1000);
     await enqueueWriteback(db, "5002", "read", null, 1001);
@@ -140,7 +131,12 @@ describe("write-back queue", () => {
       return { ok: true as const };
     });
     expect(applied).toEqual(["done:5001", "read:5002"]);
-    expect(drained).toEqual({ processed: 2, succeeded: 1, failed: 1 });
+    expect(drained).toEqual({
+      processed: 2,
+      succeeded: 1,
+      failed: 1,
+      succeededItems: [{ threadId: "5001", action: "done" }],
+    });
     expect(await queueDepth(db)).toBe(1);
     const remaining = await db.select().from(schema.writebackQueue);
     expect(remaining[0]?.threadId).toBe("5002");

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
-import { Bell, ExternalLink, Gauge, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, ExternalLink, Gauge, Github, Search, Settings2 } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
 import { BrandMark } from "@/components/brand-mark";
 import { DemoBanner } from "@/components/demo-banner";
+import { CommandPalette } from "@/components/search/command-palette";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Kbd } from "@/components/ui/kbd";
+import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/app-meta";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
 
@@ -43,17 +45,12 @@ const GITHUB_NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { resolvedTheme, setTheme } = useTheme();
-  // Render the server-consistent header until mounted: theme resolution and
-  // viewport width are client-only and must not fork the first render.
-  const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(true);
   const [showHints, setShowHints] = React.useState(false);
 
   React.useEffect(() => {
-    setMounted(true);
     try {
-      const saved = localStorage.getItem("quiet-notifications:sidebar");
+      const saved = localStorage.getItem("ghn:sidebar");
       if (saved === "closed") setOpen(false);
       else if (saved !== "open" && window.innerWidth < 768) setOpen(false);
     } catch {
@@ -65,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setOpen((v) => {
       try {
         localStorage.setItem(
-          "quiet-notifications:sidebar",
+          "ghn:sidebar",
           v ? "closed" : "open"
         );
       } catch {
@@ -108,8 +105,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  React.useEffect(() => {
+    function onToggle() {
+      toggleRef.current();
+    }
+    window.addEventListener("ghn:toggle-sidebar", onToggle);
+    return () => window.removeEventListener("ghn:toggle-sidebar", onToggle);
+  }, []);
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
+      <CommandPalette />
       {open ? (
         <>
           <div
@@ -117,7 +123,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggleSidebar}
             className="fixed inset-0 z-30 cursor-pointer bg-background/80 md:hidden"
           />
-          <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 bg-sidebar p-4 shadow-md md:static md:z-auto md:shadow-none">
+          <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 overflow-y-auto bg-sidebar p-4 shadow-md md:sticky md:top-0 md:z-auto md:h-screen md:shadow-none">
           <BrandMark />
           {NAV.map((item) => {
             const active =
@@ -164,6 +170,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </a>
             );
           })}
+          <div className="mt-auto flex items-center justify-between px-3 pt-4 text-xs text-muted-foreground">
+            <span>v{APP_VERSION}</span>
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub repository"
+              title="GitHub repository"
+              className="flex cursor-pointer items-center gap-1 rounded-md p-1 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Github className="h-4 w-4" aria-hidden />
+            </a>
+          </div>
           </aside>
         </>
       ) : null}
@@ -196,21 +215,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 ? "GitHub API buckets from response headers"
                 : "Triage with fewer clicks"}
           </div>
-          <ContributionsChip />
           <button
             type="button"
-            aria-label="Toggle theme"
-            aria-pressed={mounted && resolvedTheme === "dark"}
-            title="Toggle theme (Cmd+F12)"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Search and commands"
+            title="Search and commands (Cmd+K)"
+            onClick={() => window.dispatchEvent(new CustomEvent("ghn:open-palette"))}
+            className="hidden cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
           >
-            {mounted && resolvedTheme === "dark" ? (
-              <Sun className="h-4 w-4" aria-hidden />
-            ) : (
-              <Moon className="h-4 w-4" aria-hidden />
-            )}
+            <Search className="h-4 w-4" aria-hidden />
+            <span className="hidden lg:inline">Search or command…</span>
+            <Kbd>⌘K</Kbd>
           </button>
+          <button
+            type="button"
+            aria-label="Search and commands"
+            title="Search and commands (Cmd+K)"
+            onClick={() => window.dispatchEvent(new CustomEvent("ghn:open-palette"))}
+            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+          >
+            <Search className="h-4 w-4" aria-hidden />
+          </button>
+          <ContributionsChip />
+          <ThemeSwitcher />
         </header>
         <main className="min-w-0 flex-1 px-4 pb-10">{children}</main>
       </div>

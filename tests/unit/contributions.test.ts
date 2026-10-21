@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { dayWindowUTC, isFresh, isValidDay, pickDay } from "@/lib/contributions";
 
 describe("contributions", () => {

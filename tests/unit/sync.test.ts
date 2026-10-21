@@ -1,9 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { eq } from "drizzle-orm";
+import { describe, expect, test } from "vitest";
+import { createMemoryDb } from "../support/db-client.node";
+import { serve } from "../support/http-stub";
 import * as schema from "@/db/schema";
-import { ensureSchema } from "@/db/ensure-schema";
+import { eq } from "drizzle-orm";
 import {
   applyRemoteDone,
   migrateSeedToLive,
@@ -15,13 +14,6 @@ import {
 } from "@/lib/sync";
 import type { GhThread } from "@/lib/github";
 
-type TestDb = BunSQLiteDatabase<typeof schema>;
-
-function makeTestDb(): TestDb {
-  const sqlite = new Database(":memory:");
-  ensureSchema(sqlite);
-  return drizzle(sqlite, { schema });
-}
 
 function thread(overrides: Partial<GhThread> = {}): GhThread {
   return {
@@ -44,7 +36,7 @@ const resolveUrl = async () => "https://github.com/acme/web/pull/12";
 
 describe("thread-to-row mapping", () => {
   test("stores raw reason verbatim and inverts unread", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const summary = await upsertThreads(db, [thread({ reason: "state_change" })], null, 1792000001000, resolveUrl);
     expect(summary.upserted).toBe(1);
     const rows = await db.select().from(schema.notifications);
@@ -56,7 +48,7 @@ describe("thread-to-row mapping", () => {
   });
 
   test("read threads map to isRead 1 with updated_at as sort key", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ id: "1002", unread: false })], null, 1792000001000, resolveUrl);
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1002"));
     expect(rows[0]?.isRead).toBe(1);
@@ -66,7 +58,7 @@ describe("thread-to-row mapping", () => {
   });
 
   test("subject truncates to 200 chars with https source url", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(
       db,
       [thread({ id: "1003", subjectTitle: "x".repeat(250) })],
@@ -80,7 +72,7 @@ describe("thread-to-row mapping", () => {
   });
 
   test("explicit local unread survives sync of a remotely read thread", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ id: "1004" })], null, 1792000001000, resolveUrl);
     await db
       .update(schema.notifications)
@@ -99,7 +91,7 @@ describe("thread-to-row mapping", () => {
   });
 
   test("locally done rows stay done when the thread is still present", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ id: "1005" })], null, 1792000001000, resolveUrl);
     await db
       .update(schema.notifications)
@@ -111,9 +103,49 @@ describe("thread-to-row mapping", () => {
   });
 });
 
+describe("duplicate thread ids", () => {
+  test("duplicate thread ids in one payload insert once instead of throwing", async () => {
+    const db = createMemoryDb().db;
+    const summary = await upsertThreads(
+      db,
+      [thread({ id: "1006" }), thread({ id: "1006" })],
+      null,
+      1792000001000,
+      resolveUrl
+    );
+    expect(summary.upserted).toBe(1);
+    const rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.id, "1006"));
+    expect(rows).toHaveLength(1);
+  });
+
+  test("duplicate thread ids keep the freshest updatedAt", async () => {
+    const db = createMemoryDb().db;
+    await upsertThreads(
+      db,
+      [
+        thread({ id: "1007", updatedAt: 1792000000000, subjectTitle: "stale title" }),
+        thread({ id: "1007", updatedAt: 1792000005000, subjectTitle: "fresh title" }),
+      ],
+      null,
+      1792000001000,
+      resolveUrl
+    );
+    const rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.id, "1007"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.subject).toBe("fresh title");
+    expect(rows[0]?.githubUpdatedAt).toBe(1792000005000);
+  });
+});
+
 describe("first-sync migration", () => {
   test("deletes n_* seed rows and keeps rhythm settings", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await db.insert(schema.repositories).values({
       id: "acme-web",
       fullName: "acme/web",
@@ -148,7 +180,7 @@ describe("first-sync migration", () => {
   });
 
   test("discovered watched repos get a weekly due date, owned get immediate", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const now = 1792000001000;
     const summary = await upsertThreads(
       db,
@@ -173,7 +205,7 @@ describe("first-sync migration", () => {
   });
 
   test("backfills due dates for digest repos missing nextDueAt", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const { backfillDueDates } = await import("@/lib/sync");
     const now = 1792000001000;
     await db.insert(schema.repositories).values({
@@ -194,7 +226,7 @@ describe("first-sync migration", () => {
   });
 
   test("existing rhythm is never overwritten by discovery", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await db.insert(schema.repositories).values({
       id: "vendor--slow-dep",
       fullName: "vendor/slow-dep",
@@ -218,7 +250,7 @@ describe("first-sync migration", () => {
     expect(repos[0]?.rhythm).toBe("monthly");
   });
   test("prunes repositories left with zero notification rows", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ id: "4001", repoFullName: "a/kept" })], null, 1792000001000, resolveUrl);
     await db.insert(schema.repositories).values({
       id: "stale--repo",
@@ -240,7 +272,7 @@ describe("first-sync migration", () => {
 
 describe("stale and conditional sync state", () => {
   test("sync_state round-trips lastSyncAt and poll interval", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     expect(await readSyncState(db, "lastSyncAt")).toBeNull();
     await writeSyncState(db, "lastSyncAt", "1792000001000");
     await writeSyncState(db, "pollIntervalSecs", "60");
@@ -249,7 +281,7 @@ describe("stale and conditional sync state", () => {
   });
 
   test("readSyncStatus reports fresh, stale, and never-synced", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const now = 1792000000000;
     await writeSyncState(db, "pollIntervalSecs", "60");
     expect(await readSyncStatus(db, now)).toEqual({
@@ -272,7 +304,7 @@ describe("stale and conditional sync state", () => {
   });
 
   test("readSyncStatus honors a custom poll interval", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const now = 1792000000000;
     await writeSyncState(db, "pollIntervalSecs", "600");
     await writeSyncState(db, "lastSyncAt", String(now - 1_000_000));
@@ -284,17 +316,23 @@ describe("stale and conditional sync state", () => {
 
   test("conditional 304 returns notModified without touching rows", async () => {
     let conditionalHits = 0;
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: (req) => {
         if (req.headers.get("if-modified-since")) conditionalHits += 1;
-        return new Response("[]", {
-          status: conditionalHits > 0 ? 304 : 200,
-          headers: { "last-modified": "Fri, 16 Oct 2026 15:33:32 GMT", "x-poll-interval": "60" },
-        });
+        // A 304 must not carry a body. Node rejects one, so the empty
+        // response is built without one.
+        return conditionalHits > 0
+          ? new Response(null, {
+              status: 304,
+              headers: { "last-modified": "Fri, 16 Oct 2026 15:33:32 GMT", "x-poll-interval": "60" },
+            })
+          : new Response("[]", {
+              status: 200,
+              headers: { "last-modified": "Fri, 16 Oct 2026 15:33:32 GMT", "x-poll-interval": "60" },
+            });
       },
     });
-    process.env.GHN_API_BASE = `http://localhost:${server.port}`;
+    process.env.GHN_API_BASE = `${server.url}`;
     try {
       const github = await import("@/lib/github");
       const result = await github.listNotifications("t", {
@@ -307,15 +345,14 @@ describe("stale and conditional sync state", () => {
       expect(conditionalHits).toBe(1);
     } finally {
       delete process.env.GHN_API_BASE;
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
 
 describe("merged-status capture", () => {
   test("persists merged flag from the subject payload", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify({ html_url: "https://github.com/acme/web/pull/12", merged: true }),
@@ -324,8 +361,8 @@ describe("merged-status capture", () => {
     });
     try {
       const github = await import("@/lib/github");
-      const db = makeTestDb();
-      const apiUrl = `http://localhost:${server.port}/repos/acme/web/pulls/12`;
+      const db = createMemoryDb().db;
+      const apiUrl = `${server.url}/repos/acme/web/pulls/12`;
       await upsertThreads(
         db,
         [thread({ id: "5001", subjectApiUrl: apiUrl })],
@@ -337,13 +374,12 @@ describe("merged-status capture", () => {
       const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "5001"));
       expect(rows[0]?.prMerged).toBe(1);
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 
   test("open PRs persist unmerged", async () => {
-    const server = Bun.serve({
-      port: 0,
+    const server = await serve({
       fetch: () =>
         new Response(
           JSON.stringify({ html_url: "https://github.com/acme/web/pull/13", merged: false }),
@@ -352,8 +388,8 @@ describe("merged-status capture", () => {
     });
     try {
       const github = await import("@/lib/github");
-      const db = makeTestDb();
-      const apiUrl = `http://localhost:${server.port}/repos/acme/web/pulls/13`;
+      const db = createMemoryDb().db;
+      const apiUrl = `${server.url}/repos/acme/web/pulls/13`;
       await upsertThreads(
         db,
         [thread({ id: "5002", subjectApiUrl: apiUrl })],
@@ -364,7 +400,7 @@ describe("merged-status capture", () => {
       const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "5002"));
       expect(rows[0]?.prMerged).toBe(0);
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 });
@@ -372,7 +408,7 @@ describe("merged-status capture", () => {
 describe("seed shape", () => {
   test("seeds ten repos and two hundred valid notifications", async () => {
     const { seedDatabase } = await import("@/lib/seed");
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const summary = await seedDatabase(1792000000000, db);
     expect(summary).toEqual({ repositories: 10, notifications: 200 });
     const rows = await db.select().from(schema.notifications);
@@ -386,7 +422,7 @@ describe("seed shape", () => {
 
   test("muted subjects land done", async () => {
     const { seedDatabase } = await import("@/lib/seed");
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     const now = 1792000000000;
     await seedDatabase(now, db);
     const first = (await db.select().from(schema.notifications))[0];
@@ -405,7 +441,7 @@ describe("seed shape", () => {
 
 describe("remote-done propagation", () => {
   test("threads absent from a full pass become done", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ id: "3001" }), thread({ id: "3002" })], null, 1792000001000, resolveUrl);
     const result = await applyRemoteDone(db, new Set(["3001"]), new Set());
     expect(result.markedDone).toBe(1);
@@ -414,7 +450,7 @@ describe("remote-done propagation", () => {
   });
 
   test("queued threads and seed rows are excluded from remote-done", async () => {
-    const db = makeTestDb();
+    const db = createMemoryDb().db;
     await upsertThreads(db, [thread({ id: "3003" })], null, 1792000001000, resolveUrl);
     await db.insert(schema.notifications).values({
       id: "n_009",

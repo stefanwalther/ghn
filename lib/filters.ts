@@ -20,7 +20,7 @@ export const AGE_FILTERS: { value: AgeFilter; label: string }[] = [
 ];
 
 export const TYPE_FILTERS: { value: string; label: string }[] = [
-  { value: "all", label: "All types" },
+  { value: "all", label: "All" },
   { value: "pull_request", label: "Pull requests" },
   { value: "mention", label: "Mention" },
   { value: "team_mention", label: "Team mention" },
@@ -94,6 +94,57 @@ export function matchesTypeFilter(
     return true;
   }
   return reason === filter;
+}
+
+export interface QuickSelectItem {
+  id: string;
+  reason: string;
+  subject: string;
+  subjectType?: string | null;
+  subjectState?: string | null;
+  prMerged?: boolean | null;
+}
+
+/**
+ * The rows a quick select picks.
+ *
+ * The three special reasons read the item's own state rather than its
+ * reason, and everything else matches on the reason.
+ */
+export function selectByQuickFilter(
+  items: QuickSelectItem[],
+  reason: string
+): string[] {
+  if (reason === "release") {
+    return items
+      .filter((item) =>
+        isReleaseItem({
+          reason: item.reason,
+          subject: item.subject,
+          subjectType: item.subjectType ?? null,
+        })
+      )
+      .map((item) => item.id);
+  }
+  if (reason === "merged") {
+    return items
+      .filter((item) =>
+        isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false })
+      )
+      .map((item) => item.id);
+  }
+  if (reason === "closed") {
+    return items
+      .filter((item) =>
+        isClosedItem({
+          reason: item.reason,
+          prMerged: item.prMerged ?? false,
+          subjectState: item.subjectState ?? null,
+        })
+      )
+      .map((item) => item.id);
+  }
+  return items.filter((item) => item.reason === reason).map((item) => item.id);
 }
 
 const DAY = 24 * 60 * 60 * 1000;

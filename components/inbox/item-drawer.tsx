@@ -4,6 +4,7 @@ import * as React from "react";
 import { ChevronDown, ChevronUp, ExternalLink, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Markdown } from "@/components/inbox/markdown";
 import { isClosedItem, isMergedItem } from "@/lib/filters";
 import type { CheckSummary, DependabotAlertDetails, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
@@ -49,12 +50,10 @@ function TitleLink({ item }: { item: InboxItem }) {
       className="cursor-pointer rounded-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {item.subject}{" "}
-      {active ? (
-        <ExternalLink
-          aria-hidden
-          style={{ display: "inline-block", verticalAlign: "middle", width: "1rem", height: "1rem" }}
-        />
-      ) : null}
+      <ExternalLink
+        aria-hidden
+        style={{ display: "inline-block", verticalAlign: "middle", width: "1rem", height: "1rem" }}
+      />
     </a>
   );
 }
@@ -68,6 +67,7 @@ function runDotClass(conclusion: string | null): string {
 
 export function ItemDrawer({
   item,
+  syncing,
   onClose,
   onAction,
   onPrev,
@@ -77,6 +77,7 @@ export function ItemDrawer({
   positionLabel,
 }: {
   item: InboxItem;
+  syncing?: boolean;
   onClose: () => void;
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
   onPrev?: () => void;
@@ -294,6 +295,16 @@ export function ItemDrawer({
             {item.isRead === 0 ? "unread" : "read"} ·{" "}
             {new Date(item.createdAt).toLocaleString()}
           </span>
+          {syncing ? (
+            <span
+              role="status"
+              aria-label={`Syncing ${item.subject}`}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <SyncSpinner className="h-3 w-3" />
+              <span className="animate-pulse motion-reduce:animate-none">Syncing…</span>
+            </span>
+          ) : null}
         </div>
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-medium text-muted-foreground">Triage</h3>
@@ -447,18 +458,6 @@ export function ItemDrawer({
             </>
           ) : null}
         </div>
-        {contentState !== "unavailable" && (content || alert) ? (
-          <a
-            href={item.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => saveLastOpened(item.id)}
-            className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ExternalLink className="h-4 w-4" aria-hidden />
-            Open in new window
-          </a>
-        ) : null}
       </aside>
     </div>
   );

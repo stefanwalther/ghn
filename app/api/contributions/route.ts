@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { eq } from "drizzle-orm";
 import { contributionDays } from "@/db/schema";
+import { getStoredToken } from "@/lib/github";
 import { readSyncState } from "@/lib/sync";
 import {
   fetchDayCount,
@@ -16,7 +18,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const { db } = await import("@/db/client");
   const url = new URL(request.url);
-  const now = Date.now();
+  const now = nowMs();
   const today = todayUTC();
   const raw = url.searchParams.get("date") || today;
   if (!isValidDay(raw)) {
@@ -24,7 +26,8 @@ export async function GET(request: Request) {
   }
 
   const storedLogin = await readSyncState(db, "viewerLogin");
-  const login = resolveLogin(process.env.GHN_LOGIN, storedLogin ?? (await getViewerLogin()));
+  const token = await getStoredToken();
+  const login = resolveLogin(process.env.GHN_LOGIN, storedLogin ?? (await getViewerLogin(token)));
 
   const cached = (
     await db.select().from(contributionDays).where(eq(contributionDays.date, raw))
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ date: raw, count: cached.count, cached: true, login: null });
     return NextResponse.json({ error: "github auth unavailable" }, { status: 503 });
   }
-  const count = await fetchDayCount(login, raw);
+  const count = await fetchDayCount(login, raw, token);
   if (count === null) {
     if (cached)
       return NextResponse.json({ date: raw, count: cached.count, cached: true, login });

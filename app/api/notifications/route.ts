@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
 import { isClosedItem, isMergedItem, matchAge, matchesTypeFilter, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
+import { parsePaletteLimit } from "@/lib/view-state";
 import { readSyncStatus } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +21,8 @@ export async function GET(request: Request) {
   const ageFilter: AgeFilter = (AGES as readonly string[]).includes(rawAge)
     ? (rawAge as AgeFilter)
     : "all";
-  const now = Date.now();
+  const limit = parsePaletteLimit(url.searchParams.get("limit"));
+  const now = nowMs();
 
   const repos = await db.select().from(repositories);
   const reposById = new Map(repos.map((r) => [r.id, r]));
@@ -83,9 +86,11 @@ export async function GET(request: Request) {
   let pullRequestCount = 0;
   let mergedCount = 0;
   let closedCount = 0;
+  let totalMain = 0;
   for (const n of rows) {
     if (!matchBase(n, "type")) continue;
     if (placement(n) !== "main") continue;
+    totalMain += 1;
     typeCounts.set(n.reason, (typeCounts.get(n.reason) ?? 0) + 1);
     if (n.subjectType === "PullRequest") pullRequestCount += 1;
     const prMerged = (n.prMerged ?? 0) === 1;
@@ -102,17 +107,19 @@ export async function GET(request: Request) {
   }
 
   const facets = {
-    types: TYPE_FILTERS.filter((t) => t.value !== "all").map((t) => ({
+    types: TYPE_FILTERS.map((t) => ({
       value: t.value,
       label: t.label,
       count:
-        t.value === "pull_request"
-          ? pullRequestCount
-          : t.value === "merged"
-            ? mergedCount
-            : t.value === "closed"
-              ? closedCount
-              : (typeCounts.get(t.value) ?? 0),
+        t.value === "all"
+          ? totalMain
+          : t.value === "pull_request"
+            ? pullRequestCount
+            : t.value === "merged"
+              ? mergedCount
+              : t.value === "closed"
+                ? closedCount
+                : (typeCounts.get(t.value) ?? 0),
     })),
     repos: repos.map((r) => ({
       id: r.id,
@@ -205,5 +212,5 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({ now, lastSyncAt, stale, mainFlow, collapsedSection, facets });
+  return NextResponse.json({ now, lastSyncAt, stale, mainFlow: limit !== null ? mainFlow.slice(0, limit) : mainFlow, collapsedSection, facets });
 }

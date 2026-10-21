@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
+import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { QUICK_SELECTS, isClosedItem, isMergedItem } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
@@ -68,6 +69,7 @@ export function NotificationList({
   selected,
   focusedId,
   showHints,
+  syncingIds,
   onToggle,
   onToggleAll,
   onQuickSelect,
@@ -78,6 +80,7 @@ export function NotificationList({
   selected: Set<string>;
   focusedId?: string;
   showHints: boolean;
+  syncingIds?: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onQuickSelect: (reason: string) => void;
@@ -118,6 +121,7 @@ export function NotificationList({
       <ul className="divide-y divide-border/40">
         {items.map((item) => {
           const checked = selected.has(item.id);
+          const syncing = syncingIds?.has(item.id) ?? false;
           const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
           const closed = isClosedItem({
             reason: item.reason,
@@ -129,6 +133,7 @@ export function NotificationList({
             <li
               key={item.id}
               id={`notification-${item.id}`}
+              aria-busy={syncing || undefined}
               className={cn(
                 "flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 item.isRead === 0 && "bg-accent/30",
@@ -191,7 +196,18 @@ export function NotificationList({
                 <p className="mt-1 truncate text-sm font-medium">{item.subject}</p>
               </div>
               <div className="flex shrink-0 items-start" onClick={(e) => e.stopPropagation()}>
-                <ItemMenu item={item} onAction={onMenuAction} />
+                {syncing ? (
+                  <span
+                    role="status"
+                    aria-label={`Syncing ${item.subject}`}
+                    title={`Syncing ${item.subject}`}
+                    className="p-2 text-muted-foreground"
+                  >
+                    <SyncSpinner />
+                    <span className="sr-only">Syncing…</span>
+                  </span>
+                ) : null}
+                <ItemMenu item={item} syncing={syncing} onAction={onMenuAction} />
                 <a
                   href={item.sourceUrl}
                   target="_blank"

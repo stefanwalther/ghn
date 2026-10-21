@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCw } from "lucide-react";
-import { ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
+import { ErrorRateLimits, LoadingRateLimits } from "@/components/inbox/empty-states";
 import { Button } from "@/components/ui/button";
+import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RATE_LIMIT_BUCKETS, RATE_LIMIT_DOCS } from "@/lib/rate-limit-meta";
 import type { RateLimitBucket, RateLimitsResult } from "@/lib/rate-limits";
@@ -83,18 +83,15 @@ export default function RateLimitsPage() {
           title="Refresh rate limits from GitHub"
           aria-label="Refresh rate limits from GitHub"
         >
-          <RefreshCw
-            className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"}
-            aria-hidden
-          />
+          <SyncSpinner spinning={refreshing} />
           Refresh
         </Button>
       </div>
 
-      {status === "loading" ? <LoadingInbox /> : null}
+      {status === "loading" ? <LoadingRateLimits /> : null}
       {status === "error" ? (
         <>
-          <ErrorInbox onRetry={load} />
+          <ErrorRateLimits onRetry={load} />
           {error ? (
             <p role="alert" className="text-xs text-destructive">
               {error}
@@ -206,7 +203,7 @@ export default function RateLimitsPage() {
 
           <p className="text-xs text-muted-foreground">
             Fetched {new Date(data.fetchedAt).toLocaleTimeString()} · source: api.github.com X-RateLimit
-            headers, token from `gh auth login`.
+            headers, token from `GH_TOKEN` or `gh auth login`.
           </p>
         </>
       ) : null}

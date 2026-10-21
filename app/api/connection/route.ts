@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({
       connected: false,
       reason: probe.reason ?? "auth",
-      hint: "Run `gh auth login` on the server and refresh.",
+      hint: "Set GH_TOKEN or run `gh auth login` on the server and refresh.",
       lastSyncAt,
       pollIntervalSecs,
       stale: true,

@@ -1,7 +1,33 @@
 function apiBase(): string {
-  return process.env.GHN_API_BASE ?? "https://api.github.com";
+  return apiBases().restBase;
+}
+
+export interface ApiBases {
+  restBase: string;
+  graphqlUrl: string;
+}
+
+export function apiBases(): ApiBases {
+  const override = (process.env.GHN_API_BASE ?? "").trim().replace(/\/+$/, "");
+  if (override) {
+    const graphqlUrl = override.endsWith("/api/v3")
+      ? override.replace(/\/api\/v3$/, "/api/graphql")
+      : `${override}/graphql`;
+    return { restBase: override, graphqlUrl };
+  }
+  const host = (process.env.GH_HOST ?? "github.com").trim() || "github.com";
+  if (host === "github.com") {
+    return { restBase: "https://api.github.com", graphqlUrl: "https://api.github.com/graphql" };
+  }
+  return { restBase: `https://${host}/api/v3`, graphqlUrl: `https://${host}/api/graphql` };
 }
 const API_VERSION = "2022-11-28";
+
+// Upper bound for a single GitHub mutating/read call issued from a bulk or
+// sync fan-out. Without this, one stalled connection hangs the whole batch
+// (and the UI busy state with it); a timeout surfaces as "network" so the
+// caller can queue the write-back for retry.
+const WRITE_TIMEOUT_MS = 10_000;
 
 export interface GhThread {
   id: string;
@@ -45,7 +71,25 @@ export function classifyStatus(status: number, res?: Response): SyncFailureReaso
   return "unknown";
 }
 
+function envToken(): string | null {
+  for (const key of ["GH_TOKEN", "GITHUB_TOKEN"]) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 async function readToken(): Promise<string | null> {
+  // An explicit override wins over everything else. An explicitly empty
+  // value means "no token at all" and never falls back, which is how the
+  // test suite guarantees it cannot reach a real GitHub account on a
+  // machine where `gh` is authenticated.
+  if ("GHN_TOKEN" in process.env) {
+    const override = process.env.GHN_TOKEN?.trim() ?? "";
+    return override || null;
+  }
+  const fromEnv = envToken();
+  if (fromEnv) return fromEnv;
   try {
     const { $ } = await import("bun");
     const out = await $`gh auth token`.quiet().nothrow().text();
@@ -58,6 +102,17 @@ async function readToken(): Promise<string | null> {
 
 export async function getStoredToken(): Promise<string | null> {
   return readToken();
+}
+
+/**
+ * Whether the credential was explicitly switched off.
+ *
+ * The test suite sets an empty token so that no check can reach a real
+ * GitHub account. Code that falls back to the local `gh` helper has to
+ * honour that, otherwise the fallback walks straight past the switch.
+ */
+export function tokenDisabled(): boolean {
+  return "GHN_TOKEN" in process.env && !process.env.GHN_TOKEN?.trim();
 }
 
 export async function probeConnection(): Promise<{
@@ -185,6 +240,7 @@ export async function fetchThread(
   try {
     const res = await fetch(`${apiBase()}/notifications/threads/${threadId}`, {
       headers: baseHeaders(token),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
     if (!res.ok) {
       return { ok: false, reason: classifyStatus(res.status, res), status: res.status };
@@ -209,6 +265,9 @@ async function writeThread(
     const res = await fetch(`${apiBase()}/notifications/threads/${threadId}`, {
       method,
       headers: baseHeaders(token),
+      // Bound each write so one stalled connection cannot hang a bulk
+      // triage (which would leave the UI's busy state stuck on).
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
     if (res.status === 205 || res.status === 204 || res.status === 200) {
       return { ok: true };
@@ -237,6 +296,7 @@ export async function setSubscriptionIgnored(
       method: "PUT",
       headers: { ...baseHeaders(token), "Content-Type": "application/json" },
       body: JSON.stringify({ ignored }),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
     if (res.ok) return { ok: true };
     return { ok: false, reason: classifyStatus(res.status, res), status: res.status };
@@ -291,12 +351,12 @@ export function subjectApiUrlFromHtml(htmlUrl: string): string | null {
     /^https:\/\/github\.com\/([^/]+\/[^/]+)\/security\/dependabot\/(\d+)/
   );
   if (dependabot?.[1] && dependabot?.[2]) {
-    return `https://api.github.com/repos/${dependabot[1]}/dependabot/alerts/${dependabot[2]}`;
+    return `${apiBase()}/repos/${dependabot[1]}/dependabot/alerts/${dependabot[2]}`;
   }
   const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
   if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
   const kind = match[2] === "pull" ? "pulls" : "issues";
-  return `https://api.github.com/repos/${match[1]}/${kind}/${match[3]}`;
+  return `${apiBase()}/repos/${match[1]}/${kind}/${match[3]}`;
 }
 
 export interface DependabotAlertCoords {
@@ -476,7 +536,7 @@ export async function fetchSubjectContent(
 
 export function subjectCommentsUrlFromHtml(htmlUrl: string): string | null {  const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
   if (!match?.[1] || !match?.[3]) return null;
-  return `https://api.github.com/repos/${match[1]}/issues/${match[3]}/comments`;
+  return `${apiBase()}/repos/${match[1]}/issues/${match[3]}/comments`;
 }
 
 export interface ThreadComment {
@@ -580,7 +640,7 @@ export async function fetchWorkflowRuns(
   input: { owner: string; repo: string; branch: string | null; apiBase?: string }
 ): Promise<WorkflowRun[]> {
   try {
-    const base = input.apiBase ?? "https://api.github.com";
+    const base = input.apiBase ?? apiBase();
     const params = new URLSearchParams({ per_page: "20" });
     if (input.branch) params.set("branch", input.branch);
     const res = await fetch(
@@ -626,7 +686,11 @@ export async function fetchWorkflowRuns(
 }
 
 export function parsePullCoords(apiUrl: string): PullCoords | null {
-  const match = apiUrl.match(/^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)/);
+  // Host agnostic on purpose: the API base is overridable, so the check
+  // summary has to work against the local GitHub stand-in too.
+  const match = apiUrl.match(
+    /^(?:https?:\/\/[^/]+)?\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)/
+  );
   if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
   return { owner: match[1], repo: match[2], number: Number.parseInt(match[3], 10) };
 }
@@ -642,7 +706,7 @@ export async function fetchCheckSummary(
   input: { owner: string; repo: string; sha: string; apiBase?: string }
 ): Promise<CheckSummary | null> {
   try {
-    const base = input.apiBase ?? "https://api.github.com";
+    const base = input.apiBase ?? apiBase();
     const headers = baseHeaders(token);
     const [statusRes, runsRes] = await Promise.all([
       fetch(

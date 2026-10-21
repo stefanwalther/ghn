@@ -17,7 +17,7 @@ export function isValidDay(date: string): boolean {
 }
 
 export function todayUTC(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Date(nowMs()).toISOString().slice(0, 10);
 }
 
 export function isFresh(
@@ -31,9 +31,51 @@ export function isFresh(
   return now - fetchedAt < ttlMs;
 }
 
+import { apiBases, tokenDisabled } from "@/lib/github";
+import { nowMs } from "@/lib/clock";
+
 interface CalendarDay {
   date?: unknown;
   contributionCount?: unknown;
+}
+
+async function fetchViewerLogin(token: string): Promise<string | null> {
+  try {
+    const { restBase } = apiBases();
+    const res = await fetch(`${restBase}/user`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { login?: unknown };
+    return typeof payload.login === "string" && payload.login ? payload.login : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchDayCountViaApi(token: string, login: string, date: string): Promise<number | null> {
+  const { from, to } = dayWindowUTC(date);
+  try {
+    const { graphqlUrl } = apiBases();
+    const res = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({ query: QUERY, variables: { login, from, to } }),
+    });
+    if (!res.ok) return null;
+    return pickDay(await res.json(), date);
+  } catch {
+    return null;
+  }
 }
 
 export function pickDay(payload: unknown, date: string): number | null {
@@ -52,7 +94,11 @@ export function pickDay(payload: unknown, date: string): number | null {
   return null;
 }
 
-export async function getViewerLogin(): Promise<string | null> {
+export async function getViewerLogin(token?: string | null): Promise<string | null> {
+  if (token) return fetchViewerLogin(token);
+  // The environment switched the credential off, so the local helper must
+  // not be used to find one.
+  if (tokenDisabled()) return null;
   try {
     const { $ } = await import("bun");
     const out = await $`gh api user --jq .login`.quiet().text();
@@ -63,7 +109,13 @@ export async function getViewerLogin(): Promise<string | null> {
   }
 }
 
-export async function fetchDayCount(login: string, date: string): Promise<number | null> {
+export async function fetchDayCount(
+  login: string,
+  date: string,
+  token?: string | null
+): Promise<number | null> {
+  if (token) return fetchDayCountViaApi(token, login, date);
+  if (tokenDisabled()) return null;
   const { from, to } = dayWindowUTC(date);
   try {
     const { $ } = await import("bun");

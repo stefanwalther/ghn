@@ -35,6 +35,7 @@ export interface DrainResult {
   processed: number;
   succeeded: number;
   failed: number;
+  succeededItems: { threadId: string; action: WritebackAction }[];
 }
 
 export async function drainQueue(
@@ -44,11 +45,13 @@ export async function drainQueue(
   const rows = await db.select().from(writebackQueue).orderBy(asc(writebackQueue.id));
   let succeeded = 0;
   let failed = 0;
+  const succeededItems: { threadId: string; action: WritebackAction }[] = [];
   for (const row of rows) {
     const result = await apply(row.threadId, row.action);
     if (result.ok) {
       await db.delete(writebackQueue).where(eq(writebackQueue.id, row.id));
       succeeded += 1;
+      succeededItems.push({ threadId: row.threadId, action: row.action });
     } else {
       await db
         .update(writebackQueue)
@@ -57,5 +60,5 @@ export async function drainQueue(
       failed += 1;
     }
   }
-  return { processed: rows.length, succeeded, failed };
+  return { processed: rows.length, succeeded, failed, succeededItems };
 }

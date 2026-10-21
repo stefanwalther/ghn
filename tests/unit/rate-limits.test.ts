@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { fetchRateLimits, parseRateLimitHeaders } from "@/lib/rate-limits";
 
 function headers(entries: Record<string, string>): Headers {

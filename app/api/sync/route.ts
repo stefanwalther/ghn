@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { inArray } from "drizzle-orm";
 import { notifications, repositories } from "@/db/schema";
 import {
@@ -19,6 +20,7 @@ import {
   migrateSeedToLive,
   pruneEmptyRepositories,
   readSyncState,
+  reapplyPendingReads,
   sharedUrlCache,
   upsertThreads,
   writeSyncState,
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
   const { db } = await import("@/db/client");
   const body = await request.json().catch(() => null);
   const forceFull = body?.full === true;
-  const now = Date.now();
+  const now = nowMs();
 
   const probe = await probeConnection();
   if (!probe.connected) {
@@ -82,13 +84,33 @@ export async function POST(request: Request) {
 
   const pending = await getQueuedThreadIds(db);
   if (pending.size > 0) {
-    await drainQueue(db, (threadId, action) =>
+    const drained = await drainQueue(db, (threadId, action) =>
       action === "done"
         ? markThreadDone(token, threadId)
         : action === "read"
           ? markThreadRead(token, threadId)
           : setSubscriptionIgnored(token, threadId, true)
     );
+    // Heal rows queued before local-first write-back (isDone/isRead still 0).
+    // New bulk calls already hide locally, so this is a no-op for them.
+    const doneIds = drained.succeededItems
+      .filter((i) => i.action === "done" || i.action === "unsubscribe")
+      .map((i) => i.threadId);
+    const readIds = drained.succeededItems
+      .filter((i) => i.action === "read")
+      .map((i) => i.threadId);
+    if (doneIds.length > 0) {
+      await db
+        .update(notifications)
+        .set({ isDone: 1, localUnread: 0 })
+        .where(inArray(notifications.id, doneIds));
+    }
+    if (readIds.length > 0) {
+      await db
+        .update(notifications)
+        .set({ isRead: 1, localUnread: 0 })
+        .where(inArray(notifications.id, readIds));
+    }
   }
 
   const lastSyncRaw = await readSyncState(db, "lastSyncAt");
@@ -170,6 +192,10 @@ export async function POST(request: Request) {
     now,
     (t) => resolveSubjectHtmlUrl(token, t, cache)
   );
+  // Upsert recomputes isRead from the remote unread flag, which would revert
+  // a locally-read row whose PATCH is still queued. Restore those while the
+  // retry is pending; explicit unread rows (localUnread=1) are left alone.
+  await reapplyPendingReads(db);
   let markedDone = 0;
   if (full) {
     const seenIds = new Set(threads.map((t) => t.id));

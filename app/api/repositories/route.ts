@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { count, eq } from "drizzle-orm";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const { db } = await import("@/db/client");
   const repos = await db.select().from(repositories);
-  const now = Date.now();
+  const now = nowMs();
   const counts = await db
     .select({ repositoryId: notifications.repositoryId, value: count() })
     .from(notifications)
