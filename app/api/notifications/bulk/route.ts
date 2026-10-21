@@ -70,18 +70,17 @@ export async function POST(request: Request) {
     const token = await getStoredToken();
     let queued = 0;
     if (token) {
-      const pairList = [...pairs.values()];
-      const remotes = await mapWithLimit(pairList, REMOTE_CONCURRENCY, (n) =>
+      const remotes = await mapWithLimit(existing, REMOTE_CONCURRENCY, (n) =>
         setSubscriptionIgnored(token, n.id, true)
       );
       for (const [idx, remote] of remotes.entries()) {
         if (remote.ok) continue;
-        const n = pairList[idx] as (typeof pairList)[number];
+        const n = existing[idx] as (typeof existing)[number];
         await enqueueWriteback(db, n.id, "unsubscribe", remote.reason ?? "unknown", now);
         queued += 1;
       }
     } else {
-      for (const n of pairs.values()) {
+      for (const n of existing) {
         await enqueueWriteback(db, n.id, "unsubscribe", "auth", now);
         queued += 1;
       }

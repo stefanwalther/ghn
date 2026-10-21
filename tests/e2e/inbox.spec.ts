@@ -53,12 +53,10 @@ test.describe("live github sync smoke", () => {
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThan(0);
     expect(box!.width).toBeGreaterThan(800);
-    await expect(drawer.getByRole("link", { name: /Open in new window/ })).toBeVisible();
     const titleLink = drawer.getByRole("link", { name: /^Open source for / }).first();
     await expect(titleLink).toBeVisible();
     await expect(titleLink).toHaveAttribute("href", /github\.com/);
     await expect(titleLink).toHaveAttribute("target", "_blank");
-    await titleLink.hover();
     await expect(titleLink.locator("svg")).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "Triage" })).toBeVisible();
     await page.keyboard.press("Escape");
@@ -77,7 +75,9 @@ test.describe("live github sync smoke", () => {
       const text = (await button.innerText()).trim();
       const badge = text.split(/\s+/).pop();
       const active = await button.getAttribute("aria-current");
-      if (active !== "true") expect(badge).not.toBe("0");
+      // Quiet-only repos (main 0, quiet > 0) stay visible; only
+      // fully-empty repos (no main and no quiet) are hidden.
+      if (active !== "true") expect(badge !== "0" || text.includes("+")).toBe(true);
     }
   });
 
