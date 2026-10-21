@@ -8,6 +8,7 @@ import {
   migrateSeedToLive,
   pruneEmptyRepositories,
   readSyncState,
+  readSyncStatus,
   upsertThreads,
   writeSyncState,
 } from "@/lib/sync";
@@ -277,6 +278,40 @@ describe("stale and conditional sync state", () => {
     await writeSyncState(db, "pollIntervalSecs", "60");
     expect(await readSyncState(db, "lastSyncAt")).toBe("1792000001000");
     expect(await readSyncState(db, "pollIntervalSecs")).toBe("60");
+  });
+
+  test("readSyncStatus reports fresh, stale, and never-synced", async () => {
+    const db = createMemoryDb().db;
+    const now = 1792000000000;
+    await writeSyncState(db, "pollIntervalSecs", "60");
+    expect(await readSyncStatus(db, now)).toEqual({
+      lastSyncAt: null,
+      pollIntervalSecs: 60,
+      stale: false,
+    });
+    await writeSyncState(db, "lastSyncAt", String(now - 60_000));
+    expect(await readSyncStatus(db, now)).toEqual({
+      lastSyncAt: now - 60_000,
+      pollIntervalSecs: 60,
+      stale: false,
+    });
+    await writeSyncState(db, "lastSyncAt", String(now - 121_000));
+    expect(await readSyncStatus(db, now)).toEqual({
+      lastSyncAt: now - 121_000,
+      pollIntervalSecs: 60,
+      stale: true,
+    });
+  });
+
+  test("readSyncStatus honors a custom poll interval", async () => {
+    const db = createMemoryDb().db;
+    const now = 1792000000000;
+    await writeSyncState(db, "pollIntervalSecs", "600");
+    await writeSyncState(db, "lastSyncAt", String(now - 1_000_000));
+    // 1000s old with a 600s poll window (stale past 1200s) is still fresh.
+    expect((await readSyncStatus(db, now)).stale).toBe(false);
+    await writeSyncState(db, "lastSyncAt", String(now - 1_201_000));
+    expect((await readSyncStatus(db, now)).stale).toBe(true);
   });
 
   test("conditional 304 returns notModified without touching rows", async () => {
