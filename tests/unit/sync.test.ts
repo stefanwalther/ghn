@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { ensureSchema } from "@/scripts/push";
+import { ensureSchema } from "@/db/ensure-schema";
 import {
   applyRemoteDone,
   migrateSeedToLive,
