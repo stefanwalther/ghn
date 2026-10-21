@@ -21,6 +21,42 @@ export function LoadingInbox() {
   );
 }
 
+export function LoadingRateLimits() {
+  return (
+    <div className="flex flex-col gap-4" role="status" aria-label="Loading rate limits">
+      <div className="grid gap-4 md:grid-cols-3" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="mt-2 h-3 w-32 animate-pulse rounded bg-muted" />
+            <div className="mt-4 h-2 animate-pulse rounded-full bg-muted" />
+            <div className="mt-2 h-3 w-20 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">Loading rate limits…</p>
+    </div>
+  );
+}
+
+export function ErrorRateLimits({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-lg bg-card p-10 text-center shadow-sm" role="alert">
+      <h2 className="font-semibold">Rate limits failed to load</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+        Could not fetch the current GitHub API quota. Retry to fetch again.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 export function ErrorInbox({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="rounded-lg bg-card p-10 text-center shadow-sm" role="alert">

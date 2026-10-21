@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     const token = await getStoredToken();
     let queued = 0;
     if (token) {
-      for (const n of pairs.values()) {
+      for (const n of existing) {
         const remote = await setSubscriptionIgnored(token, n.id, true);
         if (!remote.ok) {
           await enqueueWriteback(db, n.id, "unsubscribe", remote.reason ?? "unknown", now);
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      for (const n of pairs.values()) {
+      for (const n of existing) {
         await enqueueWriteback(db, n.id, "unsubscribe", "auth", now);
         queued += 1;
       }
