@@ -17,7 +17,7 @@ const now = nowMs();
 const standIn = await startGitHubStandIn({ port, token });
 standIn.setThreads(buildSeedThreads(standIn.url, now));
 
-for (const [path, payload] of buildSeedSubjects(standIn.url, now)) {
+for (const [path, payload] of buildSeedSubjects(now)) {
   standIn.setSubject(path, payload);
 }
 

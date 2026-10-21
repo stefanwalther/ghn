@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { parseRateLimitHeaders } from "@/lib/rate-limits";
 import { applyLocalAction } from "@/lib/inbox-state";
-import { buildSeedNotifications, IMMEDIATE_REPOS } from "@/lib/seed-data";
+import { buildSeedNotifications, IMMEDIATE_REPOS, SEED_COUNTS } from "@/lib/seed-data";
 
 /**
  * The details the suite claims to pin.
@@ -75,7 +75,7 @@ describe("the dataset's read balance", () => {
   // part of what the suite promises to pin.
   test("a third of the visible items are read", () => {
     const read = visible.filter((item) => item.isRead).length;
-    expect(visible).toHaveLength(30);
+    expect(visible).toHaveLength(SEED_COUNTS.visible);
     expect(read).toBe(10);
   });
 
@@ -105,7 +105,7 @@ describe("the dataset's collapsed ages", () => {
     const inYear = collapsed.filter(
       (item) => new Date(item.createdAt).getUTCFullYear() === year
     ).length;
-    expect(collapsed).toHaveLength(170);
+    expect(collapsed).toHaveLength(SEED_COUNTS.quiet);
     expect(inYear).toBe(0);
   });
 });
