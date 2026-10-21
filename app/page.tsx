@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { copyText } from "@/lib/clipboard";
+import { describeBulkResult } from "@/lib/bulk";
 import { isClosedItem, isMergedItem, isReleaseItem } from "@/lib/filters";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
@@ -26,6 +27,27 @@ interface CollapsedGroup {
   nextDueAt: number | null;
   nextDueLabel: string;
   pendingCount: number;
+}
+
+// Client-side request bounds. Bulk triage fans out over many threads
+// server-side, so it gets the longest leash; everything else must settle
+// fast so the busy state (which gates the triage buttons) can never stick.
+const REQUEST_TIMEOUT_MS = 30_000;
+const BULK_REQUEST_TIMEOUT_MS = 120_000;
+const SYNC_REQUEST_TIMEOUT_MS = 120_000;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit | undefined,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function InboxView() {
@@ -44,7 +66,17 @@ function InboxView() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
-  const [busy, setBusy] = React.useState(false);
+  // In-flight triage/sync operations. A counter (not a boolean) so
+  // overlapping requests cannot re-enable the buttons while work remains,
+  // and timeouts below guarantee it always drains back to zero.
+  const [busyCount, setBusyCount] = React.useState(0);
+  const busy = busyCount > 0;
+  function startBusy() {
+    setBusyCount((n) => n + 1);
+  }
+  function endBusy() {
+    setBusyCount((n) => Math.max(0, n - 1));
+  }
   const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
   const [stale, setStale] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
@@ -63,7 +95,7 @@ function InboxView() {
     else setRefreshing(true);
     const my = ++reqRef.current;
     try {
-      const res = await fetch(`/api/notifications${query}`, { cache: "no-store" });
+      const res = await fetchWithTimeout(`/api/notifications${query}`, { cache: "no-store" }, REQUEST_TIMEOUT_MS);
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
       if (reqRef.current !== my) return;
@@ -149,11 +181,15 @@ function InboxView() {
   async function refresh() {
     setSyncing(true);
     try {
-      const res = await fetch("/api/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
+      const res = await fetchWithTimeout(
+        "/api/sync",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        SYNC_REQUEST_TIMEOUT_MS
+      );
       const data = await res.json().catch(() => null);
       if (data && typeof data.pollIntervalSecs === "number") setPollSecs(data.pollIntervalSecs);
       if (data && typeof data.lastSyncAt === "number") setLastSyncAt(data.lastSyncAt);
@@ -279,14 +315,18 @@ function InboxView() {
   }
 
   async function syncOne(id: string) {
-    setBusy(true);
+    startBusy();
     setNotice(null);
     try {
-      const res = await fetch("/api/thread/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
+      const res = await fetchWithTimeout(
+        "/api/thread/sync",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        },
+        REQUEST_TIMEOUT_MS
+      );
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "sync failed");
       if (data?.gone === true) {
@@ -302,14 +342,14 @@ function InboxView() {
     } catch {
       setNotice("Sync failed for this item.");
     } finally {
-      setBusy(false);
+      endBusy();
     }
   }
 
   async function apply(action: BulkAction, ids?: string[]) {
     const targets = ids ?? [...selected];
     if (targets.length === 0) return;
-    setBusy(true);
+    startBusy();
     setNotice(null);
     const targetSet = new Set(targets);
     const prevItems = items;
@@ -331,18 +371,34 @@ function InboxView() {
     }
     setSelected(new Set());
     try {
-      const res = await fetch("/api/notifications/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: targets, action }),
-      });
+      const res = await fetchWithTimeout(
+        "/api/notifications/bulk",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: targets, action }),
+        },
+        BULK_REQUEST_TIMEOUT_MS
+      );
       if (!res.ok) throw new Error("bulk failed");
+      const body = await res.json().catch(() => null);
       await load();
+      // A partial remote failure queues write-backs server-side while the
+      // affected rows stay (or return) in the inbox. Say so explicitly:
+      // without this, triage looks like a silent no-op.
+      const queued = typeof body?.queued === "number" ? body.queued : 0;
+      const updated = typeof body?.updated === "number" ? body.updated : targets.length;
+      const queuedNotice = describeBulkResult(action, {
+        updated,
+        queued,
+        error: typeof body?.error === "string" ? body.error : null,
+      });
+      if (queuedNotice) setNotice(queuedNotice);
     } catch {
       setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
     } finally {
-      setBusy(false);
+      endBusy();
     }
   }
 
