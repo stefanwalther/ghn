@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { BellOff, Check, ExternalLink, Link2, Mail, MailOpen, MoreHorizontal, PanelRight, RefreshCw } from "lucide-react";
+import { BellOff, Check, ExternalLink, Link2, Mail, MailOpen, MoreHorizontal, PanelRight } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
+import { SyncSpinner } from "@/components/ui/sync-spinner";
 import type { BulkAction } from "@/components/inbox/bulk-bar";
 import type { InboxItem } from "@/components/inbox/notification-list";
 import { cn } from "@/lib/utils";
@@ -31,9 +32,11 @@ function menuItems(item: InboxItem): { value: ItemMenuAction; label: string; hin
 
 export function ItemMenu({
   item,
+  syncing,
   onAction,
 }: {
   item: InboxItem;
+  syncing?: boolean;
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -161,7 +164,7 @@ export function ItemMenu({
                   ) : entry.value === "copy" ? (
                     <Link2 className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "sync" ? (
-                    <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                    <SyncSpinner spinning={syncing} className="shrink-0" />
                   ) : entry.value === "done" ? (
                     <Check className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "read" ? (
@@ -171,7 +174,9 @@ export function ItemMenu({
                   ) : (
                     <BellOff className="h-4 w-4 shrink-0" aria-hidden />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {entry.value === "sync" && syncing ? "Syncing…" : entry.label}
+                  </span>
                   <Kbd>{entry.hint}</Kbd>
                 </button>
               ))}

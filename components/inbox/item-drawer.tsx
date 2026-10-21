@@ -4,6 +4,7 @@ import * as React from "react";
 import { ChevronDown, ChevronUp, ExternalLink, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Markdown } from "@/components/inbox/markdown";
 import { isClosedItem, isMergedItem } from "@/lib/filters";
 import type { CheckSummary, DependabotAlertDetails, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
@@ -66,6 +67,7 @@ function runDotClass(conclusion: string | null): string {
 
 export function ItemDrawer({
   item,
+  syncing,
   onClose,
   onAction,
   onPrev,
@@ -75,6 +77,7 @@ export function ItemDrawer({
   positionLabel,
 }: {
   item: InboxItem;
+  syncing?: boolean;
   onClose: () => void;
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
   onPrev?: () => void;
@@ -292,6 +295,16 @@ export function ItemDrawer({
             {item.isRead === 0 ? "unread" : "read"} ·{" "}
             {new Date(item.createdAt).toLocaleString()}
           </span>
+          {syncing ? (
+            <span
+              role="status"
+              aria-label={`Syncing ${item.subject}`}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <SyncSpinner className="h-3 w-3" />
+              <span className="animate-pulse motion-reduce:animate-none">Syncing…</span>
+            </span>
+          ) : null}
         </div>
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-medium text-muted-foreground">Triage</h3>
