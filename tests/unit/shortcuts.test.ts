@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   SHORTCUTS,
   isAltHintKey,
+  isCycleThemeEvent,
   isEditableTarget,
   isToggleSidebarEvent,
 } from "@/lib/shortcuts";
@@ -55,5 +56,20 @@ describe("shortcuts", () => {
     expect(isAltHintKey(keyEvent({ key: "Option" }))).toBe(true);
     expect(isAltHintKey(keyEvent({ key: "a" }))).toBe(false);
     expect(isAltHintKey(keyEvent({ key: "AltGraph" }))).toBe(false);
+  });
+
+  test("help lists the theme cycle key", () => {
+    const keys = SHORTCUTS.map((s) => s.key);
+    expect(keys).toContain("Cmd+F12");
+  });
+
+  test("theme cycle fires on Cmd+F12 and Ctrl+F12 only", () => {
+    expect(isCycleThemeEvent(keyEvent({ key: "F12", metaKey: true }))).toBe(true);
+    expect(isCycleThemeEvent(keyEvent({ key: "F12", ctrlKey: true }))).toBe(true);
+    expect(isCycleThemeEvent(keyEvent({ key: "F12" }))).toBe(false);
+    expect(isCycleThemeEvent(keyEvent({ key: "F11", metaKey: true }))).toBe(false);
+    expect(isCycleThemeEvent(keyEvent({ key: "F12", metaKey: true, altKey: true }))).toBe(false);
+    expect(isCycleThemeEvent(keyEvent({ key: "F12", metaKey: true, shiftKey: true }))).toBe(false);
+    expect(isCycleThemeEvent(keyEvent({ key: "F12", ctrlKey: true, shiftKey: true }))).toBe(false);
   });
 });
