@@ -339,6 +339,26 @@ These need a decision that is not the test suite's to make.
 | `muted_subjects` has no primary key and no unique index | `db/schema.ts` | `onConflictDoNothing` cannot deduplicate, so the table can accumulate duplicates. |
 | The `data/` directory is not created by any script | `db/client.ts:5` | A fresh clone fails to open the database. |
 
+### The coverage gate is advisory, not enforced
+
+FR-006 says a failing automated run must block the merge of the pull request
+that triggered it. The workflow satisfies the first half of that. It runs on
+every pull request and a failing run shows red on the pull request.
+
+The second half is not in place. `main` carries no required status checks, so
+GitHub still offers the merge button when the run is red. The gate is
+advisory until the two check contexts from the workflow are required on the
+branch protection rule:
+
+| Check | Context name |
+|---|---|
+| Type check, lint and the fast suites | `typecheck, lint, tests` |
+| The end-to-end layer | `end-to-end (playwright)` |
+
+Enabling that is a repository setting change, which is outside what the
+feature work is allowed to touch. It is recorded here so the next session does
+not read the finished task list and assume the gate is already hard.
+
 ---
 
 ## Credential exposure during research

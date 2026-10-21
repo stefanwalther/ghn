@@ -301,6 +301,8 @@ The validation pass confirmed: ten consecutive runs of the fast layers give iden
 
 A review of the finished suite, with mutations applied to the implementation to see which checks noticed, found five checks that passed without proving anything. All five are fixed and each fix is verified against the mutation that used to slip through. The one production defect it surfaced is parked as issue 35.
 
+One requirement is only half met. FR-006 asks a failing automated run to block the merge. The workflow runs on every pull request and a failing run shows red, but `main` carries no required status checks, so GitHub still offers the merge button. The two check contexts that would close the gap are named in `research.md`, under "The coverage gate is advisory, not enforced".
+
 
 - `[P]` tasks mean different files with no dependencies
 - `[Story]` labels map a task to a user story for traceability
