@@ -945,7 +945,9 @@ describe("rate limits screen", () => {
 
     render(<RateLimitsPage />);
 
-    expect(await screen.findByText("Inbox failed to load")).toBeInTheDocument();
+    // The rate limits have their own error state.
+    expect(await screen.findByText("Rate limits failed to load")).toBeInTheDocument();
     expect(await screen.findByText("GitHub API probes failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 });
