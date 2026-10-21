@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
-import { Bell, ExternalLink, Gauge, Moon, Settings2, Sun } from "lucide-react";
+import { Bell, ExternalLink, Gauge, Github, Settings2 } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
 import { DemoBanner } from "@/components/demo-banner";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Kbd } from "@/components/ui/kbd";
+import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/app-meta";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
 
@@ -42,15 +43,10 @@ const GITHUB_NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { resolvedTheme, setTheme } = useTheme();
-  // Render the server-consistent header until mounted: theme resolution and
-  // viewport width are client-only and must not fork the first render.
-  const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(true);
   const [showHints, setShowHints] = React.useState(false);
 
   React.useEffect(() => {
-    setMounted(true);
     try {
       const saved = localStorage.getItem("quiet-notifications:sidebar");
       if (saved === "closed") setOpen(false);
@@ -116,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggleSidebar}
             className="fixed inset-0 z-30 cursor-pointer bg-background/80 md:hidden"
           />
-          <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 bg-sidebar p-4 shadow-md md:static md:z-auto md:shadow-none">
+          <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 overflow-y-auto bg-sidebar p-4 shadow-md md:sticky md:top-0 md:z-auto md:h-screen md:shadow-none">
           <div className="mb-4 px-2 text-sm font-semibold">Quiet Notifications</div>
           {NAV.map((item) => {
             const active =
@@ -163,6 +159,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </a>
             );
           })}
+          <div className="mt-auto flex items-center justify-between px-3 pt-4 text-xs text-muted-foreground">
+            <span>v{APP_VERSION}</span>
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub repository"
+              title="GitHub repository"
+              className="flex cursor-pointer items-center gap-1 rounded-md p-1 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Github className="h-4 w-4" aria-hidden />
+            </a>
+          </div>
           </aside>
         </>
       ) : null}
@@ -196,20 +205,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 : "Triage with fewer clicks"}
           </div>
           <ContributionsChip />
-          <button
-            type="button"
-            aria-label="Toggle theme"
-            aria-pressed={mounted && resolvedTheme === "dark"}
-            title="Toggle theme (Cmd+F12)"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {mounted && resolvedTheme === "dark" ? (
-              <Sun className="h-4 w-4" aria-hidden />
-            ) : (
-              <Moon className="h-4 w-4" aria-hidden />
-            )}
-          </button>
+          <ThemeSwitcher />
         </header>
         <main className="min-w-0 flex-1 px-4 pb-10">{children}</main>
       </div>
