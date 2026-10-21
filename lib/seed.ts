@@ -51,6 +51,16 @@ const REASONS = [
   "subscribed",
 ] as const;
 
+// Live GitHub subject types are PascalCase ("PullRequest", "Issue", ...).
+// The mix is deterministic so seeded data stays stable across runs; the
+// e2e type filter needs PullRequest rows to exist.
+const SUBJECT_TYPES = [
+  "PullRequest",
+  "PullRequest",
+  "PullRequest",
+  "Issue",
+] as const;
+
 function seededRandom(seed: number): () => number {
   let s = seed;
   return () => {
@@ -102,6 +112,7 @@ export async function seedDatabase(
       id: `n_${String(i + 1).padStart(3, "0")}`,
       repositoryId: repo.id,
       subject: subject.slice(0, 200),
+      subjectType: SUBJECT_TYPES[i % SUBJECT_TYPES.length],
       reason,
       createdAt: created,
       isRead,

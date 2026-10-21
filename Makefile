@@ -1,7 +1,9 @@
 .DEFAULT_GOAL := help
 .PHONY: help web-open web-serve web-dev
 
-PORT ?= 21120
+# Per-workspace port (bg-style slot allocation). Explicit PORT=... in the
+# environment wins; otherwise resolve a collision-free port for this checkout.
+PORT ?= $(shell ./scripts/resolve-dev-runtime.sh --port-only 2>/dev/null || echo 21120)
 export PORT
 
 help:
@@ -9,7 +11,7 @@ help:
 	@echo ""
 	@echo "Web UI (local, serves on port $(PORT)):"
 	@echo "  web-open    Ensure the web UI is running, starting it when down, then open it"
-	@echo "  web-serve   Build and serve production (foreground). Override with PORT=21121."
+	@echo "  web-serve   Build and serve production (foreground). Override with PORT=... ."
 	@echo "  web-dev     Run the dev server with hot reload (foreground)."
 
 # Ensure running, starting in the background when down, then open the browser.
@@ -18,13 +20,13 @@ help:
 web-open:
 	scripts/ensure-web.sh
 
-# Serve production in the foreground.
+# Serve production in the foreground (per-workspace port via resolve-dev-runtime.sh).
 web-serve:
 	bun install
 	bun run build
-	bun --bun next start -p $(PORT)
+	bun run start
 
-# Run the dev server in the foreground.
+# Run the dev server in the foreground (per-workspace port via resolve-dev-runtime.sh).
 web-dev:
 	bun install
-	bun --bun next dev -p $(PORT)
+	bun run dev
