@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   DRAWER_DEFAULT_WIDTH,
   DRAWER_MAX_WIDTH,

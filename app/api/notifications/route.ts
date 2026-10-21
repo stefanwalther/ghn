@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nowMs } from "@/lib/clock";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   const ageFilter: AgeFilter = (AGES as readonly string[]).includes(rawAge)
     ? (rawAge as AgeFilter)
     : "all";
-  const now = Date.now();
+  const now = nowMs();
 
   const repos = await db.select().from(repositories);
   const reposById = new Map(repos.map((r) => [r.id, r]));

@@ -16,7 +16,15 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { copyText } from "@/lib/clipboard";
-import { isClosedItem, isMergedItem, isReleaseItem } from "@/lib/filters";
+import { selectByQuickFilter } from "@/lib/filters";
+import {
+  applyLocalAction,
+  nextFocusIndex,
+  nextSelection,
+  pollWindow,
+  toggleAllSelection,
+} from "@/lib/inbox-state";
+import { syncErrorMessage } from "@/lib/sync-errors";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
 
 interface CollapsedGroup {
@@ -139,13 +147,6 @@ function InboxView() {
     });
   }
 
-  function syncErrorMessage(reason: unknown): string {
-    if (reason === "auth") return "GitHub access missing. Set GH_TOKEN or run `gh auth login` on the server and refresh.";
-    if (reason === "rate_limited") return "GitHub rate limit reached. Retry shortly; cached inbox shown.";
-    if (reason === "network") return "GitHub unreachable. Showing cached inbox.";
-    return "Sync failed. Showing last loaded data.";
-  }
-
   async function refresh() {
     setSyncing(true);
     try {
@@ -181,68 +182,24 @@ function InboxView() {
     await load();
   }
 
-  const nextAllowedAt = lastSyncAt !== null ? lastSyncAt + pollSecs * 1000 : 0;
-  const inPollWindow = lastSyncAt !== null && nowMs < nextAllowedAt && !syncing;
-  const countdownSecs = inPollWindow ? Math.ceil((nextAllowedAt - nowMs) / 1000) : 0;
+  const poll = pollWindow(lastSyncAt, pollSecs, nowMs);
+  const inPollWindow = poll.inWindow && !syncing;
+  const countdownSecs = poll.countdownSecs;
 
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
   }
 
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected((prev) => nextSelection(items, prev, id));
   }
 
   function toggleAll() {
-    setSelected((prev) => {
-      if (items.every((i) => prev.has(i.id))) return new Set();
-      return new Set(items.map((i) => i.id));
-    });
+    setSelected((prev) => toggleAllSelection(items, prev));
   }
 
   function quickSelect(reason: string) {
-    if (reason === "release") {
-      setSelected(
-        new Set(
-          items
-            .filter((i) =>
-              isReleaseItem({ reason: i.reason, subject: i.subject, subjectType: i.subjectType ?? null })
-            )
-            .map((i) => i.id)
-        )
-      );
-      return;
-    }
-    if (reason === "merged") {
-      setSelected(
-        new Set(
-          items.filter((i) => isMergedItem({ reason: i.reason, prMerged: i.prMerged ?? false })).map((i) => i.id)
-        )
-      );
-      return;
-    }
-    if (reason === "closed") {
-      setSelected(
-        new Set(
-          items
-            .filter((i) =>
-              isClosedItem({
-                reason: i.reason,
-                prMerged: i.prMerged ?? false,
-                subjectState: i.subjectState ?? null,
-              })
-            )
-            .map((i) => i.id)
-        )
-      );
-      return;
-    }
-    setSelected(new Set(items.filter((i) => i.reason === reason).map((i) => i.id)));
+    setSelected(new Set(selectByQuickFilter(items, reason)));
   }
 
   function openDrawer(item: InboxItem) {
@@ -316,19 +273,7 @@ function InboxView() {
     if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
       setDrawerItem(null);
     }
-    if (action === "done" || action === "unsubscribe") {
-      setItems((prev) => prev.filter((i) => !targetSet.has(i.id)));
-    } else if (action === "read") {
-      setItems((prev) =>
-        prev.map((i) => (targetSet.has(i.id) ? { ...i, isRead: 1 } : i))
-      );
-    } else {
-      setItems((prev) =>
-        prev.map((i) =>
-          targetSet.has(i.id) ? { ...i, isDone: 0, isRead: 0 } : i
-        )
-      );
-    }
+    setItems((prev) => applyLocalAction(prev, targets, action));
     setSelected(new Set());
     try {
       const res = await fetch("/api/notifications/bulk", {
@@ -347,13 +292,8 @@ function InboxView() {
   }
 
   function moveFocus(delta: number) {
-    if (items.length === 0) return;
-    const next =
-      focusIdx === null
-        ? delta > 0
-          ? 0
-          : items.length - 1
-        : Math.min(items.length - 1, Math.max(0, focusIdx + delta));
+    const next = nextFocusIndex(items.length, focusIdx, delta);
+    if (next === null) return;
     setFocusIdx(next);
     requestAnimationFrame(() => {
       const id = items[next]?.id;
@@ -459,6 +399,11 @@ function InboxView() {
     };
   }, []);
 
+  // The keyboard handler reads the current items and the current selection,
+  // so it has to see the latest state on every keystroke. The ref keeps it
+  // current without removing and re-adding the listener on every render.
+  const keyHandlerRef = React.useRef<(e: KeyboardEvent) => void>(() => {});
+
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -551,9 +496,16 @@ function InboxView() {
           break;
       }
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    keyHandlerRef.current = onKey;
   });
+
+  React.useEffect(() => {
+    function listener(e: KeyboardEvent) {
+      keyHandlerRef.current(e);
+    }
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">

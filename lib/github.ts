@@ -1,5 +1,5 @@
 function apiBase(): string {
-  return process.env.GHN_API_BASE ?? "https://api.github.com";
+  return apiBases().restBase;
 }
 
 export interface ApiBases {
@@ -74,6 +74,14 @@ function envToken(): string | null {
 }
 
 async function readToken(): Promise<string | null> {
+  // An explicit override wins over everything else. An explicitly empty
+  // value means "no token at all" and never falls back, which is how the
+  // test suite guarantees it cannot reach a real GitHub account on a
+  // machine where `gh` is authenticated.
+  if ("GHN_TOKEN" in process.env) {
+    const override = process.env.GHN_TOKEN?.trim() ?? "";
+    return override || null;
+  }
   const fromEnv = envToken();
   if (fromEnv) return fromEnv;
   try {
@@ -88,6 +96,17 @@ async function readToken(): Promise<string | null> {
 
 export async function getStoredToken(): Promise<string | null> {
   return readToken();
+}
+
+/**
+ * Whether the credential was explicitly switched off.
+ *
+ * The test suite sets an empty token so that no check can reach a real
+ * GitHub account. Code that falls back to the local `gh` helper has to
+ * honour that, otherwise the fallback walks straight past the switch.
+ */
+export function tokenDisabled(): boolean {
+  return "GHN_TOKEN" in process.env && !process.env.GHN_TOKEN?.trim();
 }
 
 export async function probeConnection(): Promise<{
@@ -321,12 +340,12 @@ export function subjectApiUrlFromHtml(htmlUrl: string): string | null {
     /^https:\/\/github\.com\/([^/]+\/[^/]+)\/security\/dependabot\/(\d+)/
   );
   if (dependabot?.[1] && dependabot?.[2]) {
-    return `https://api.github.com/repos/${dependabot[1]}/dependabot/alerts/${dependabot[2]}`;
+    return `${apiBase()}/repos/${dependabot[1]}/dependabot/alerts/${dependabot[2]}`;
   }
   const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
   if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
   const kind = match[2] === "pull" ? "pulls" : "issues";
-  return `https://api.github.com/repos/${match[1]}/${kind}/${match[3]}`;
+  return `${apiBase()}/repos/${match[1]}/${kind}/${match[3]}`;
 }
 
 export interface DependabotAlertCoords {
@@ -506,7 +525,7 @@ export async function fetchSubjectContent(
 
 export function subjectCommentsUrlFromHtml(htmlUrl: string): string | null {  const match = htmlUrl.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(pull|issues)\/(\d+)/);
   if (!match?.[1] || !match?.[3]) return null;
-  return `https://api.github.com/repos/${match[1]}/issues/${match[3]}/comments`;
+  return `${apiBase()}/repos/${match[1]}/issues/${match[3]}/comments`;
 }
 
 export interface ThreadComment {
@@ -610,7 +629,7 @@ export async function fetchWorkflowRuns(
   input: { owner: string; repo: string; branch: string | null; apiBase?: string }
 ): Promise<WorkflowRun[]> {
   try {
-    const base = input.apiBase ?? "https://api.github.com";
+    const base = input.apiBase ?? apiBase();
     const params = new URLSearchParams({ per_page: "20" });
     if (input.branch) params.set("branch", input.branch);
     const res = await fetch(
@@ -656,7 +675,11 @@ export async function fetchWorkflowRuns(
 }
 
 export function parsePullCoords(apiUrl: string): PullCoords | null {
-  const match = apiUrl.match(/^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)/);
+  // Host agnostic on purpose: the API base is overridable, so the check
+  // summary has to work against the local GitHub stand-in too.
+  const match = apiUrl.match(
+    /^(?:https?:\/\/[^/]+)?\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)/
+  );
   if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
   return { owner: match[1], repo: match[2], number: Number.parseInt(match[3], 10) };
 }
@@ -672,7 +695,7 @@ export async function fetchCheckSummary(
   input: { owner: string; repo: string; sha: string; apiBase?: string }
 ): Promise<CheckSummary | null> {
   try {
-    const base = input.apiBase ?? "https://api.github.com";
+    const base = input.apiBase ?? apiBase();
     const headers = baseHeaders(token);
     const [statusRes, runsRes] = await Promise.all([
       fetch(

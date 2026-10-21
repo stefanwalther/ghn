@@ -13,6 +13,9 @@ data/*.db-shm
 data/*.db-wal
 tsconfig.tsbuildinfo
 coverage/
+playwright-report/
+test-results/
+blob-report/
 .next-env.d.ts
 # >>> speckit.install managed block (do not edit between markers)
 # Agent local state: credentials, caches, transient artifacts.

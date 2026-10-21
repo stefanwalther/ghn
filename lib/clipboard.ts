@@ -16,10 +16,14 @@ export async function copyText(text: string): Promise<boolean> {
     area.style.position = "fixed";
     area.style.opacity = "0";
     document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(area);
-    return ok;
+    try {
+      area.select();
+      return document.execCommand("copy");
+    } finally {
+      // The textarea has to go even when the copy command throws, or it
+      // stays in the document until the page reloads.
+      document.body.removeChild(area);
+    }
   } catch {
     return false;
   }
