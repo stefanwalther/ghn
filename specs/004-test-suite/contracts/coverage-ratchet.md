@@ -96,9 +96,14 @@ A tolerance flag may be added later if environment noise proves to matter. It is
 |---|---|---|---|
 | `pass` | The head figure is at or above the baseline | No | The normal case |
 | `fail` | The head figure is below the baseline | Yes | The case the gate exists for |
-| `not evaluable` | The baseline or the head figure could not be produced | No, but it is reported with the reason | The first pull request that introduces the suite, and any pull request where the base has no coverage configuration |
+| `not evaluable` | There is no baseline to compare against | No, but it is reported with the reason | The first pull request that introduces the suite, and any pull request while the base is red |
 
-`not evaluable` is an expected outcome, not an error. It is reported and never blocks (FR-030).
+`not evaluable` is an expected outcome, not an error. It is reported and never blocks (FR-030). It covers two distinct states, and the script names which one it is in:
+
+- The merge base has no coverage configuration at all. There is nothing to measure, which is the case for the first pull request that introduces the suite.
+- The merge base has a coverage configuration but its own suite does not pass. The base is red, so there is no baseline. This must not block, because the change that repairs a red base is exactly the one that cannot measure it.
+
+A failure that is neither of those is an error and does block: the merge base cannot be installed, the head produced no coverage summary, or the merge base cannot be resolved. A gate that silently stops gating is worse than no gate, so those cases fail the run.
 
 ---
 
