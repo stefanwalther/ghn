@@ -1,7 +1,10 @@
 .DEFAULT_GOAL := help
 
 BUN ?= bun
-PORT ?= 21120
+# Per-workspace port (bg-style slot allocation via
+# scripts/resolve-dev-runtime.sh, range 21120-21219, slot 0 reserved for
+# non-worktree checkouts). Explicit PORT=... in the environment wins.
+PORT ?= $(shell ./scripts/resolve-dev-runtime.sh --port-only 2>/dev/null || echo 21120)
 export PORT
 
 # Next.js emits .next/ (not $(BUILD_DIR)); clean removes both the canonical
@@ -59,14 +62,14 @@ test-build-version: ## Verify version computation (manifest + git SHA + .dirty, 
 	test "$$($(MAKE) --no-print-directory version VERSION="9.8.7")" = "9.8.7"; \
 	! $(MAKE) --no-print-directory version VERSION_FILE="$$tmp/absent.json" >/dev/null 2>&1
 
-dev: install ## Run the dev server with hot reload in the foreground (port 21120, override with PORT=... for worktrees).
-	$(BUN) --bun next dev -p $(PORT)
+dev: install ## Run the dev server with hot reload in the foreground (per-workspace port via resolve-dev-runtime.sh; explicit PORT wins).
+	$(BUN) run dev
 
 web-open: ## Ensure the web UI is running, starting it when down, then open it.
 	scripts/ensure-web.sh
 
-web-serve: build ## Build and serve production in the foreground (port 21120, override with PORT=...).
-	$(BUN) --bun next start -p $(PORT)
+web-serve: build ## Build and serve production in the foreground (per-workspace port via resolve-dev-runtime.sh; explicit PORT wins).
+	$(BUN) run start
 
 web-dev: dev ## Deprecated alias for dev (foreground dev server).
 

@@ -1,31 +1,90 @@
-# ghn
+# ghn - the better GitHub notification UI
 
-## Configuration
+Clear 20 GitHub notifications in under 5 minutes with half the clicks.
 
-The database location is configurable so it can live in a shared folder (e.g. Dropbox).
+Zero friction. If `gh` works, ghn works. No tokens, no env files.
 
-Note: SQLite supports only one writer at a time. Let Dropbox finish syncing
-before opening the app on another machine.
+## Why ghn
 
-Config file (deployed via dotfiles):
+- **Fewer clicks** - bulk select and clear 20 threads in one action. Full keyboard flow, no mouse needed.
+- **Quicker insights** - no more jumping to a PR or Action to decide. Thread body, checks, and Dependabot detail show inline in the drawer.
+- **Clever filtering** - slice by repo, type, age, and read or done state. The queue narrows to what matters now.
+- **Clever snoozing** - daily or weekly digests per repo, plus snooze for an hour, this evening, or next week.
+- **No API key wrangling** - reuses your `gh` login. No tokens to copy, no env files to maintain.
 
-- `$XDG_CONFIG_HOME/ghn/config.json`, otherwise `~/.config/ghn/config.json`
-- Override the config file location with `GHN_CONFIG_PATH`
+## Get going
 
-`config.json` format (see `config.example.json`):
+Needs Bun and an authenticated `gh`, nothing else. Tested on macOS and Linux.
 
-```json
-{
-  "databasePath": "~/Dropbox/ghn/ghn.db"
-}
+```bash
+git clone https://github.com/stefanwalther/ghn.git
+cd ghn
+bun install
+bun run dev
+# open http://localhost:21120
 ```
 
-Resolution order for the database path:
+1. Press refresh to sync from GitHub.
+2. Clear the queue: filter by repo or reason, select with `x`, press `e` for done.
+3. Silence one noisy repo in `/repos` by setting it to weekly.
 
-1. `GHN_DB_PATH` environment variable (highest precedence)
-2. `databasePath` (or `dbPath` alias) from the config file
-3. Default: `./data/ghn.db` relative to where the app runs
+Trying it out? `bun run db:seed` loads demo data instead of syncing.
 
-Path values support `~`, `$VAR`, and `${VAR}` expansion. Relative paths
-resolve against the current working directory. Parent directories are created
-automatically.
+## Screenshots
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/inbox-dark.png">
+  <img src="docs/screenshots/inbox.png" alt="Inbox with bulk triage and type filters">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/inbox-selected-dark.png">
+  <img src="docs/screenshots/inbox-selected.png" alt="Three threads selected with bulk Done and Unsubscribe actions">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/inbox-drawer-dark.png">
+  <img src="docs/screenshots/inbox-drawer.png" alt="Preview drawer with merged PR body and passing checks inline">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/repos-dark.png">
+  <img src="docs/screenshots/repos.png" alt="Per-repo digest rhythms and snooze">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/rate-limits-dark.png">
+  <img src="docs/screenshots/rate-limits.png" alt="Live GitHub API rate-limit buckets">
+</picture>
+
+## How it works
+
+Three pages, one local SQLite database, all sourced from the GitHub Notifications API.
+
+- `/` - unified inbox with main flow plus collapsed digest section
+- `/repos` - per-repo rhythm (immediate, weekly, biweekly, monthly) plus snooze
+- `/rate-limits` - live API quota from response headers
+
+Press `?` in the app for all keyboard shortcuts.
+
+## ghn vs github.com/notifications
+
+| | GitHub | ghn |
+|---|---|---|
+| Time to clear 20 items | 10 plus minutes of per-thread opens | Under 5 minutes from one list |
+| Watched repo noise | Every update interrupts | Hidden until the digest is due |
+| Return from a thread | Filter and scroll position lost | Same filter and position kept |
+| Setup and auth | Token hunt and expiry | Existing `gh` login, nothing to store |
+| Sync stalls | Silent or cryptic | Labeled stale state plus quota view |
+
+## Development
+
+See [docs/development.md](docs/development.md) for gates, commands, and layout.
+
+## Contributing
+
+Issues and small PRs welcome. See [open issues](https://github.com/stefanwalther/ghn/issues) for starters. CI runs typecheck, lint, and unit tests on every PR.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

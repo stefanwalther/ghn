@@ -14,7 +14,8 @@
 
 set -u
 
-PORT="${PORT:-21120}"
+PORT="${PORT:-}"
+WEB_PORT="${WEB_PORT:-}"
 OPEN=1
 MODE="dev"
 
@@ -26,7 +27,7 @@ Ensure the ghn web UI is running locally, then open it.
 
 Options:
   --prod           Start the production server (build + start) instead of dev.
-  --port N         Listen on port N (default: 21120, or \$PORT).
+  --port N         Listen on port N (default: per-workspace port, or \$PORT).
   --no-open        Ensure running, but do not open the browser.
   -h, --help       Print this help and exit.
 
@@ -36,6 +37,11 @@ Behavior:
      starts the server in the background (dev by default), waits
      until it answers, then opens it.
 
+Port allocation (bg-style):
+  Each checkout resolves a stable per-workspace port via
+  scripts/resolve-dev-runtime.sh (range 21120-21219, slot 0 reserved
+  for non-worktree checkouts). Explicit --port or PORT/WEB_PORT wins.
+
 Examples:
   scripts/ensure-web.sh
   scripts/ensure-web.sh --prod
@@ -43,24 +49,48 @@ Examples:
 EOF
 }
 
+PORT_FROM_CLI=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --prod) MODE="prod"; shift ;;
-    --port) PORT="${2:?--port needs a value}"; shift 2 ;;
-    --port=*) PORT="${1#--port=}"; shift ;;
+    --port) PORT_FROM_CLI="${2:?--port needs a value}"; shift 2 ;;
+    --port=*) PORT_FROM_CLI="${1#--port=}"; shift ;;
     --no-open) OPEN=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ensure-web.sh: unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${APP_DIR}" || exit 1
+
+# Explicit --port wins over the environment; the resolver respects either.
+if [ -n "${PORT_FROM_CLI}" ]; then
+  PORT="${PORT_FROM_CLI}"
+  WEB_PORT="${PORT_FROM_CLI}"
+  export PORT WEB_PORT
+else
+  # Re-export only when set so the resolver can tell "explicit" from "auto".
+  if [ -n "${PORT}" ]; then export PORT; fi
+  if [ -n "${WEB_PORT}" ]; then export WEB_PORT; fi
+fi
+
+# Resolve the per-workspace port (bg-style). Fails when the slot range is
+# exhausted so concurrent sessions never silently share a port.
+runtime_exports="$(./scripts/resolve-dev-runtime.sh)" || {
+  echo "ensure-web.sh: failed to resolve a free port (range exhausted or git lookup failed)." >&2
+  exit 1
+}
+eval "${runtime_exports}"
+PORT="${WEB_PORT}"
+export PORT
+
 case "$PORT" in
   ''|*[!0-9]*) echo "ensure-web.sh: invalid port: $PORT" >&2; exit 1 ;;
 esac
 
-APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 URL="http://localhost:${PORT}/"
-LOG_FILE="$HOME/Library/Logs/ghn-web-server.log"
+LOG_FILE="$HOME/Library/Logs/ghn-web-server-${PORT}.log"
 
 open_url() {
   if command -v open >/dev/null 2>&1; then
