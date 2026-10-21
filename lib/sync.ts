@@ -1,5 +1,5 @@
-import { eq, inArray, sql } from "drizzle-orm";
-import { notifications, repositories, syncState } from "@/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { notifications, repositories, syncState, writebackQueue } from "@/db/schema";
 import type { Db } from "@/db/client";
 import { computeNextDueAt } from "@/lib/digest";
 import type { GhThread } from "@/lib/github";
@@ -238,4 +238,17 @@ export async function applyRemoteDone(
 
 export async function markRepoUnreachable(db: Db, repoId: string): Promise<void> {
   await db.update(repositories).set({ unreachable: 1 }).where(eq(repositories.id, repoId));
+}
+
+export async function reapplyPendingReads(db: Db): Promise<{ restored: number }> {
+  const queued = await db
+    .select({ threadId: writebackQueue.threadId, action: writebackQueue.action })
+    .from(writebackQueue);
+  const readIds = queued.filter((r) => r.action === "read").map((r) => r.threadId);
+  if (readIds.length === 0) return { restored: 0 };
+  await db
+    .update(notifications)
+    .set({ isRead: 1 })
+    .where(and(inArray(notifications.id, readIds), eq(notifications.localUnread, 0)));
+  return { restored: readIds.length };
 }

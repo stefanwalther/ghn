@@ -236,19 +236,19 @@ describe("the unsubscribe action", () => {
 });
 
 describe("the remote failure path", () => {
-  test("a failing done call leaves the notification open and queues the work", async () => {
+  test("a failing done call hides the notification locally and queues the work", async () => {
     standIn.setScenario("/notifications/threads/n_001", { status: 500 });
     const { status, body } = await bulk({ ids: ["n_001"], action: "done" });
     expect(status).toBe(200);
     expect(body).toMatchObject({
-      updated: 0,
+      updated: 1,
       action: "done",
       remote: "partial",
       queued: 1,
       error: "unknown",
     });
 
-    expect((await row("n_001"))?.isDone).toBe(0);
+    expect((await row("n_001"))?.isDone).toBe(1);
     const queued = await queueRows();
     expect(queued).toHaveLength(1);
     expect(queued[0]?.threadId).toBe("n_001");
@@ -283,11 +283,12 @@ describe("the remote failure path", () => {
     standIn.setScenario("/notifications/threads/n_001", { status: 401 });
     const { body } = await bulk({ ids: ["n_001"], action: "done" });
     expect(body).toMatchObject({
-      updated: 0,
+      updated: 1,
       remote: "partial",
       queued: 1,
       error: "auth",
     });
+    expect((await row("n_001"))?.isDone).toBe(1);
     const queued = await queueRows();
     expect(queued[0]?.lastError).toBe("auth");
   });
@@ -304,14 +305,14 @@ describe("the write-back queue fallback", () => {
     const { status, body } = await bulk({ ids: ["n_001"], action: "done" });
     expect(status).toBe(200);
     expect(body).toMatchObject({
-      updated: 0,
+      updated: 1,
       action: "done",
       remote: "partial",
       queued: 1,
       error: "auth",
     });
     expect(standIn.requests).toHaveLength(0);
-    expect((await row("n_001"))?.isDone).toBe(0);
+    expect((await row("n_001"))?.isDone).toBe(1);
 
     const queued = await queueRows();
     expect(queued).toHaveLength(1);
@@ -362,6 +363,6 @@ describe("the write-back queue fallback", () => {
       .select()
       .from(notifications)
       .where(inArray(notifications.id, ["n_001", "n_002"]));
-    expect(rows.every((r) => r.isDone === 0)).toBe(true);
+    expect(rows.every((r) => r.isDone === 1)).toBe(true);
   });
 });

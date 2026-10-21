@@ -328,9 +328,9 @@ function InboxView() {
       if (!res.ok) throw new Error("bulk failed");
       const body = await res.json().catch(() => null);
       await load();
-      // A partial remote failure queues write-backs server-side while the
-      // affected rows stay (or return) in the inbox. Say so explicitly:
-      // without this, triage looks like a silent no-op.
+      // A partial remote failure queues write-backs server-side; the rows
+      // stay hidden locally while the retry runs automatically. Say so
+      // explicitly: without this, triage looks like a silent no-op.
       const queued = typeof body?.queued === "number" ? body.queued : 0;
       const updated = typeof body?.updated === "number" ? body.updated : targets.length;
       const queuedNotice = describeBulkResult(action, {

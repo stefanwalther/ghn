@@ -11,7 +11,7 @@ describe("the write-back queue", () => {
     await enqueueWriteback(db, "7001", "done", null, 1000);
 
     const drained = await drainQueue(db, async () => ({ ok: false as const }));
-    expect(drained).toEqual({ processed: 1, succeeded: 0, failed: 1 });
+    expect(drained).toEqual({ processed: 1, succeeded: 0, failed: 1, succeededItems: [] });
 
     const rows = await db.select().from(schema.writebackQueue);
     expect(rows[0]?.attempts).toBe(1);
@@ -37,7 +37,12 @@ describe("the write-back queue", () => {
     await enqueueWriteback(db, "7003", "unsubscribe", null, 1000);
 
     const drained = await drainQueue(db, async () => ({ ok: true as const }));
-    expect(drained).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+    expect(drained).toEqual({
+      processed: 1,
+      succeeded: 1,
+      failed: 0,
+      succeededItems: [{ threadId: "7003", action: "unsubscribe" }],
+    });
     expect(await queueDepth(db)).toBe(0);
   });
 
@@ -45,6 +50,6 @@ describe("the write-back queue", () => {
   test("an empty queue drains to nothing", async () => {
     const db = createMemoryDb().db;
     const drained = await drainQueue(db, async () => ({ ok: true as const }));
-    expect(drained).toEqual({ processed: 0, succeeded: 0, failed: 0 });
+    expect(drained).toEqual({ processed: 0, succeeded: 0, failed: 0, succeededItems: [] });
   });
 });
