@@ -5,17 +5,17 @@ export interface ShortcutDef {
 }
 
 export const SHORTCUTS: ShortcutDef[] = [
-  { key: "j / k", label: "Move down / up", description: "Move focus between rows, or to the next / previous thread when the drawer is open" },
-  { key: "[ / ]", label: "Prev / next in drawer", description: "Jump to the previous / next thread while the drawer is open" },
+  { key: "j / k", label: "Move down / up", description: "Move focus between rows, or to the next / previous thread when details are open" },
+  { key: "[ / ]", label: "Prev / next in details", description: "Jump to the previous / next thread while details are open" },
   { key: "x", label: "Select", description: "Toggle the focused row" },
-  { key: "e", label: "Done", description: "Mark selection done (or the focused row)" },
+  { key: "d", label: "Done", description: "Mark selection done (or the focused row)" },
   { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row)" },
   { key: "u", label: "Unread", description: "Mark selection unread (or the focused row)" },
   { key: "r", label: "Read", description: "Mark selection read (or the focused row)" },
   { key: "s", label: "Sync", description: "Refresh selection from GitHub (or the focused row)" },
   { key: "o", label: "Open", description: "Open the focused thread in a new tab" },
   { key: "c", label: "Copy", description: "Copy the focused thread link" },
-  { key: "d", label: "Drawer", description: "Open the focused thread in the side drawer" },
+  { key: "Shift+D", label: "Details", description: "Open the focused thread details in the side panel" },
   { key: "a", label: "All", description: "Select or clear all visible rows" },
   { key: "Cmd+K", label: "Search", description: "Search threads, repos, commands, and filters" },
   { key: "Cmd+B", label: "Sidebar", description: "Show or hide the main menu" },

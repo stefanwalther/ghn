@@ -230,7 +230,7 @@ describe("ItemMenu", () => {
     const menu = screen.getByRole("menu", { name: "Actions for Fix flaky login redirect" });
     const items = within(menu).getAllByRole("menuitem").map((el) => el.textContent);
     expect(items.join(" ")).toContain("Open source");
-    expect(items.join(" ")).toContain("Open in drawer");
+    expect(items.join(" ")).toContain("Open details");
     expect(items.join(" ")).toContain("Copy link");
     expect(items.join(" ")).toContain("Sync this item");
     expect(items.join(" ")).toContain("Mark as done");
@@ -602,7 +602,7 @@ describe("BulkBar", () => {
   test("shows the keyboard hints when they are enabled", () => {
     renderBar({ showHints: true });
 
-    expect(screen.getByText("E")).toBeInTheDocument();
+    expect(screen.getByText("D")).toBeInTheDocument();
     expect(screen.getByText("⇧U")).toBeInTheDocument();
     expect(screen.getByText("R")).toBeInTheDocument();
     expect(screen.getByText("U")).toBeInTheDocument();

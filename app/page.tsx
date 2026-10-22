@@ -522,7 +522,7 @@ function InboxView() {
         case "x":
           if (activeId) toggle(activeId);
           break;
-        case "e":
+        case "d":
           if (selected.size > 0) apply("done");
           else if (activeId) apply("done", [activeId]);
           break;
@@ -549,7 +549,8 @@ function InboxView() {
           }
           break;
         }
-        case "d": {
+        case "D": {
+          if (!e.shiftKey) break;
           if (drawerOpen) break;
           const item = focusIdx !== null ? items[focusIdx] : undefined;
           if (item) openDrawer(item);
