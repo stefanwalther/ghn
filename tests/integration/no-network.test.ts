@@ -73,7 +73,7 @@ beforeEach(async () => {
   blocked.length = 0;
   standIn = await startGitHubStandIn({ token: TOKEN });
   standIn.setThreads(buildSeedThreads(standIn.url, NOW));
-  for (const [path, payload] of buildSeedSubjects(standIn.url, NOW)) {
+  for (const [path, payload] of buildSeedSubjects(NOW)) {
     standIn.setSubject(path, payload);
   }
   restoreEnv = withEnv({

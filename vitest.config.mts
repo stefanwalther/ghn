@@ -34,6 +34,9 @@ export default defineConfig({
           // The dataset's calendar filters are local-time based, so the
           // timezone is pinned to keep the counts identical everywhere.
           env: { TZ: "UTC" },
+          // The unit layer must not inherit a credential from the
+          // environment.
+          setupFiles: ["./tests/support/unit-setup.ts"],
           include: ["tests/unit/**/*.test.{ts,tsx}"],
         },
       },

@@ -24,12 +24,15 @@ if (!path) {
 }
 
 // The end-to-end suite must never touch the application's own database.
-// The comparison is against the location the application resolves without
-// the override, so the guard cannot compare the path with itself.
+// Both sides are resolved before they are compared, so a relative path or a
+// redundant segment cannot slip past the guard.
+const resolved = resolveDatabasePath({
+  env: { ...process.env, GHN_DB_PATH: path },
+});
 const configured = resolveDatabasePath({
   env: { ...process.env, GHN_DB_PATH: undefined },
 });
-if (path === configured) {
+if (resolved === configured) {
   throw new Error(
     "GHN_DB_PATH points at the application's own database. The end-to-end suite must never touch it."
   );

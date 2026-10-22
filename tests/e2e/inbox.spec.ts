@@ -34,10 +34,9 @@ const idsUpTo = (last: number) =>
  *
  * "This year" is the exception worth naming. The instant the contract pins
  * (`2026-01-15T12:00:00Z`) is only two weeks into the year, so "This year"
- * covers the same rows as "Last 14 days" here. The dataset's own frozen
- * epoch (`lib/seed-data.ts` FROZEN_EPOCH, `2026-06-15T12:00:00Z`) would put
- * 26 rows in this bucket instead of 19, and would leave no item in the gap
- * between "This year" and "Older than a year".
+ * covers the same rows as "Last 14 days" here. Seven visible items sit in
+ * the gap between "This year" and "Older than a year", which is the
+ * application's own filter behaviour and not a property of the dataset.
  */
 const AGE_CASES = [
   { value: "24h", label: "Last 24 hours", ids: idsUpTo(7) },

@@ -262,10 +262,7 @@ export function seedSubjectPath(item: SeedNotification): string {
  * with the same default would silently reset both, which is why the payload
  * has to be per item.
  */
-export function buildSeedSubjects(
-  apiBase: string,
-  now: number
-): Map<string, unknown> {
+export function buildSeedSubjects(now: number): Map<string, unknown> {
   const subjects = new Map<string, unknown>();
   for (const item of buildSeedNotifications(now)) {
     const path = seedSubjectPath(item);
@@ -280,7 +277,6 @@ export function buildSeedSubjects(
       head: { sha: "0123456789abcdef0123456789abcdef01234567" },
     });
   }
-  void apiBase;
   return subjects;
 }
 

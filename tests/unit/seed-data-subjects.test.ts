@@ -42,7 +42,7 @@ describe("the seed subject payloads", () => {
   // cover every item.
   test("there is one payload per item", () => {
     const items = buildSeedNotifications(EPOCH);
-    const subjects = buildSeedSubjects("https://api.example.test", EPOCH);
+    const subjects = buildSeedSubjects(EPOCH);
     expect(subjects.size).toBe(items.length);
   });
 
@@ -50,7 +50,7 @@ describe("the seed subject payloads", () => {
   // the merged flag and the state out of it.
   test("the payload carries the item's own state and merged flag", () => {
     const items = buildSeedNotifications(EPOCH);
-    const subjects = buildSeedSubjects("https://api.example.test", EPOCH);
+    const subjects = buildSeedSubjects(EPOCH);
 
     for (const item of items) {
       const payload = subjects.get(seedSubjectPath(item)) as {
@@ -68,7 +68,7 @@ describe("the seed subject payloads", () => {
 
   // The payloads are keyed by the path the subject api url points at.
   test("the payloads are keyed by the subject path", () => {
-    const subjects = buildSeedSubjects("https://api.example.test", EPOCH);
+    const subjects = buildSeedSubjects(EPOCH);
     expect(subjects.has("/repos/acme/web/pulls/1")).toBe(true);
   });
 });

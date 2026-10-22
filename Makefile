@@ -31,10 +31,13 @@ version: ## Print the computed release version (manifest + git SHA + .dirty).
 build: install ## Install deps and build the production Next.js bundle (.next/).
 	$(BUN) run build
 
-check: fmt-check lint-check test test-integration test-component test-help test-build-version ## Run the local verification gate (test-e2e stays out).
+check: fmt-check lint-check test-fast test-help test-build-version ## Run the local verification gate (test-e2e stays out).
 
 test: ## Run the unit suite only (vitest run --project unit). No lint, no build, no infra.
 	$(BUN) run test:unit
+
+test-fast: ## Run the unit, integration and component layers in one pass.
+	$(BUN) run test:fast
 
 test-integration: ## Run the integration suite (request handlers, database and GitHub client together).
 	$(BUN) run test:integration

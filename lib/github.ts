@@ -366,8 +366,10 @@ export interface DependabotAlertCoords {
 }
 
 export function parseDependabotAlertCoordsFromApi(apiUrl: string): DependabotAlertCoords | null {
+  // Host agnostic on purpose: the API base is overridable, and this parser
+  // has to recognise the url the configured base produces.
   const match = apiUrl.match(
-    /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/dependabot\/alerts\/(\d+)/
+    /^(?:https?:\/\/[^/]+)?(?:\/api\/v3)?\/repos\/([^/]+)\/([^/]+)\/dependabot\/alerts\/(\d+)/
   );
   if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
   return { owner: match[1], repo: match[2], number: Number.parseInt(match[3], 10) };

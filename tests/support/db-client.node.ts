@@ -1,7 +1,6 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import * as schema from "@/db/schema";
 import { ensureSchema } from "@/db/ensure-schema";
 import type { Db } from "@/db/client";
@@ -88,11 +87,31 @@ export function createMemoryDb(): TestDb {
  *
  * It never falls back to the application's own database file. A test that
  * opened the real database would be able to delete the maintainer's inbox.
+ *
+ * The default is an in-memory database. A file would leave one database per
+ * test file behind in the temporary directory, because a worker that is
+ * killed rather than closed never runs its cleanup.
  */
-export const TEST_DB_PATH: string =
-  process.env.GHN_DB_PATH ?? join(tmpdir(), `ghn-test-${process.pid}.db`);
+export const TEST_DB_PATH: string = process.env.GHN_DB_PATH ?? ":memory:";
 
 const instance = createDb(TEST_DB_PATH);
+
+// The handle is closed when the worker exits.
+process.once("exit", () => {
+  try {
+    instance.sqlite.close();
+  } catch {
+    // The handle may already be closed.
+  }
+  if (TEST_DB_PATH === ":memory:") return;
+  for (const suffix of ["", "-wal", "-shm"]) {
+    try {
+      rmSync(`${TEST_DB_PATH}${suffix}`, { force: true });
+    } catch {
+      // The file may already be gone.
+    }
+  }
+});
 
 /** The database the aliased `@/db/client` resolves to inside a test. */
 export const db: Db = instance.db;

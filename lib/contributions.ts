@@ -1,3 +1,6 @@
+import { apiBases, tokenDisabled } from "@/lib/github";
+import { nowMs } from "@/lib/clock";
+
 const QUERY = `query($login: String!, $from: DateTime!, $to: DateTime!) {
   user(login: $login) {
     contributionsCollection(from: $from, to: $to) {
@@ -30,9 +33,6 @@ export function isFresh(
   if (date !== today) return true;
   return now - fetchedAt < ttlMs;
 }
-
-import { apiBases, tokenDisabled } from "@/lib/github";
-import { nowMs } from "@/lib/clock";
 
 interface CalendarDay {
   date?: unknown;
