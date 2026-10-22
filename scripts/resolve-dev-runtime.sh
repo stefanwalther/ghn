@@ -128,7 +128,11 @@ port_owned_by_workspace() {
   fi
 
   local holders
-  holders="$(lsof -ti "tcp:${port}" 2>/dev/null | sort -u || true)"
+  # LISTEN-only: established client connections (e.g. an open browser tab
+  # pointed at the dev server) must not mark the slot as foreign. Without
+  # the LISTEN filter a running server plus an open tab reads as "held by
+  # someone else" and the resolver wrongly reports the range exhausted.
+  holders="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
   if [[ -z "$holders" ]]; then
     return 1
   fi

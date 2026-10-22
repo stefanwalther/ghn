@@ -12,6 +12,8 @@
 # - App already running -> just opens it.
 # - App not running     -> installs deps when stale, starts the server in
 #                          the background, waits until it answers, then opens it.
+# - App running stale   -> restarts it (new commit, changed deps, or
+#                          dev/prod switch), then opens it.
 
 set -u
 
