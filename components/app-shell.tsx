@@ -8,11 +8,12 @@ import { ContributionsChip } from "@/components/contributions-chip";
 import { BrandMark } from "@/components/brand-mark";
 import { DemoBanner } from "@/components/demo-banner";
 import { CommandPalette } from "@/components/search/command-palette";
+import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Kbd } from "@/components/ui/kbd";
 import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/app-meta";
 import { cn } from "@/lib/utils";
-import { isAltHintKey, isToggleSidebarEvent } from "@/lib/shortcuts";
+import { isAltHintKey, isEditableTarget, isToggleSidebarEvent } from "@/lib/shortcuts";
 
 const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(true);
   const [showHints, setShowHints] = React.useState(false);
+  const [helpOpen, setHelpOpen] = React.useState(false);
 
   React.useEffect(() => {
     try {
@@ -112,6 +114,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("ghn:toggle-sidebar", onToggle);
     return () => window.removeEventListener("ghn:toggle-sidebar", onToggle);
   }, []);
+
+  React.useEffect(() => {
+    function onShowHelp() {
+      setHelpOpen(true);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (helpOpen) setHelpOpen(false);
+        return;
+      }
+      if (isEditableTarget(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "?") setHelpOpen(true);
+    }
+    window.addEventListener("ghn:show-help", onShowHelp);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("ghn:show-help", onShowHelp);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [helpOpen]);
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -236,10 +259,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Search className="h-4 w-4" aria-hidden />
           </button>
           <ContributionsChip />
+          <button
+            type="button"
+            aria-label="Show keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+            onClick={() => setHelpOpen(true)}
+            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center text-sm font-medium">?</span>
+          </button>
           <ThemeSwitcher />
         </header>
         <main className="min-w-0 flex-1 px-4 pb-10">{children}</main>
       </div>
+      {helpOpen ? <ShortcutsHelp onClose={() => setHelpOpen(false)} /> : null}
     </div>
   );
 }

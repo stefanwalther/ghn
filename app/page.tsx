@@ -10,10 +10,8 @@ import { InboxFilters } from "@/components/inbox/inbox-filters";
 import { ItemDrawer } from "@/components/inbox/item-drawer";
 import type { ItemMenuAction } from "@/components/inbox/item-menu";
 import { NotificationList, type InboxItem } from "@/components/inbox/notification-list";
-import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
-import { Kbd } from "@/components/ui/kbd";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { announceSync } from "@/lib/sync-events";
 import { copyText } from "@/lib/clipboard";
@@ -69,7 +67,6 @@ function InboxView() {
   const [repoFacets, setRepoFacets] = React.useState<RepoFacet[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
-  const [helpOpen, setHelpOpen] = React.useState(false);
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -426,9 +423,6 @@ function InboxView() {
       // last-opened and navigated to the repo filter, so the existing
       // scroll-restoration effect brings it into view after load.
     }
-    function onShowHelp() {
-      setHelpOpen(true);
-    }
     function onRefresh() {
       void refreshRef.current();
     }
@@ -437,12 +431,10 @@ function InboxView() {
       window.scrollTo({ top: 0, behavior: "auto" });
     }
     window.addEventListener("ghn:open-thread", onOpenThread);
-    window.addEventListener("ghn:show-help", onShowHelp);
     window.addEventListener("ghn:refresh", onRefresh);
     window.addEventListener("ghn:scroll-top", onScrollTop);
     return () => {
       window.removeEventListener("ghn:open-thread", onOpenThread);
-      window.removeEventListener("ghn:show-help", onShowHelp);
       window.removeEventListener("ghn:refresh", onRefresh);
       window.removeEventListener("ghn:scroll-top", onScrollTop);
     };
@@ -479,13 +471,15 @@ function InboxView() {
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        // The shortcuts dialog now lives in the global AppShell. When it is
+        // open, leave selection and drawer alone so Escape only closes help.
+        if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
         if (drawerItem) setDrawerItem(null);
-        else if (helpOpen) setHelpOpen(false);
         else setSelected(new Set());
         return;
       }
       if (isEditableTarget(e.target)) return;
-      if (helpOpen) return;
+      if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const drawerOpen = drawerItem !== null;
       const activeId = drawerOpen ? drawerItem.id : focusIdx !== null ? items[focusIdx]?.id : undefined;
@@ -564,7 +558,7 @@ function InboxView() {
           toggleAll();
           break;
         case "?":
-          setHelpOpen(true);
+          window.dispatchEvent(new CustomEvent("ghn:show-help"));
           break;
       }
     }
@@ -589,15 +583,6 @@ function InboxView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            title="Keyboard shortcuts (?)"
-            aria-label="Show keyboard shortcuts"
-            onClick={() => setHelpOpen(true)}
-          >
-            {showHints ? <Kbd>?</Kbd> : null} ?
-          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -727,7 +712,6 @@ function InboxView() {
           ) : null}
         </div>
       </div>
-      {helpOpen ? <ShortcutsHelp onClose={() => setHelpOpen(false)} /> : null}
       {drawerItem ? (
         <ItemDrawer
           item={drawerItem}
