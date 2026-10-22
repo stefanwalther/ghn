@@ -104,6 +104,8 @@ make web-open    # start server if down, then open it (bash only)
 | `GHN_CONFIG_PATH` | `$XDG_CONFIG_HOME/ghn/config.json` | Override the config file location |
 | `GHN_TOKEN` | unset | Override the GitHub credential. An empty value means no credential at all, and never falls back to the local `gh` helper |
 | `GHN_NOW` | unset | Freeze the instant the application reads as "now" |
+| `GHN_RELEASES_API_BASE` | `https://api.github.com` | Override for the release check (tests, mocks) |
+| `GHN_DISABLE_UPDATE_CHECK` | unset | Set to `1` to skip the release check and always show the running version |
 
 The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
 
