@@ -19,10 +19,10 @@ const MENU_PADDING = 16;
 function menuItems(item: InboxItem): { value: ItemMenuAction; label: string; hint: string }[] {
   return [
     { value: "open", label: "Open source", hint: "O" },
-    { value: "drawer", label: "Open in drawer", hint: "D" },
+    { value: "drawer", label: "Open details", hint: "⇧D" },
     { value: "copy", label: "Copy link", hint: "C" },
     { value: "sync", label: "Sync this item", hint: "S" },
-    { value: "done", label: "Mark as done", hint: "E" },
+    { value: "done", label: "Mark as done", hint: "D" },
     item.isRead === 0
       ? { value: "read", label: "Mark as read", hint: "R" }
       : { value: "unread", label: "Mark as unread", hint: "U" },

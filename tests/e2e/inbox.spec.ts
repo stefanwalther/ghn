@@ -435,7 +435,7 @@ test.describe("inbox triage", () => {
       )
     ).toEqual([
       "Open source",
-      "Open in drawer",
+      "Open details",
       "Copy link",
       "Sync this item",
       "Mark as done",

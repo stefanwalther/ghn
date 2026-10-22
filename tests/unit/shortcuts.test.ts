@@ -21,7 +21,7 @@ function keyEvent(overrides: Partial<KeyboardEvent>): KeyboardEvent {
 describe("shortcuts", () => {
   test("help lists the core triage keys", () => {
     const keys = SHORTCUTS.map((s) => s.key);
-    for (const k of ["j / k", "x", "e", "Shift+U", "u", "r", "o", "d", "c", "a", "Esc", "?"]) {
+    for (const k of ["j / k", "x", "d", "Shift+U", "u", "r", "o", "Shift+D", "c", "a", "Esc", "?"]) {
       expect(keys).toContain(k);
     }
   });

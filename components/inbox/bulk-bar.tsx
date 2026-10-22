@@ -31,7 +31,7 @@ export function BulkBar({
     <div className="flex min-h-[56px] flex-wrap items-center gap-2 rounded-lg bg-card p-3 shadow-sm">
       <span className="text-sm text-muted-foreground">{selectedCount} selected</span>
       <Button onClick={() => onAction("done")} disabled={busy} size="sm">
-        {showHints ? <Kbd>E</Kbd> : null} Done
+        {showHints ? <Kbd>D</Kbd> : null} Done
       </Button>
       <Button
         onClick={() => onAction("unsubscribe")}
