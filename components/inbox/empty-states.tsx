@@ -26,7 +26,7 @@ export function LoadingRateLimits() {
     <div className="flex flex-col gap-4" role="status" aria-label="Loading rate limits">
       <div className="grid gap-4 md:grid-cols-3" aria-hidden>
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-lg border bg-card p-4 shadow-sm">
+          <div key={i} className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="h-4 w-24 animate-pulse rounded bg-muted" />
             <div className="mt-2 h-3 w-32 animate-pulse rounded bg-muted" />
             <div className="mt-4 h-2 animate-pulse rounded-full bg-muted" />
