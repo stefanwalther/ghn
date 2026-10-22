@@ -91,7 +91,7 @@ that is reported rather than failed.
 bun run dev      # local inbox on http://localhost:21120
 bun run db:seed  # load demo data
 bun run db:push  # explicit schema push, also runs automatically on boot
-make web-open    # start server if down, then open it (bash only)
+make web-open    # ensure the server is running and fresh (restart when stale), then open it
 ```
 
 ## Configuration
