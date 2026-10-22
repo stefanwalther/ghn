@@ -307,6 +307,37 @@ describe("inbox screen", () => {
     expect(await screen.findByText("1 selected")).toBeInTheDocument();
   });
 
+  test("the d key marks the focused row done", async () => {
+    const fetchMock = installFetch();
+    render(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.keyDown(window, { key: "j" });
+    fireEvent.keyDown(window, { key: "d" });
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/notifications/bulk")[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({ ids: ["n_001"], action: "done" });
+  });
+
+  test("Shift+D opens details for the focused row", async () => {
+    installFetch();
+    render(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.keyDown(window, { key: "j" });
+    fireEvent.keyDown(window, { key: "D" });
+    expect(screen.queryByRole("dialog", { name: "Preview drawer" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "D", shiftKey: true });
+    expect(await screen.findByRole("dialog", { name: "Preview drawer" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "D", shiftKey: true });
+    expect(await screen.findByRole("dialog", { name: "Preview drawer" })).toBeInTheDocument();
+  });
+
   test("the item menu copies the source link and says so", async () => {
     installFetch();
     render(<InboxPage />);
