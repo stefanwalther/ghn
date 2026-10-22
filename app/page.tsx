@@ -9,7 +9,7 @@ import { FilterSidebar, type RepoFacet, type TypeFacet } from "@/components/inbo
 import { InboxFilters } from "@/components/inbox/inbox-filters";
 import { ItemDrawer } from "@/components/inbox/item-drawer";
 import type { ItemMenuAction } from "@/components/inbox/item-menu";
-import { NotificationList, type InboxItem } from "@/components/inbox/notification-list";
+import { ListToolbar, NotificationList, type InboxItem } from "@/components/inbox/notification-list";
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
@@ -146,13 +146,6 @@ function InboxView() {
       document.getElementById(`notification-${last}`)?.scrollIntoView({ block: "nearest" });
     }
   }, [status]);
-
-  function prefersReducedMotion(): boolean {
-    return (
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
-  }
 
   React.useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -600,16 +593,6 @@ function InboxView() {
               {inPollWindow ? ` · ${countdownSecs}s` : ""}
             </span>
           ) : null}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSelected(new Set());
-              window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
-            }}
-          >
-            Back to inbox top
-          </Button>
           {lastSyncAt === null ? (
             <Button
               variant="secondary"
@@ -637,13 +620,26 @@ function InboxView() {
         </aside>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <InboxFilters filters={filters} onChange={setFilters} />
-          <BulkBar
-            selectedCount={selected.size}
-            busy={busy}
-            showHints={showHints}
-            onAction={apply}
-            onClear={() => setSelected(new Set())}
-          />
+          <div className="sticky top-2 z-10 flex flex-col gap-2 bg-background pb-2">
+            <BulkBar
+              selectedCount={selected.size}
+              busy={busy}
+              showHints={showHints}
+              onAction={apply}
+              onClear={() => setSelected(new Set())}
+            />
+            {status === "ready" && items.length > 0 ? (
+              <div className="rounded-lg bg-card shadow-sm">
+                <ListToolbar
+                  items={items}
+                  selected={selected}
+                  showHints={showHints}
+                  onToggleAll={toggleAll}
+                  onQuickSelect={quickSelect}
+                />
+              </div>
+            ) : null}
+          </div>
           {notice ? (
             <p role="alert" className="text-xs text-destructive">
               {notice}
@@ -706,6 +702,7 @@ function InboxView() {
           onQuickSelect={quickSelect}
           onMenuAction={menuAction}
           onOpen={(item) => openDrawer(item)}
+          hideToolbar
         />
           ) : null}
           {status === "ready" && collapsed.length > 0 ? (
