@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import InboxPage from "@/app/page";
+import { AppShell } from "@/components/app-shell";
 import type { InboxItem } from "@/components/inbox/notification-list";
 
 /**
@@ -19,6 +20,7 @@ const nav = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: nav.replace, push: nav.push, back: nav.back }),
   useSearchParams: () => nav.params,
+  usePathname: () => "/",
 }));
 
 const firstItem: InboxItem = {
@@ -320,7 +322,11 @@ describe("inbox screen", () => {
 
   test("the question mark opens the shortcuts help", async () => {
     installFetch();
-    render(<InboxPage />);
+    render(
+      <AppShell>
+        <InboxPage />
+      </AppShell>
+    );
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.keyDown(window, { key: "?" });
@@ -369,7 +375,11 @@ describe("inbox screen", () => {
 
   test("the shortcuts help opens from the header and closes with Escape", async () => {
     installFetch();
-    render(<InboxPage />);
+    render(
+      <AppShell>
+        <InboxPage />
+      </AppShell>
+    );
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("button", { name: "Show keyboard shortcuts" }));
