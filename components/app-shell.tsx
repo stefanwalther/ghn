@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ExternalLink, Gauge, Github, Search, Settings2 } from "lucide-react";
+import { Bell, ExternalLink, Gauge, Github, Search, Settings, Settings2 } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
 import { BrandMark } from "@/components/brand-mark";
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
   { href: "/repos", label: "Repositories", icon: Settings2 },
   { href: "/rate-limits", label: "Rate limits", icon: Gauge },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 const GITHUB_NAV = [
@@ -236,7 +237,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ? "Digest settings per repository"
               : pathname === "/rate-limits"
                 ? "GitHub API buckets from response headers"
-                : "Triage with fewer clicks"}
+                : pathname === "/settings"
+                  ? "Database location and GitHub auth status"
+                  : "Triage with fewer clicks"}
           </div>
           <button
             type="button"

@@ -92,6 +92,14 @@ export function staticEntries(): PaletteEntry[] {
       action: { type: "navigate", href: "/rate-limits" },
     },
     {
+      id: "go-settings",
+      section: "go",
+      title: "Go to Settings",
+      subtitle: "/settings",
+      keywords: "go settings database config github auth gh cli",
+      action: { type: "navigate", href: "/settings" },
+    },
+    {
       id: "go-gh-notifs",
       section: "go",
       title: "Open GitHub Notifications",
