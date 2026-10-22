@@ -14,6 +14,7 @@ export interface PaletteEntry {
   title: string;
   subtitle?: string;
   keywords: string;
+  shortcut?: string;
   action: PaletteAction;
 }
 
@@ -41,6 +42,7 @@ export function staticEntries(): PaletteEntry[] {
       title: "Toggle theme",
       subtitle: "Switch light / dark",
       keywords: "theme dark light mode appearance",
+      shortcut: "⌘F12",
       action: { type: "theme" },
     },
     {
@@ -49,6 +51,7 @@ export function staticEntries(): PaletteEntry[] {
       title: "Toggle sidebar",
       subtitle: "Show or hide the main menu",
       keywords: "sidebar menu collapse expand navigation",
+      shortcut: "⌘B",
       action: { type: "event", name: "ghn:toggle-sidebar" },
     },
     {
@@ -57,6 +60,7 @@ export function staticEntries(): PaletteEntry[] {
       title: "Show keyboard shortcuts",
       subtitle: "Open the shortcut help",
       keywords: "shortcuts help keys bindings ?",
+      shortcut: "?",
       action: { type: "event", name: "ghn:show-help" },
     },
     {

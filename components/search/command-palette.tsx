@@ -268,7 +268,7 @@ export function CommandPalette() {
           {loading ? (
             <span className="text-xs text-muted-foreground">…</span>
           ) : (
-            <Kbd>esc</Kbd>
+            <Kbd>Esc</Kbd>
           )}
         </div>
         <div
@@ -314,7 +314,11 @@ export function CommandPalette() {
                           </span>
                         ) : null}
                       </span>
-                      {isActive ? <Kbd>↵</Kbd> : null}
+                      {entry.shortcut ? (
+                        <span className="ml-auto shrink-0 pl-3 text-xs text-muted-foreground tabular-nums">
+                          {entry.shortcut}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -322,13 +326,16 @@ export function CommandPalette() {
             ))
           )}
         </div>
-        <div className="flex items-center gap-3 border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-4 border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> move
+            <Kbd>↓</Kbd> <span className="ml-1">Navigate</span>
           </span>
           <span className="flex items-center gap-1">
-            <Kbd>↵</Kbd> run
+            <Kbd>Enter</Kbd> <span className="ml-1">Select</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd>Esc</Kbd> <span className="ml-1">Close</span>
           </span>
           <span className="ml-auto hidden sm:inline">threads · repos · commands · filters</span>
         </div>
