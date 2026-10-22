@@ -90,6 +90,8 @@ describe("GET /api/connection", () => {
       connected: true,
       viewerLogin: "test-user",
       lastSyncAt: null,
+      pollIntervalSecs: 60,
+      stale: false,
     });
   });
 
