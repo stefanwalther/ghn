@@ -64,6 +64,52 @@ function ageLabel(createdAt: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+export function ListToolbar({
+  items,
+  selected,
+  showHints,
+  onToggleAll,
+  onQuickSelect,
+}: {
+  items: InboxItem[];
+  selected: Set<string>;
+  showHints: boolean;
+  onToggleAll: () => void;
+  onQuickSelect: (reason: string) => void;
+}) {
+  const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-border/40 px-4 py-2">
+      <Checkbox
+        checked={allSelected}
+        onChange={onToggleAll}
+        aria-label="Select all visible"
+      />
+      <span className="text-xs text-muted-foreground">
+        {items.length} {items.length === 1 ? "item" : "items"}
+      </span>
+      <span className="ml-auto flex items-center gap-1">
+        {showHints ? (
+          <span className="mr-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <Kbd>j</Kbd>/<Kbd>k</Kbd> move <Kbd>x</Kbd> select <Kbd>a</Kbd> all
+          </span>
+        ) : null}
+        <span className="text-xs text-muted-foreground">Quick select:</span>
+        {QUICK_SELECTS.map((q) => (
+          <button
+            key={q.value}
+            type="button"
+            onClick={() => onQuickSelect(q.value)}
+            className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {q.label}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 export function NotificationList({
   items,
   selected,
@@ -75,6 +121,7 @@ export function NotificationList({
   onQuickSelect,
   onMenuAction,
   onOpen,
+  hideToolbar,
 }: {
   items: InboxItem[];
   selected: Set<string>;
@@ -86,38 +133,19 @@ export function NotificationList({
   onQuickSelect: (reason: string) => void;
   onMenuAction: (item: InboxItem, action: ItemMenuAction) => void;
   onOpen: (item: InboxItem) => void;
+  hideToolbar?: boolean;
 }) {
-  const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
   return (
     <div className="overflow-hidden rounded-lg bg-card shadow-sm">
-      <div className="flex flex-wrap items-center gap-3 border-b border-border/40 px-4 py-2">
-        <Checkbox
-          checked={allSelected}
-          onChange={onToggleAll}
-          aria-label="Select all visible"
+      {hideToolbar ? null : (
+        <ListToolbar
+          items={items}
+          selected={selected}
+          showHints={showHints}
+          onToggleAll={onToggleAll}
+          onQuickSelect={onQuickSelect}
         />
-        <span className="text-xs text-muted-foreground">
-          {items.length} {items.length === 1 ? "item" : "items"}
-        </span>
-        <span className="ml-auto flex items-center gap-1">
-          {showHints ? (
-            <span className="mr-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <Kbd>j</Kbd>/<Kbd>k</Kbd> move <Kbd>x</Kbd> select <Kbd>a</Kbd> all
-            </span>
-          ) : null}
-          <span className="text-xs text-muted-foreground">Quick select:</span>
-          {QUICK_SELECTS.map((q) => (
-            <button
-              key={q.value}
-              type="button"
-              onClick={() => onQuickSelect(q.value)}
-              className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {q.label}
-            </button>
-          ))}
-        </span>
-      </div>
+      )}
       <ul className="divide-y divide-border/40">
         {items.map((item) => {
           const checked = selected.has(item.id);
@@ -135,7 +163,7 @@ export function NotificationList({
               id={`notification-${item.id}`}
               aria-busy={syncing || undefined}
               className={cn(
-                "flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex cursor-pointer scroll-mt-48 items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 item.isRead === 0 && "bg-accent/30",
                 focusedId === item.id && "ring-2 ring-inset ring-ring"
               )}
