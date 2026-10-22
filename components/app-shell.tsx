@@ -10,8 +10,9 @@ import { DemoBanner } from "@/components/demo-banner";
 import { CommandPalette } from "@/components/search/command-palette";
 import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { VersionIndicator } from "@/components/version-indicator";
 import { Kbd } from "@/components/ui/kbd";
-import { APP_VERSION, GITHUB_REPO_URL } from "@/lib/app-meta";
+import { GITHUB_REPO_URL } from "@/lib/app-meta";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isEditableTarget, isToggleSidebarEvent } from "@/lib/shortcuts";
 
@@ -194,8 +195,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </a>
             );
           })}
-          <div className="mt-auto flex items-center justify-between px-3 pt-4 text-xs text-muted-foreground">
-            <span>v{APP_VERSION}</span>
+          <div className="mt-auto flex items-center justify-between gap-2 px-3 pt-4 text-xs text-muted-foreground">
+            <VersionIndicator />
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
