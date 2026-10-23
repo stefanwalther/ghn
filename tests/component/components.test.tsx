@@ -746,7 +746,8 @@ describe("RepoSnoozeMenu", () => {
   });
 
   test("a preset reports the repo and a future time", () => {
-    const props = renderSnoozeMenu();
+    const onSnooze = vi.fn();
+    renderSnoozeMenu({ onSnooze });
     const before = Date.now();
 
     fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
@@ -754,8 +755,8 @@ describe("RepoSnoozeMenu", () => {
     const submenu = screen.getByRole("menu", { name: "Snooze acme/web" });
     fireEvent.click(within(submenu).getByRole("menuitem", { name: /Next week/ }));
 
-    expect(props.onSnooze).toHaveBeenCalledTimes(1);
-    const [id, at] = props.onSnooze.mock.calls[0]!;
+    expect(onSnooze).toHaveBeenCalledTimes(1);
+    const [id, at] = onSnooze.mock.calls[0]!;
     expect(id).toBe("acme--web");
     expect(at).toBeGreaterThan(before);
   });
