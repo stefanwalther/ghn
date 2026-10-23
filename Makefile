@@ -83,7 +83,7 @@ test-build-version: ## Verify version computation (manifest + git SHA + .dirty, 
 dev: install ## Run the dev server with hot reload in the foreground (per-workspace port via resolve-dev-runtime.sh; explicit PORT wins).
 	$(BUN) run dev
 
-web-open: ## Ensure the web UI is running, starting it when down, then open it.
+web-open: ## Ensure the web UI is running and fresh (restart when stale), then open it.
 	scripts/ensure-web.sh
 
 web-serve: build ## Build and serve production in the foreground (per-workspace port via resolve-dev-runtime.sh; explicit PORT wins).
