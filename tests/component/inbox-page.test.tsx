@@ -265,6 +265,110 @@ describe("inbox screen", () => {
     });
   });
 
+  test("a bulk done updates the sidebar counts before the server answers", async () => {
+    const releaseItems: InboxItem[] = [
+      {
+        ...firstItem,
+        id: "n_101",
+        repositoryId: "acme--web",
+        repositoryName: "acme/web",
+        subject: "Release v2.0 ships",
+        subjectType: "Release",
+        subjectState: "open",
+        reason: "release",
+      },
+      {
+        ...firstItem,
+        id: "n_102",
+        repositoryId: "acme--api",
+        repositoryName: "acme/api",
+        subject: "Release v2.1 ships",
+        subjectType: "Release",
+        subjectState: "open",
+        reason: "release",
+      },
+    ];
+    const releaseFacets = {
+      types: [
+        { value: "all", label: "All", count: 2 },
+        { value: "release", label: "Release", count: 2 },
+      ],
+      repos: [
+        { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false },
+        { id: "acme--api", fullName: "acme/api", main: 1, quiet: 0, isSnoozed: false },
+      ],
+    };
+    const releasePayload = {
+      lastSyncAt: null,
+      stale: false,
+      mainFlow: releaseItems,
+      collapsedSection: [],
+      facets: releaseFacets,
+    };
+    const emptiedPayload = {
+      lastSyncAt: null,
+      stale: false,
+      mainFlow: [],
+      collapsedSection: [],
+      facets: {
+        types: [
+          { value: "all", label: "All", count: 0 },
+          { value: "release", label: "Release", count: 0 },
+        ],
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 0, quiet: 0, isSnoozed: false },
+          { id: "acme--api", fullName: "acme/api", main: 0, quiet: 0, isSnoozed: false },
+        ],
+      },
+    };
+    let notifCalls = 0;
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    const gatedFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) {
+        notifCalls += 1;
+        return Response.json(notifCalls === 1 ? releasePayload : emptiedPayload);
+      }
+      if (url.includes("/api/connection")) {
+        return Response.json({ connected: true });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", gatedFetch);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Release v2.0 ships");
+    expect(
+      within(screen.getByRole("button", { name: "Show all" })).getByText("2")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // The bulk request is still gated, so any count change is optimistic.
+    expect(
+      await within(screen.getByRole("button", { name: "Show all" })).findByText("0")
+    ).toBeInTheDocument();
+    expect(
+      await within(screen.getByRole("button", { name: "Filter by Release" })).findByText(
+        "0"
+      )
+    ).toBeInTheDocument();
+
+    resolveBulk(Response.json({ updated: 2, action: "done" }));
+    await waitFor(() => {
+      expect(notifCalls).toBeGreaterThanOrEqual(2);
+    });
+    expect(
+      within(screen.getByRole("button", { name: "Show all" })).getByText("0")
+    ).toBeInTheDocument();
+  });
+
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);
