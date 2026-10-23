@@ -782,6 +782,55 @@ describe("ShortcutsHelp", () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  test("groups shortcuts and shows the match count", () => {
+    render(<ShortcutsHelp onClose={vi.fn()} />);
+
+    const dialog = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+    expect(within(dialog).getByText("Navigate")).toBeInTheDocument();
+    expect(within(dialog).getByText("Triage")).toBeInTheDocument();
+    expect(within(dialog).getByText("App")).toBeInTheDocument();
+    expect(within(dialog).getByText(/of \d+/)).toBeInTheDocument();
+  });
+
+  test("filters the list as the user types", () => {
+    render(<ShortcutsHelp onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Search keyboard shortcuts"), {
+      target: { value: "sidebar" },
+    });
+
+    expect(screen.getByText("Cmd+B")).toBeInTheDocument();
+    expect(screen.queryByText("j / k")).not.toBeInTheDocument();
+  });
+
+  test("shows an empty state when nothing matches and clears the search", () => {
+    render(<ShortcutsHelp onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Search keyboard shortcuts"), {
+      target: { value: "zzz-no-match" },
+    });
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(screen.getByLabelText("Search keyboard shortcuts")).toHaveValue("");
+    expect(screen.getByText("j / k")).toBeInTheDocument();
+  });
+
+  test("Escape clears the query first and closes on a second press", () => {
+    const onClose = vi.fn();
+    render(<ShortcutsHelp onClose={onClose} />);
+    const input = screen.getByLabelText("Search keyboard shortcuts");
+
+    fireEvent.change(input, { target: { value: "theme" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(input).toHaveValue("");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("repositories screen", () => {
