@@ -4,6 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSettings } from "@/lib/queries";
 
 interface SettingsPayload {
   database: { configPath: string; databasePath: string };
@@ -28,38 +29,20 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 export default function SettingsPage() {
-  const [data, setData] = React.useState<SettingsPayload | null>(null);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = React.useState<string | null>(null);
-  const [refreshing, setRefreshing] = React.useState(false);
-
-  const dataRef = React.useRef<SettingsPayload | null>(null);
-  dataRef.current = data;
-
-  const load = React.useCallback(async () => {
-    const first = dataRef.current === null;
-    if (first) setStatus("loading");
-    else setRefreshing(true);
-    try {
-      const res = await fetch("/api/settings", { cache: "no-store" });
-      const payload = (await res.json().catch(() => null)) as SettingsPayload | null;
-      if (!res.ok || !payload?.database || !payload?.github) {
-        throw new Error("Failed to load settings.");
-      }
-      setData(payload);
-      setError(null);
-      setStatus("ready");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load settings.");
-      if (first) setStatus("error");
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const settingsQuery = useSettings();
+  const payload = settingsQuery.data ?? null;
+  const data =
+    payload && payload.database && payload.github
+      ? (payload as SettingsPayload)
+      : null;
+  const status =
+    settingsQuery.isPending
+      ? "loading"
+      : settingsQuery.isError || (settingsQuery.data && !data)
+        ? "error"
+        : "ready";
+  const error = settingsQuery.isError ? "Failed to load settings." : null;
+  const refreshing = settingsQuery.isFetching && !settingsQuery.isPending;
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -73,7 +56,7 @@ export default function SettingsPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => void load()}
+          onClick={() => void settingsQuery.refetch()}
           disabled={refreshing || status === "loading"}
           title="Refresh settings status"
           aria-label="Refresh settings status"
@@ -96,7 +79,7 @@ export default function SettingsPage() {
           </p>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void settingsQuery.refetch()}
             className="mt-4 cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Retry

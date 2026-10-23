@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RATE_LIMIT_BUCKETS, RATE_LIMIT_DOCS } from "@/lib/rate-limit-meta";
-import type { RateLimitBucket, RateLimitsResult } from "@/lib/rate-limits";
+import type { RateLimitBucket } from "@/lib/rate-limits";
+import { useRateLimits } from "@/lib/queries";
 
 function formatReset(bucket: RateLimitBucket): string {
   if (bucket.resetsAt) {
@@ -31,40 +32,19 @@ function barClass(pct: number, rateLimited: boolean): string {
 }
 
 export default function RateLimitsPage() {
-  const [data, setData] = React.useState<RateLimitsResult | null>(null);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = React.useState<string | null>(null);
-  const [refreshing, setRefreshing] = React.useState(false);
-
-  const dataRef = React.useRef<RateLimitsResult | null>(null);
-  dataRef.current = data;
-
-  const load = React.useCallback(async () => {
-    const first = dataRef.current === null;
-    if (first) setStatus("loading");
-    else setRefreshing(true);
-    try {
-      const res = await fetch("/api/rate-limits", { cache: "no-store" });
-      const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.usage) {
-        throw new Error(
-          typeof payload?.error === "string" ? payload.error : "Failed to load rate limits."
-        );
-      }
-      setData(payload as RateLimitsResult);
-      setError(null);
-      setStatus("ready");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load rate limits.");
-      if (first) setStatus("error");
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const rateQuery = useRateLimits();
+  const data = rateQuery.data ?? null;
+  const status = rateQuery.isPending
+    ? "loading"
+    : rateQuery.isError && !rateQuery.data
+      ? "error"
+      : "ready";
+  const error = rateQuery.isError
+    ? rateQuery.error instanceof Error
+      ? rateQuery.error.message
+      : "Failed to load rate limits."
+    : null;
+  const refreshing = rateQuery.isFetching && !rateQuery.isPending;
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -78,7 +58,7 @@ export default function RateLimitsPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => void load()}
+          onClick={() => void rateQuery.refetch()}
           disabled={refreshing || status === "loading"}
           title="Refresh rate limits from GitHub"
           aria-label="Refresh rate limits from GitHub"
@@ -91,7 +71,7 @@ export default function RateLimitsPage() {
       {status === "loading" ? <LoadingRateLimits /> : null}
       {status === "error" ? (
         <>
-          <ErrorRateLimits onRetry={load} />
+          <ErrorRateLimits onRetry={() => void rateQuery.refetch()} />
           {error ? (
             <p role="alert" className="text-xs text-destructive">
               {error}

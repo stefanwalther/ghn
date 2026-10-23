@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQuery } from "./support/render-with-query";
+import { resetUIStore } from "@/lib/ui-store";
 import InboxPage from "@/app/page";
 import { AppShell } from "@/components/app-shell";
 import type { InboxItem } from "@/components/inbox/notification-list";
@@ -145,6 +147,7 @@ describe("inbox screen", () => {
     nav.params = new URLSearchParams("");
     localStorage.clear();
     sessionStorage.clear();
+    resetUIStore();
   });
 
   afterEach(() => {
@@ -156,7 +159,7 @@ describe("inbox screen", () => {
   test("loads the notification list from the API and renders it", async () => {
     const fetchMock = installFetch();
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
 
     const list = within(await screen.findByRole("list"));
     expect(list.getByText("Fix flaky login redirect")).toBeInTheDocument();
@@ -171,7 +174,7 @@ describe("inbox screen", () => {
   test("shows the empty state when the inbox has no items", async () => {
     installFetch({ notifications: { ...notificationsPayload, mainFlow: [] } });
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
 
     expect(await screen.findByText("All caught up")).toBeInTheDocument();
     expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
@@ -180,7 +183,7 @@ describe("inbox screen", () => {
   test("shows the error state and recovers when the retry succeeds", async () => {
     const fetchMock = installFetch({ failFirstNotifications: true });
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
 
     expect(await screen.findByText("Inbox failed to load")).toBeInTheDocument();
 
@@ -192,7 +195,7 @@ describe("inbox screen", () => {
 
   test("a type filter change replaces the route with the matching query string", async () => {
     installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("button", { name: "Filter by Pull requests" }));
@@ -202,7 +205,7 @@ describe("inbox screen", () => {
 
   test("an age filter change replaces the route with the matching query string", async () => {
     installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.change(screen.getByLabelText("Filter by age"), { target: { value: "7d" } });
@@ -212,7 +215,7 @@ describe("inbox screen", () => {
 
   test("a repository filter change replaces the route with the matching query string", async () => {
     installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("button", { name: "Filter by acme/api" }));
@@ -222,7 +225,7 @@ describe("inbox screen", () => {
 
   test("Escape closes the drawer", async () => {
     installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByText("Fix flaky login redirect"));
@@ -237,7 +240,7 @@ describe("inbox screen", () => {
 
   test("a bulk action posts the selected ids and the action to the bulk endpoint", async () => {
     const fetchMock = installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
@@ -264,7 +267,7 @@ describe("inbox screen", () => {
 
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByText("Fix flaky login redirect"));
@@ -283,7 +286,7 @@ describe("inbox screen", () => {
 
   test("syncing one item posts the id of that item", async () => {
     const fetchMock = installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     // The menu of the second row, so the id has to be the second one.
@@ -300,7 +303,7 @@ describe("inbox screen", () => {
   });
 
   test("the keyboard selects the focused row", async () => {    installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.keyDown(window, { key: "j" });
@@ -311,7 +314,7 @@ describe("inbox screen", () => {
 
   test("the d key marks the focused row done", async () => {
     const fetchMock = installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.keyDown(window, { key: "j" });
@@ -326,7 +329,7 @@ describe("inbox screen", () => {
 
   test("Shift+D opens details for the focused row", async () => {
     installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.keyDown(window, { key: "j" });
@@ -342,7 +345,7 @@ describe("inbox screen", () => {
 
   test("the item menu copies the source link and says so", async () => {
     installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("button", { name: "Actions for Fix flaky login redirect" }));
@@ -353,7 +356,7 @@ describe("inbox screen", () => {
 
   test("the question mark opens the shortcuts help", async () => {
     installFetch();
-    render(
+    renderWithQuery(
       <AppShell>
         <InboxPage />
       </AppShell>
@@ -382,7 +385,7 @@ describe("inbox screen", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
@@ -396,7 +399,7 @@ describe("inbox screen", () => {
   test("renders the quiet digest section for collapsed repositories", async () => {
     installFetch({ notifications: digestPayload });
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
 
     expect(await screen.findByText("Quiet until due (2 pending)")).toBeInTheDocument();
     const digest = within(screen.getByRole("region", { name: "Quiet digests" }));
@@ -406,7 +409,7 @@ describe("inbox screen", () => {
 
   test("the shortcuts help opens from the header and closes with Escape", async () => {
     installFetch();
-    render(
+    renderWithQuery(
       <AppShell>
         <InboxPage />
       </AppShell>
@@ -425,7 +428,7 @@ describe("inbox screen", () => {
 
   test("the refresh button syncs from GitHub and reloads the list", async () => {
     const fetchMock = installFetch();
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh inbox from GitHub" }));
@@ -443,7 +446,7 @@ describe("inbox screen", () => {
   test("warns when the GitHub connection is down but still shows the cached list", async () => {
     installFetch({ connection: { connected: false, reason: "auth" } });
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
 
     expect(await screen.findByText("GitHub disconnected.")).toBeInTheDocument();
     expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
@@ -458,7 +461,7 @@ describe("inbox screen", () => {
       },
     });
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
 
     expect(await screen.findByText(/Data may be stale\./)).toBeInTheDocument();
     expect(screen.getByText(/Last synced/)).toBeInTheDocument();
@@ -474,7 +477,7 @@ describe("inbox screen", () => {
       },
     });
 
-    render(<InboxPage />);
+    renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
     expect(screen.getByRole("button", { name: "Next refresh in 60 seconds" })).toBeDisabled();

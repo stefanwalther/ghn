@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Markdown } from "@/components/inbox/markdown";
 import { isClosedItem, isMergedItem } from "@/lib/filters";
-import type { CheckSummary, DependabotAlertDetails, SubjectContent, ThreadComment, WorkflowRun } from "@/lib/github";
+import type { DependabotAlertDetails, WorkflowRun } from "@/lib/github";
 import { SecurityAlertPreview } from "@/components/inbox/security-alert-preview";
 import {
   findPinnedRun,
@@ -15,6 +15,7 @@ import {
   parseBranchFromTitle,
   parseWorkflowNameFromTitle,
 } from "@/lib/github";
+import { useThreadDetails, type ThreadDetails } from "@/lib/queries";
 import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
@@ -26,11 +27,6 @@ import {
 } from "@/lib/view-state";
 import { reasonTone, type InboxItem } from "@/components/inbox/notification-list";
 import type { ItemMenuAction } from "@/components/inbox/item-menu";
-
-interface ThreadDetails extends SubjectContent {
-  comments: ThreadComment[];
-  checks: CheckSummary | null;
-}
 
 function TitleLink({ item }: { item: InboxItem }) {
   const [active, setActive] = React.useState(false);
@@ -92,11 +88,39 @@ export function ItemDrawer({
     prMerged: item.prMerged ?? false,
     subjectState: item.subjectState ?? null,
   });
-  const [content, setContent] = React.useState<ThreadDetails | null>(null);  const [contentState, setContentState] = React.useState<"loading" | "ready" | "unavailable">(
-    "loading"
-  );
-  const [runs, setRuns] = React.useState<WorkflowRun[]>([]);
-  const [alert, setAlert] = React.useState<DependabotAlertDetails | null>(null);
+  // Thread content comes from the shared cache. The branching below mirrors
+  // the previous direct fetch: alerts win, an explicit null content means no
+  // preview with runs, otherwise the payload itself is the thread content.
+  const detailsQuery = useThreadDetails(item.id);
+  const contentState = detailsQuery.isPending
+    ? "loading"
+    : detailsQuery.isError
+      ? "unavailable"
+      : "ready";
+  const derived = React.useMemo<{
+    content: ThreadDetails | null;
+    runs: WorkflowRun[];
+    alert: DependabotAlertDetails | null;
+  }>(() => {
+    const data = detailsQuery.data;
+    if (!data) return { content: null, runs: [], alert: null };
+    if (data.alert) {
+      return {
+        content: null,
+        runs: Array.isArray(data.runs) ? data.runs : [],
+        alert: data.alert,
+      };
+    }
+    if ("content" in data && data.content === null) {
+      return {
+        content: null,
+        runs: Array.isArray(data.runs) ? data.runs : [],
+        alert: null,
+      };
+    }
+    return { content: data as ThreadDetails, runs: [], alert: null };
+  }, [detailsQuery.data]);
+  const { content, runs, alert } = derived;
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
   const scrollRef = React.useRef<HTMLElement>(null);
@@ -133,48 +157,6 @@ export function ItemDrawer({
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
-  }, [item.id]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setContent(null);
-    setRuns([]);
-    setAlert(null);
-    setContentState("loading");
-    (async () => {
-      try {
-        const res = await fetch(`/api/thread?id=${encodeURIComponent(item.id)}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) throw new Error("thread failed");
-        const data = (await res.json()) as ThreadDetails & {
-          content?: SubjectContent | null;
-          runs?: WorkflowRun[];
-          alert?: DependabotAlertDetails | null;
-        };
-        if (!cancelled) {
-          if (data.alert) {
-            setAlert(data.alert);
-            setContent(null);
-            setRuns(Array.isArray(data.runs) ? data.runs : []);
-          } else if ("content" in data && data.content === null) {
-            setContent(null);
-            setAlert(null);
-            setRuns(Array.isArray(data.runs) ? data.runs : []);
-          } else {
-            setContent(data as ThreadDetails);
-            setAlert(null);
-            setRuns([]);
-          }
-          setContentState("ready");
-        }
-      } catch {
-        if (!cancelled) setContentState("unavailable");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, [item.id]);
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQuery } from "./support/render-with-query";
+import { resetUIStore } from "@/lib/ui-store";
 import type { ComponentProps } from "react";
 import { BulkBar } from "@/components/inbox/bulk-bar";
 import { DigestSection, type DigestGroup } from "@/components/inbox/digest-section";
@@ -89,6 +91,7 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  resetUIStore();
 });
 
 describe("NotificationList", () => {
@@ -326,7 +329,7 @@ describe("ItemDrawer", () => {
   function renderDrawer(target: InboxItem = item) {
     const onClose = vi.fn();
     const onAction = vi.fn();
-    render(<ItemDrawer item={target} onClose={onClose} onAction={onAction} />);
+    renderWithQuery(<ItemDrawer item={target} onClose={onClose} onAction={onAction} />);
     return { onClose, onAction };
   }
 
@@ -829,7 +832,7 @@ describe("repositories screen", () => {
   test("loads the repositories and renders a row for each", async () => {
     stubRepositories(payload);
 
-    render(<ReposPage />);
+    renderWithQuery(<ReposPage />);
 
     expect(await screen.findByText("acme/web")).toBeInTheDocument();
     expect(screen.getByText("acme/api")).toBeInTheDocument();
@@ -838,7 +841,7 @@ describe("repositories screen", () => {
 
   test("filters the repositories by name", async () => {
     stubRepositories(payload);
-    render(<ReposPage />);
+    renderWithQuery(<ReposPage />);
     await screen.findByText("acme/web");
 
     fireEvent.change(screen.getByLabelText("Filter repositories by name"), {
@@ -851,7 +854,7 @@ describe("repositories screen", () => {
 
   test("says when nothing matches the filter", async () => {
     stubRepositories(payload);
-    render(<ReposPage />);
+    renderWithQuery(<ReposPage />);
     await screen.findByText("acme/web");
 
     fireEvent.change(screen.getByLabelText("Filter repositories by name"), {
@@ -863,7 +866,7 @@ describe("repositories screen", () => {
 
   test("changing the rhythm patches the repository", async () => {
     const fetchMock = stubRepositories(payload);
-    render(<ReposPage />);
+    renderWithQuery(<ReposPage />);
     await screen.findByText("acme/web");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Digest rhythm for acme/web" }), {
@@ -919,7 +922,7 @@ describe("rate limits screen", () => {
   test("shows the usage of every bucket", async () => {
     stubRateLimits(payload);
 
-    render(<RateLimitsPage />);
+    renderWithQuery(<RateLimitsPage />);
 
     expect(await screen.findByText("Core (REST)")).toBeInTheDocument();
     expect(screen.getByText("GraphQL")).toBeInTheDocument();
@@ -935,7 +938,7 @@ describe("rate limits screen", () => {
   test("warns about a bucket it could not read", async () => {
     stubRateLimits(payload);
 
-    render(<RateLimitsPage />);
+    renderWithQuery(<RateLimitsPage />);
 
     expect(await screen.findByText("no rate-limit headers on HTTP 200")).toBeInTheDocument();
   });
@@ -943,7 +946,7 @@ describe("rate limits screen", () => {
   test("shows the error state when the buckets cannot be read", async () => {
     stubRateLimits({ error: "GitHub API probes failed", reason: "unreachable" }, false);
 
-    render(<RateLimitsPage />);
+    renderWithQuery(<RateLimitsPage />);
 
     // The rate limits have their own error state.
     expect(await screen.findByText("Rate limits failed to load")).toBeInTheDocument();

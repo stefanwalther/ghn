@@ -5,7 +5,7 @@ import * as React from "react";
 import { BulkBar, type BulkAction } from "@/components/inbox/bulk-bar";
 import { DigestSection } from "@/components/inbox/digest-section";
 import { EmptyInbox, ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
-import { FilterSidebar, type RepoFacet, type TypeFacet } from "@/components/inbox/filter-sidebar";
+import { FilterSidebar } from "@/components/inbox/filter-sidebar";
 import { InboxFilters } from "@/components/inbox/inbox-filters";
 import { ItemDrawer } from "@/components/inbox/item-drawer";
 import type { ItemMenuAction } from "@/components/inbox/item-menu";
@@ -13,126 +13,85 @@ import { ListToolbar, NotificationList, type InboxItem } from "@/components/inbo
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
-import { announceSync } from "@/lib/sync-events";
 import { copyText } from "@/lib/clipboard";
 import { describeBulkResult } from "@/lib/bulk";
+import {
+  useBulkAction,
+  useNotifications,
+  useSyncFlow,
+  useThreadSync,
+} from "@/lib/queries";
+import { useUIStore } from "@/lib/ui-store";
 import { selectByQuickFilter } from "@/lib/filters";
 import {
   applyLocalAction,
   nextFocusIndex,
   nextSelection,
-  pollWindow,
   toggleAllSelection,
 } from "@/lib/inbox-state";
-import { syncErrorMessage } from "@/lib/sync-errors";
 import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
-
-interface CollapsedGroup {
-  repositoryId: string;
-  repositoryName: string;
-  rhythm: string;
-  nextDueAt: number | null;
-  nextDueLabel: string;
-  pendingCount: number;
-}
-
-// Client-side request bounds. Bulk triage fans out over many threads
-// server-side, so it gets the longest leash; everything else must settle
-// fast so the busy state (which gates the triage buttons) can never stick.
-const REQUEST_TIMEOUT_MS = 30_000;
-const BULK_REQUEST_TIMEOUT_MS = 120_000;
-const SYNC_REQUEST_TIMEOUT_MS = 120_000;
-
-async function fetchWithTimeout(
-  input: string,
-  init: RequestInit | undefined,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
 
 function InboxView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const filters = parseInboxFilters(searchParams);
   const [items, setItems] = React.useState<InboxItem[]>([]);
-  const [collapsed, setCollapsed] = React.useState<CollapsedGroup[]>([]);
-  const [typeFacets, setTypeFacets] = React.useState<TypeFacet[]>([]);
-  const [repoFacets, setRepoFacets] = React.useState<RepoFacet[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
-  // In-flight triage/sync operations. A counter (not a boolean) so
-  // overlapping requests cannot re-enable the buttons while work remains,
-  // and timeouts below guarantee it always drains back to zero.
-  const [busyCount, setBusyCount] = React.useState(0);
-  const busy = busyCount > 0;
-  function startBusy() {
-    setBusyCount((n) => n + 1);
-  }
-  function endBusy() {
-    setBusyCount((n) => Math.max(0, n - 1));
-  }
-  // Row-level sync feedback: ids currently syncing show a spinner.
-  const [syncingIds, setSyncingIds] = React.useState<Set<string>>(new Set());
-  const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
-  const [stale, setStale] = React.useState(false);
-  const [syncing, setSyncing] = React.useState(false);
-  const [pollSecs, setPollSecs] = React.useState(60);
-  const [nowMs, setNowMs] = React.useState(() => Date.now());
-  const [conn, setConn] = React.useState<{ connected: boolean; reason?: string } | null>(null);
-  const [syncError, setSyncError] = React.useState<string | null>(null);
-  const loadedRef = React.useRef(false);
-  const reqRef = React.useRef(0);
+  // Busy state derives from the in-flight mutations, so overlapping triage
+  // and sync operations keep the controls disabled until all settle.
+  const bulkMutation = useBulkAction(filters);
+  const {
+    syncOne: syncThread,
+    syncingIds,
+    isPending: threadBusy,
+  } = useThreadSync(filters);
+  const busy = bulkMutation.isPending || threadBusy;
+  // Central sync flow: manual refresh, poll window, and the truthful header
+  // state derived from the shared notifications and connection entries.
+  const sync = useSyncFlow(filters);
+  const {
+    lastSyncAt,
+    stale,
+    syncError,
+    conn,
+    syncing,
+    pollSecs,
+    inPollWindow,
+    countdownSecs,
+  } = sync;
 
-  const query = serializeInboxFilters(filters);
+  const notifQuery = useNotifications(filters);
+  const serverList = React.useMemo(
+    () => notifQuery.data?.mainFlow ?? [],
+    [notifQuery.data]
+  );
+  const collapsed = notifQuery.data?.collapsedSection ?? [];
+  const typeFacets = notifQuery.data?.facets?.types ?? [];
+  const repoFacets = notifQuery.data?.facets?.repos ?? [];
+  const refreshing = notifQuery.isFetching && !notifQuery.isPending;
+  const status =
+    notifQuery.isPending
+      ? "loading"
+      : notifQuery.isError && !notifQuery.data
+        ? "error"
+        : "ready";
 
-  const load = React.useCallback(async () => {
-    const silent = loadedRef.current;
-    if (!silent) {
-      setStatus("loading");
-      announceSync(true);
-    } else setRefreshing(true);
-    const my = ++reqRef.current;
-    try {
-      const res = await fetchWithTimeout(`/api/notifications${query}`, { cache: "no-store" }, REQUEST_TIMEOUT_MS);
-      if (!res.ok) throw new Error("load failed");
-      const data = await res.json();
-      if (reqRef.current !== my) return;
-      setItems(data.mainFlow ?? []);
-      setCollapsed(data.collapsedSection ?? []);
-      setTypeFacets(data.facets?.types ?? []);
-      setRepoFacets(data.facets?.repos ?? []);
-      setLastSyncAt(typeof data.lastSyncAt === "number" ? data.lastSyncAt : null);
-      setStale(data.stale === true);
-      loadedRef.current = true;
-      setStatus("ready");
-      setNotice(null);
-    } catch {
-      if (reqRef.current !== my) return;
-      if (!loadedRef.current) setStatus("error");
-      else setNotice("Refresh failed. Showing last loaded data.");
-    } finally {
-      if (reqRef.current === my) {
-        setRefreshing(false);
-        if (!silent) announceSync(false);
-      }
-    }
-  }, [query]);
+  // The list is a local working copy of the cached server snapshot so the
+  // existing optimistic triage below keeps working. Background refetches
+  // replace it with the confirmed server state.
+  React.useEffect(() => {
+    if (serverList.length > 0 || notifQuery.data) setItems(serverList);
+  }, [serverList, notifQuery.data]);
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    if (notifQuery.isError && notifQuery.data) {
+      setNotice("Refresh failed. Showing last loaded data.");
+    }
+  }, [notifQuery.isError, notifQuery.data]);
 
   React.useEffect(() => {
     try {
@@ -147,28 +106,12 @@ function InboxView() {
     }
   }, [status]);
 
-  React.useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/connection", { cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        if (!cancelled && data) {
-          setConn({ connected: data.connected === true, reason: data.reason });
-        }
-      } catch {
-        // Connection probe is best-effort; the inbox still loads from cache.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  function prefersReducedMotion(): boolean {
+    return (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
 
   function formatSyncTime(ts: number): string {
     return new Date(ts).toLocaleTimeString(undefined, {
@@ -177,50 +120,7 @@ function InboxView() {
     });
   }
 
-  async function refresh() {
-    setSyncing(true);
-    announceSync(true);
-    try {
-      const res = await fetchWithTimeout(
-        "/api/sync",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        },
-        SYNC_REQUEST_TIMEOUT_MS
-      );
-      const data = await res.json().catch(() => null);
-      if (data && typeof data.pollIntervalSecs === "number") setPollSecs(data.pollIntervalSecs);
-      if (data && typeof data.lastSyncAt === "number") setLastSyncAt(data.lastSyncAt);
-      if (data && data.fresh === false) {
-        setStale(true);
-        setSyncError(syncErrorMessage(data.reason));
-      } else {
-        setStale(false);
-        setSyncError(null);
-      }
-    } catch {
-      setSyncError("Sync failed. Showing last loaded data.");
-    } finally {
-      setSyncing(false);
-      announceSync(false);
-      try {
-        const connRes = await fetch("/api/connection", { cache: "no-store" });
-        const connData = await connRes.json().catch(() => null);
-        if (connData) {
-          setConn({ connected: connData.connected === true, reason: connData.reason });
-        }
-      } catch {
-        // Best-effort; banner state keeps its previous value.
-      }
-    }
-    await load();
-  }
-
-  const poll = pollWindow(lastSyncAt, pollSecs, nowMs);
-  const inPollWindow = poll.inWindow && !syncing;
-  const countdownSecs = poll.countdownSecs;
+  const refresh = sync.refresh;
 
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
@@ -272,47 +172,22 @@ function InboxView() {
   }
 
   async function syncOne(id: string) {
-    startBusy();
-    setSyncingIds((prev) => new Set(prev).add(id));
     setNotice(null);
     try {
-      const res = await fetchWithTimeout(
-        "/api/thread/sync",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        },
-        REQUEST_TIMEOUT_MS
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error ?? "sync failed");
-      if (data?.gone === true) {
+      const result = await syncThread(id);
+      if (result.gone === true) {
         setItems((prev) => prev.filter((i) => i.id !== id));
         setDrawerItem((prev) => (prev?.id === id ? null : prev));
         setNotice("Thread is gone on GitHub; marked done.");
-        return;
-      }
-      if (data?.item) {
-        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...data.item } : i)));
-        setDrawerItem((prev) => (prev?.id === id ? { ...prev, ...data.item } : prev));
       }
     } catch {
       setNotice("Sync failed for this item.");
-    } finally {
-      endBusy();
-      setSyncingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
     }
   }
 
   async function apply(action: BulkAction, ids?: string[]) {
     const targets = ids ?? [...selected];
     if (targets.length === 0) return;
-    startBusy();
     setNotice(null);
     const targetSet = new Set(targets);
     const prevItems = items;
@@ -322,18 +197,7 @@ function InboxView() {
     setItems((prev) => applyLocalAction(prev, targets, action));
     setSelected(new Set());
     try {
-      const res = await fetchWithTimeout(
-        "/api/notifications/bulk",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: targets, action }),
-        },
-        BULK_REQUEST_TIMEOUT_MS
-      );
-      if (!res.ok) throw new Error("bulk failed");
-      const body = await res.json().catch(() => null);
-      await load();
+      const body = await bulkMutation.mutateAsync({ action, ids: targets });
       // A partial remote failure queues write-backs server-side; the rows
       // stay hidden locally while the retry runs automatically. Say so
       // explicitly: without this, triage looks like a silent no-op.
@@ -348,8 +212,6 @@ function InboxView() {
     } catch {
       setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
-    } finally {
-      endBusy();
     }
   }
 
@@ -399,39 +261,42 @@ function InboxView() {
 
   const itemsRef = React.useRef(items);
   itemsRef.current = items;
-  const refreshRef = React.useRef(refresh);
-  refreshRef.current = refresh;
+  const refreshRef = React.useRef(sync.refresh);
+  refreshRef.current = sync.refresh;
+
+  // Typed global UI actions from the palette or keyboard shortcuts elsewhere.
+  // Counters use seen-refs so a remount never replays an old request.
+  const openThreadReq = useUIStore((s) => s.openThread);
+  const refreshReq = useUIStore((s) => s.refreshRequest);
+  const scrollTopReq = useUIStore((s) => s.scrollTopRequest);
+  const seenRefresh = React.useRef(refreshReq);
+  const seenScrollTop = React.useRef(scrollTopReq);
 
   React.useEffect(() => {
-    function onOpenThread(e: Event) {
-      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-      if (!id) return;
-      const found = itemsRef.current.find((i) => i.id === id);
-      if (found) {
-        const idx = itemsRef.current.findIndex((i) => i.id === id);
-        if (idx >= 0) setFocusIdx(idx);
-        setDrawerItem(found);
-      }
-      // When absent (different filter or page), the palette already saved
-      // last-opened and navigated to the repo filter, so the existing
-      // scroll-restoration effect brings it into view after load.
-    }
-    function onRefresh() {
-      void refreshRef.current();
-    }
-    function onScrollTop() {
-      setSelected(new Set());
-      window.scrollTo({ top: 0, behavior: "auto" });
-    }
-    window.addEventListener("ghn:open-thread", onOpenThread);
-    window.addEventListener("ghn:refresh", onRefresh);
-    window.addEventListener("ghn:scroll-top", onScrollTop);
-    return () => {
-      window.removeEventListener("ghn:open-thread", onOpenThread);
-      window.removeEventListener("ghn:refresh", onRefresh);
-      window.removeEventListener("ghn:scroll-top", onScrollTop);
-    };
-  }, []);
+    if (!openThreadReq) return;
+    useUIStore.getState().consumeOpenThread();
+    const found = itemsRef.current.find((i) => i.id === openThreadReq.id);
+    if (!found) return;
+    // When absent (different filter or page), the palette already saved
+    // last-opened and navigated to the repo filter, so the existing
+    // scroll-restoration effect brings it into view after load.
+    const idx = itemsRef.current.findIndex((i) => i.id === openThreadReq.id);
+    if (idx >= 0) setFocusIdx(idx);
+    setDrawerItem(found);
+  }, [openThreadReq]);
+
+  React.useEffect(() => {
+    if (refreshReq === seenRefresh.current) return;
+    seenRefresh.current = refreshReq;
+    void refreshRef.current();
+  }, [refreshReq]);
+
+  React.useEffect(() => {
+    if (scrollTopReq === seenScrollTop.current) return;
+    seenScrollTop.current = scrollTopReq;
+    setSelected(new Set());
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [scrollTopReq]);
 
   React.useEffect(() => {
     function onAltDown(e: KeyboardEvent) {
@@ -552,7 +417,7 @@ function InboxView() {
           toggleAll();
           break;
         case "?":
-          window.dispatchEvent(new CustomEvent("ghn:show-help"));
+          useUIStore.getState().openHelp();
           break;
       }
     }
@@ -599,7 +464,7 @@ function InboxView() {
               size="sm"
               onClick={async () => {
                 await fetch("/api/notifications/seed", { method: "POST" });
-                await load();
+                await notifQuery.refetch();
               }}
             >
               Reseed demo data
@@ -688,7 +553,7 @@ function InboxView() {
             </div>
           ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
-          {status === "error" ? <ErrorInbox onRetry={load} /> : null}
+          {status === "error" ? <ErrorInbox onRetry={() => void notifQuery.refetch()} /> : null}
           {status === "ready" && items.length === 0 && collapsed.length === 0 ? <EmptyInbox /> : null}
           {status === "ready" && items.length > 0 ? (
         <NotificationList

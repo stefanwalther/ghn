@@ -13,6 +13,8 @@ import {
   type PaletteSection,
 } from "@/lib/palette-commands";
 import { rankSearch } from "@/lib/search";
+import { useNotifications, useRepositories } from "@/lib/queries";
+import { useUIStore } from "@/lib/ui-store";
 import { repoFilterHref, saveLastOpened } from "@/lib/view-state";
 
 interface ThreadRow {
@@ -38,14 +40,39 @@ export function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
-  const [open, setOpen] = React.useState(false);
+  const open = useUIStore((s) => s.paletteOpen);
   const [query, setQuery] = React.useState("");
-  const [threads, setThreads] = React.useState<ThreadRow[]>([]);
-  const [repos, setRepos] = React.useState<RepoRow[]>([]);
-  const [loading, setLoading] = React.useState(false);
   const [active, setActive] = React.useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const loadedAt = React.useRef(0);
+
+  // Shared cache entries: no per-open fetches while fresh. Queries stay
+  // idle until the palette opens.
+  const threadsQuery = useNotifications(
+    { repo: "all", state: "all", type: "all", age: "all" },
+    { limit: 400, enabled: open }
+  );
+  const reposQuery = useRepositories({ enabled: open });
+  const loading = open && (threadsQuery.isFetching || reposQuery.isFetching);
+
+  const threads = React.useMemo<ThreadRow[]>(
+    () =>
+      (threadsQuery.data?.mainFlow ?? []).slice(0, 400).map((t) => ({
+        id: t.id,
+        repositoryId: t.repositoryId,
+        repositoryName: t.repositoryName,
+        subject: t.subject,
+        reason: t.reason,
+      })),
+    [threadsQuery.data]
+  );
+  const repos = React.useMemo<RepoRow[]>(
+    () =>
+      (reposQuery.data?.repositories ?? []).map((r) => ({
+        id: r.id,
+        fullName: r.fullName,
+      })),
+    [reposQuery.data]
+  );
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -54,7 +81,9 @@ export function CommandPalette() {
         // Don't steal Cmd+K while an IME composition is in progress.
         if (e.isComposing) return;
         e.preventDefault();
-        setOpen((v) => !v);
+        const ui = useUIStore.getState();
+        if (ui.paletteOpen) ui.closePalette();
+        else ui.openPalette();
         return;
       }
       if (e.key === "/" && !open) {
@@ -66,20 +95,12 @@ export function CommandPalette() {
         // Slash opens the palette as a fast path; the keystroke itself
         // must not land in the input.
         e.preventDefault();
-        setOpen(true);
+        useUIStore.getState().openPalette();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open ]);
-
-  React.useEffect(() => {
-    function onOpen() {
-      setOpen(true);
-    }
-    window.addEventListener("ghn:open-palette", onOpen);
-    return () => window.removeEventListener("ghn:open-palette", onOpen);
-  }, []);
 
   React.useEffect(() => {
     if (!open) {
@@ -88,42 +109,7 @@ export function CommandPalette() {
       return;
     }
     requestAnimationFrame(() => inputRef.current?.focus());
-    // Refresh cached rows at most once per 30s.
-    if (Date.now() - loadedAt.current < 30_000 && (threads.length > 0 || repos.length > 0)) return;
-    setLoading(true);
-    (async () => {
-      try {
-        const [nRes, rRes] = await Promise.all([
-          fetch("/api/notifications?state=all&limit=400", { cache: "no-store" }),
-          fetch("/api/repositories", { cache: "no-store" }),
-        ]);
-        if (nRes.ok) {
-          const data = await nRes.json().catch(() => null);
-          const flows = (data?.mainFlow ?? []) as ThreadRow[];
-          setThreads(
-            flows.slice(0, 400).map((t) => ({
-              id: t.id,
-              repositoryId: t.repositoryId,
-              repositoryName: t.repositoryName,
-              subject: t.subject,
-              reason: t.reason,
-            }))
-          );
-        }
-        if (rRes.ok) {
-          const data = await rRes.json().catch(() => null);
-          const rows = (data?.repositories ?? []) as RepoRow[];
-          setRepos(rows.map((r) => ({ id: r.id, fullName: r.fullName })));
-        }
-        loadedAt.current = Date.now();
-      } catch {
-        // Palette still shows static commands when fetches fail.
-      } finally {
-        setLoading(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open ]);
 
   const allEntries = React.useMemo<PaletteEntry[]>(() => {
     const statics = staticEntries();
@@ -160,11 +146,12 @@ export function CommandPalette() {
   }, [query]);
 
   function close() {
-    setOpen(false);
+    useUIStore.getState().closePalette();
   }
 
   function run(entry: PaletteEntry) {
     const a = entry.action;
+    const ui = useUIStore.getState();
     if (a.type === "navigate") {
       close();
       router.push(a.href);
@@ -180,16 +167,31 @@ export function CommandPalette() {
       close();
       return;
     }
-    if (a.type === "event") {
-      window.dispatchEvent(new CustomEvent(a.name, { detail: a.detail }));
+    if (a.type === "refresh") {
+      ui.requestRefresh();
+      close();
+      return;
+    }
+    if (a.type === "toggle-sidebar") {
+      ui.toggleSidebar();
+      close();
+      return;
+    }
+    if (a.type === "show-help") {
+      ui.openHelp();
+      close();
+      return;
+    }
+    if (a.type === "scroll-top") {
+      ui.requestScrollTop();
       close();
       return;
     }
     if (a.type === "thread") {
       saveLastOpened(a.id);
-      window.dispatchEvent(new CustomEvent("ghn:open-thread", { detail: { id: a.id } }));
+      ui.requestOpenThread(a.id, a.repositoryId);
       close();
-      // On the inbox the event opens the drawer directly. From other
+      // On the inbox the store opens the drawer directly. From other
       // pages fall back to navigation so scroll-restoration finds it.
       if (pathname !== "/") {
         router.push(repoFilterHref(window.location.search, a.repositoryId));

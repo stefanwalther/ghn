@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import * as React from "react";
-import { GHN_SYNC_EVENT, type GhnSyncDetail } from "@/lib/sync-events";
+import { useIsFetching } from "@tanstack/react-query";
+import { useConnection } from "@/lib/queries";
 
 interface ConnStatus {
   connected: boolean;
@@ -27,71 +28,52 @@ const INDICATOR_BY_STATE = {
 } as const;
 
 export function BrandMark() {
-  const [syncing, setSyncing] = React.useState(true);
-  const [conn, setConn] = React.useState<ConnStatus | null>(null);
+  // Any in-flight query means syncing. The intro flag keeps the syncing
+  // indicator on through the first paint so it never flashes ready before
+  // the initial fetches register.
+  const fetching = useIsFetching();
+  const connectionQuery = useConnection();
+  const [intro, setIntro] = React.useState(true);
   const [nowMs, setNowMs] = React.useState(() => Date.now());
   const [reducedMotion, setReducedMotion] = React.useState(false);
-  const introRef = React.useRef(true);
 
   React.useEffect(() => {
     setReducedMotion(
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     );
-    const onSync = (e: Event) => {
-      const detail = (e as CustomEvent<GhnSyncDetail>).detail;
-      if (detail && typeof detail.syncing === "boolean") {
-        introRef.current = false;
-        setSyncing(detail.syncing);
-      }
-    };
-    window.addEventListener(GHN_SYNC_EVENT, onSync);
-    return () => window.removeEventListener(GHN_SYNC_EVENT, onSync);
   }, []);
 
-  // Connection probe is expensive (gh subprocess plus one core API call),
-  // so it runs on mount, at most every 5 minutes, and on tab focus.
-  // Staleness flips on a cheap local 30s tick instead.
   React.useEffect(() => {
-    let cancelled = false;
-    async function fetchStatus() {
-      try {
-        const res = await fetch("/api/connection", { cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        if (cancelled || !data) return;
-        setConn({
-          connected: data.connected === true,
-          lastSyncAt:
-            typeof data.lastSyncAt === "number" ? data.lastSyncAt : null,
-          pollIntervalSecs:
-            typeof data.pollIntervalSecs === "number"
-              ? data.pollIntervalSecs
-              : 60,
-        });
-        if (introRef.current) {
-          introRef.current = false;
-          setSyncing(false);
-        }
-      } catch {
-        // Best-effort; the mark keeps its previous state.
+    if (fetching === 0) setIntro(false);
+  }, [fetching]);
+
+  const syncing = intro || fetching > 0;
+  const data = connectionQuery.data;
+  const conn: ConnStatus | null = data
+    ? {
+        connected: data.connected === true,
+        lastSyncAt: typeof data.lastSyncAt === "number" ? data.lastSyncAt : null,
+        pollIntervalSecs:
+          typeof data.pollIntervalSecs === "number" ? data.pollIntervalSecs : 60,
       }
-    }
-    fetchStatus();
-    const pollId = window.setInterval(fetchStatus, 300000);
+    : null;
+
+  // Staleness flips on a cheap local 30s tick, and the connection entry is
+  // refreshed when the tab becomes visible again.
+  React.useEffect(() => {
     const tickId = window.setInterval(() => setNowMs(Date.now()), 30000);
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         setNowMs(Date.now());
-        fetchStatus();
+        void connectionQuery.refetch();
       }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      cancelled = true;
-      window.clearInterval(pollId);
       window.clearInterval(tickId);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [connectionQuery]);
 
   const stale =
     conn !== null &&

@@ -2,13 +2,25 @@
 
 import * as React from "react";
 import { ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
-import { RepoRow, type RepoRowData } from "@/components/repos/repo-row";
+import { RepoRow } from "@/components/repos/repo-row";
+import { useRepositories, useUpdateRepository } from "@/lib/queries";
 
 export default function ReposPage() {
-  const [repos, setRepos] = React.useState<RepoRowData[]>([]);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
-  const [busy, setBusy] = React.useState(false);
+  const reposQuery = useRepositories();
+  const updateRepo = useUpdateRepository();
+  const [notice, setNotice] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
+
+  const repos = React.useMemo(
+    () => reposQuery.data?.repositories ?? [],
+    [reposQuery.data]
+  );
+  const status = reposQuery.isPending
+    ? "loading"
+    : reposQuery.isError && !reposQuery.data
+      ? "error"
+      : "ready";
+  const busy = updateRepo.isPending;
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -16,50 +28,21 @@ export default function ReposPage() {
     return repos.filter((r) => r.fullName.toLowerCase().includes(q));
   }, [repos, query]);
 
-  const load = React.useCallback(async () => {
-    setStatus("loading");
-    try {
-      const res = await fetch("/api/repositories", { cache: "no-store" });
-      if (!res.ok) throw new Error("load failed");
-      const data = await res.json();
-      setRepos(data.repositories ?? []);
-      setStatus("ready");
-    } catch {
-      setStatus("error");
-    }
-  }, []);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
   async function setRhythm(id: string, rhythm: string) {
-    setBusy(true);
+    setNotice(null);
     try {
-      const res = await fetch(`/api/repositories/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rhythm }),
-      });
-      if (!res.ok) throw new Error("patch failed");
-      await load();
-    } finally {
-      setBusy(false);
+      await updateRepo.mutateAsync({ id, patch: { rhythm } });
+    } catch {
+      setNotice("Rhythm update failed. Previous setting restored.");
     }
   }
 
   async function setSnooze(id: string, snoozedUntil: number | null) {
-    setBusy(true);
+    setNotice(null);
     try {
-      const res = await fetch(`/api/repositories/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snoozedUntil }),
-      });
-      if (!res.ok) throw new Error("patch failed");
-      await load();
-    } finally {
-      setBusy(false);
+      await updateRepo.mutateAsync({ id, patch: { snoozedUntil } });
+    } catch {
+      setNotice("Snooze update failed. Previous setting restored.");
     }
   }
 
@@ -73,7 +56,12 @@ export default function ReposPage() {
         </p>
       </div>
       {status === "loading" ? <LoadingInbox /> : null}
-      {status === "error" ? <ErrorInbox onRetry={load} /> : null}
+      {status === "error" ? <ErrorInbox onRetry={() => void reposQuery.refetch()} /> : null}
+      {notice ? (
+        <p role="alert" className="text-xs text-destructive">
+          {notice}
+        </p>
+      ) : null}
       {status === "ready" ? (
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex min-w-0 flex-1 items-center gap-2">

@@ -15,6 +15,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { GITHUB_REPO_URL } from "@/lib/app-meta";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isEditableTarget, isToggleSidebarEvent } from "@/lib/shortcuts";
+import { useUIStore } from "@/lib/ui-store";
 
 const NAV = [
   { href: "/", label: "Inbox", icon: Bell },
@@ -48,36 +49,9 @@ const GITHUB_NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [open, setOpen] = React.useState(true);
+  const open = useUIStore((s) => s.sidebarOpen);
+  const helpOpen = useUIStore((s) => s.helpOpen);
   const [showHints, setShowHints] = React.useState(false);
-  const [helpOpen, setHelpOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem("ghn:sidebar");
-      if (saved === "closed") setOpen(false);
-      else if (saved !== "open" && window.innerWidth < 768) setOpen(false);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  function toggleSidebar() {
-    setOpen((v) => {
-      try {
-        localStorage.setItem(
-          "ghn:sidebar",
-          v ? "closed" : "open"
-        );
-      } catch {
-        // ignore
-      }
-      return !v;
-    });
-  }
-
-  const toggleRef = React.useRef(toggleSidebar);
-  toggleRef.current = toggleSidebar;
 
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -90,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
       if (isToggleSidebarEvent(e)) {
         e.preventDefault();
-        toggleRef.current();
+        useUIStore.getState().toggleSidebar();
       }
     }
     function onKeyUp(e: KeyboardEvent) {
@@ -110,33 +84,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
-    function onToggle() {
-      toggleRef.current();
-    }
-    window.addEventListener("ghn:toggle-sidebar", onToggle);
-    return () => window.removeEventListener("ghn:toggle-sidebar", onToggle);
-  }, []);
-
-  React.useEffect(() => {
-    function onShowHelp() {
-      setHelpOpen(true);
-    }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        if (helpOpen) setHelpOpen(false);
+        if (useUIStore.getState().helpOpen) useUIStore.getState().closeHelp();
         return;
       }
       if (isEditableTarget(e.target)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "?") setHelpOpen(true);
+      if (e.key === "?") useUIStore.getState().openHelp();
     }
-    window.addEventListener("ghn:show-help", onShowHelp);
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("ghn:show-help", onShowHelp);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [helpOpen]);
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -145,7 +106,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <>
           <div
             aria-hidden="true"
-            onClick={toggleSidebar}
+            onClick={() => useUIStore.getState().toggleSidebar()}
             className="fixed inset-0 z-30 cursor-pointer bg-background/80 md:hidden"
           />
           <aside className="fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col gap-1 overflow-y-auto bg-sidebar p-4 shadow-md md:sticky md:top-0 md:z-auto md:h-screen md:shadow-none">
@@ -160,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 onClick={() => {
-                  if (window.innerWidth < 768) setOpen(false);
+                  if (window.innerWidth < 768) useUIStore.getState().setSidebar(false);
                 }}
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -184,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => {
-                  if (window.innerWidth < 768) setOpen(false);
+                  if (window.innerWidth < 768) useUIStore.getState().setSidebar(false);
                 }}
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -220,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               aria-expanded={open}
               aria-label="Toggle sidebar"
               title="Toggle sidebar (Cmd+B)"
-              onClick={toggleSidebar}
+              onClick={() => useUIStore.getState().toggleSidebar()}
               className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span aria-hidden="true">☰</span>
@@ -246,7 +207,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             aria-label="Search and commands"
             title="Search and commands (Cmd+K)"
-            onClick={() => window.dispatchEvent(new CustomEvent("ghn:open-palette"))}
+            onClick={() => useUIStore.getState().openPalette()}
             className="hidden cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
           >
             <Search className="h-4 w-4" aria-hidden />
@@ -257,7 +218,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             aria-label="Search and commands"
             title="Search and commands (Cmd+K)"
-            onClick={() => window.dispatchEvent(new CustomEvent("ghn:open-palette"))}
+            onClick={() => useUIStore.getState().openPalette()}
             className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
           >
             <Search className="h-4 w-4" aria-hidden />
@@ -267,7 +228,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             aria-label="Show keyboard shortcuts"
             title="Keyboard shortcuts (?)"
-            onClick={() => setHelpOpen(true)}
+            onClick={() => useUIStore.getState().openHelp()}
             className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center text-sm font-medium">?</span>
@@ -276,7 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="min-w-0 flex-1 px-4 pb-10">{children}</main>
       </div>
-      {helpOpen ? <ShortcutsHelp onClose={() => setHelpOpen(false)} /> : null}
+      {helpOpen ? <ShortcutsHelp onClose={() => useUIStore.getState().closeHelp()} /> : null}
     </div>
   );
 }

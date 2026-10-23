@@ -1,8 +1,11 @@
 export type PaletteAction =
   | { type: "navigate"; href: string }
   | { type: "external"; href: string }
-  | { type: "event"; name: string; detail?: Record<string, unknown> }
   | { type: "theme" }
+  | { type: "refresh" }
+  | { type: "toggle-sidebar" }
+  | { type: "show-help" }
+  | { type: "scroll-top" }
   | { type: "thread"; id: string; repositoryId: string }
   | { type: "repo-filter"; repositoryId: string };
 
@@ -34,7 +37,7 @@ export function staticEntries(): PaletteEntry[] {
       title: "Refresh from GitHub",
       subtitle: "Sync now, then reload the inbox",
       keywords: "refresh sync reload fetch update",
-      action: { type: "event", name: "ghn:refresh" },
+      action: { type: "refresh" },
     },
     {
       id: "cmd-theme",
@@ -52,7 +55,7 @@ export function staticEntries(): PaletteEntry[] {
       subtitle: "Show or hide the main menu",
       keywords: "sidebar menu collapse expand navigation",
       shortcut: "⌘B",
-      action: { type: "event", name: "ghn:toggle-sidebar" },
+      action: { type: "toggle-sidebar" },
     },
     {
       id: "cmd-shortcuts",
@@ -61,7 +64,7 @@ export function staticEntries(): PaletteEntry[] {
       subtitle: "Open the shortcut help",
       keywords: "shortcuts help keys bindings ?",
       shortcut: "?",
-      action: { type: "event", name: "ghn:show-help" },
+      action: { type: "show-help" },
     },
     {
       id: "cmd-top",
@@ -69,7 +72,7 @@ export function staticEntries(): PaletteEntry[] {
       title: "Back to inbox top",
       subtitle: "Clear selection and scroll up",
       keywords: "top scroll clear inbox",
-      action: { type: "event", name: "ghn:scroll-top" },
+      action: { type: "scroll-top" },
     },
     {
       id: "go-inbox",
