@@ -21,6 +21,38 @@ export function LoadingInbox() {
   );
 }
 
+export function LoadingRepositories() {
+  return (
+    <div className="flex flex-col gap-4" role="status" aria-label="Loading repositories">
+      <div className="flex flex-wrap items-center gap-2" aria-hidden>
+        <div className="h-9 min-w-0 flex-1 animate-pulse rounded-md bg-muted" />
+        <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+      </div>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          aria-hidden
+          className="flex flex-wrap items-center gap-3 rounded-lg bg-card px-4 py-3 shadow-sm"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+              <div className="h-5 w-16 animate-pulse rounded-full bg-muted" />
+              <div className="h-5 w-20 animate-pulse rounded-full bg-muted" />
+            </div>
+            <div className="mt-2 h-3 w-3/4 animate-pulse rounded bg-muted" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="h-9 w-32 animate-pulse rounded-md bg-muted" />
+            <div className="h-9 w-32 animate-pulse rounded-md bg-muted" />
+          </div>
+        </div>
+      ))}
+      <p className="text-sm text-muted-foreground">Loading repositories…</p>
+    </div>
+  );
+}
+
 export function LoadingRateLimits() {
   return (
     <div className="flex flex-col gap-4" role="status" aria-label="Loading rate limits">
