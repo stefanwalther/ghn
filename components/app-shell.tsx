@@ -133,30 +133,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-          <div className="mt-6 mb-1 px-3 text-xs font-medium text-muted-foreground">
-            GitHub
+          <div className="mt-auto pt-6">
+            <div className="mb-1 px-3 text-xs font-medium text-muted-foreground">
+              GitHub
+            </div>
+            {GITHUB_NAV.map((item) => {
+              const Icon = item.icon;
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => {
+                    if (window.innerWidth < 768) useUIStore.getState().setSidebar(false);
+                  }}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  )}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                  {item.label}
+                </a>
+              );
+            })}
           </div>
-          {GITHUB_NAV.map((item) => {
-            const Icon = item.icon;
-            return (
-              <a
-                key={item.href}
-                href={item.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => {
-                  if (window.innerWidth < 768) useUIStore.getState().setSidebar(false);
-                }}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                )}
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                {item.label}
-              </a>
-            );
-          })}
-          <div className="mt-auto flex items-center justify-between gap-2 px-3 pt-4 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-2 px-3 pt-4 text-xs text-muted-foreground">
             <VersionIndicator />
             <a
               href={GITHUB_REPO_URL}
