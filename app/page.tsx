@@ -29,11 +29,27 @@ import {
   nextSelection,
   toggleAllSelection,
 } from "@/lib/inbox-state";
-import { parseInboxFilters, serializeInboxFilters, loadLastOpened, saveLastOpened, type InboxFilters as Filters } from "@/lib/view-state";
+import {
+  parseInboxFilters,
+  serializeInboxFilters,
+  loadLastOpened,
+  saveLastOpened,
+  FILTER_DEFAULT_WIDTH,
+  FILTER_MAX_WIDTH,
+  FILTER_MIN_WIDTH,
+  clampFilterWidth,
+  loadFilterWidth,
+  saveFilterWidth,
+  type InboxFilters as Filters,
+} from "@/lib/view-state";
+
+// Runs before paint on the client (no-op on the server) so the stored
+// width is applied before anything is shown.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect;
 
 function InboxView() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const router = useRouter();  const searchParams = useSearchParams();
   const filters = parseInboxFilters(searchParams);
   const [items, setItems] = React.useState<InboxItem[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -41,6 +57,36 @@ function InboxView() {
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
+  // Filter sidebar width persists across visits. It stays hidden until the
+  // stored value is applied before first paint, so the wrong width never
+  // flashes on screen.
+  const [sidebarWidth, setSidebarWidth] = React.useState<number>(FILTER_DEFAULT_WIDTH);
+  const [sidebarReady, setSidebarReady] = React.useState(false);
+  const [resizingSidebar, setResizingSidebar] = React.useState(false);
+  const [handleVisible, setHandleVisible] = React.useState(false);
+  const sidebarRef = React.useRef<HTMLElement>(null);
+  const sidebarDraggingRef = React.useRef(false);
+
+  useIsomorphicLayoutEffect(() => {
+    setSidebarWidth(loadFilterWidth());
+    setSidebarReady(true);
+  }, []);
+
+  function resizeSidebarTo(clientX: number): void {
+    const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
+    setSidebarWidth(clampFilterWidth(clientX - left));
+  }
+
+  function endSidebarResize(): void {
+    if (!sidebarDraggingRef.current) return;
+    sidebarDraggingRef.current = false;
+    setResizingSidebar(false);
+    setHandleVisible(false);
+    setSidebarWidth((current) => {
+      saveFilterWidth(current);
+      return current;
+    });
+  }
   // Busy state derives from the in-flight mutations, so overlapping triage
   // and sync operations keep the controls disabled until all settle.
   const bulkMutation = useBulkAction(filters);
@@ -105,13 +151,6 @@ function InboxView() {
       document.getElementById(`notification-${last}`)?.scrollIntoView({ block: "nearest" });
     }
   }, [status]);
-
-  function prefersReducedMotion(): boolean {
-    return (
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
-  }
 
   function formatSyncTime(ts: number): string {
     return new Date(ts).toLocaleTimeString(undefined, {
@@ -473,7 +512,17 @@ function InboxView() {
         </div>
       </div>
       <div className="flex flex-col gap-4 lg:flex-row">
-        <aside className="w-full shrink-0 lg:w-64">
+        <aside
+          ref={sidebarRef}
+          aria-label="Inbox filters"
+          className="filter-aside relative w-full shrink-0 lg:w-[var(--filter-w)]"
+          style={
+            {
+              "--filter-w": `${sidebarWidth}px`,
+              visibility: sidebarReady ? undefined : "hidden",
+            } as React.CSSProperties
+          }
+        >
           <FilterSidebar
             types={typeFacets}
             activeType={filters.type}
@@ -482,6 +531,59 @@ function InboxView() {
             onType={(type) => setFilters({ ...filters, type })}
             onRepo={(repo) => setFilters({ ...filters, repo })}
           />
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize filters sidebar"
+            aria-valuenow={Math.round(sidebarWidth)}
+            aria-valuemin={FILTER_MIN_WIDTH}
+            aria-valuemax={FILTER_MAX_WIDTH}
+            tabIndex={0}
+            className="absolute top-0 bottom-0 -right-2 hidden w-4 cursor-ew-resize touch-none focus-visible:outline-none lg:block"
+            title="Drag to resize filters sidebar (double-click to reset)"
+            onMouseEnter={() => setHandleVisible(true)}
+            onMouseLeave={() => {
+              if (!sidebarDraggingRef.current) setHandleVisible(false);
+            }}
+            onFocus={() => setHandleVisible(true)}
+            onBlur={() => {
+              if (!sidebarDraggingRef.current) setHandleVisible(false);
+            }}
+            onPointerDown={(e) => {
+              sidebarDraggingRef.current = true;
+              setResizingSidebar(true);
+              e.currentTarget.setPointerCapture(e.pointerId);
+              resizeSidebarTo(e.clientX);
+            }}
+            onPointerMove={(e) => {
+              if (sidebarDraggingRef.current) resizeSidebarTo(e.clientX);
+            }}
+            onPointerUp={endSidebarResize}
+            onPointerCancel={endSidebarResize}
+            onDoubleClick={() => {
+              setSidebarWidth(FILTER_DEFAULT_WIDTH);
+              saveFilterWidth(FILTER_DEFAULT_WIDTH);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                e.preventDefault();
+                const next = clampFilterWidth(
+                  sidebarWidth + (e.key === "ArrowRight" ? 16 : -16)
+                );
+                setSidebarWidth(next);
+                saveFilterWidth(next);
+              }
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                opacity: resizingSidebar || handleVisible ? 1 : 0,
+                transition: "opacity 150ms",
+              }}
+              className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-ring"
+            />
+          </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <InboxFilters filters={filters} onChange={setFilters} />
