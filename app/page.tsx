@@ -24,7 +24,7 @@ import {
 import { useUIStore } from "@/lib/ui-store";
 import { selectByQuickFilter } from "@/lib/filters";
 import {
-  applyLocalAction,
+  applyOptimisticList,
   nextFocusIndex,
   nextSelection,
   toggleAllSelection,
@@ -194,7 +194,7 @@ function InboxView() {
     if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
       setDrawerItem(null);
     }
-    setItems((prev) => applyLocalAction(prev, targets, action));
+    setItems((prev) => applyOptimisticList(prev, targets, action, filters.state));
     setSelected(new Set());
     try {
       const body = await bulkMutation.mutateAsync({ action, ids: targets });

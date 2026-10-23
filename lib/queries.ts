@@ -8,7 +8,8 @@ import type {
   ThreadComment,
   WorkflowRun,
 } from "@/lib/github";
-import { type BulkAction } from "./inbox-state";
+import { type BulkAction, applyOptimisticList } from "./inbox-state";
+import { matchesTypeFilter } from "./filters";
 import { pollWindow } from "./inbox-state";
 import { syncErrorMessage } from "./sync-errors";
 import type { InboxItem } from "@/components/inbox/notification-list";
@@ -179,9 +180,11 @@ export interface BulkMutationBody {
 }
 
 /**
- * Bulk triage mutation. The visible list stays a local working copy in the
- * caller; the mutation centralizes endpoint, timeout, and invalidation so
- * busy state always drains and the cache confirms the server result.
+ * Bulk triage mutation with instant sidebar counts and rollback.
+ * The visible list stays a local working copy in the caller; the mutation
+ * optimistically updates the notifications cache entry (list plus facets)
+ * so the left menu reflects the triage before the 110 remote GitHub calls
+ * settle. Snapshot restores on error, invalidation confirms on settle.
  */
 export function useBulkAction(filters: InboxFilters) {
   const client = useQueryClient();
@@ -198,6 +201,56 @@ export function useBulkAction(filters: InboxFilters) {
         },
         BULK_TIMEOUT_MS
       ),
+    onMutate: async (vars) => {
+      if (vars.ids.length === 0) return { previous: undefined };
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<NotificationsResponse>(key);
+      if (!previous) return { previous };
+      const idsSet = new Set(vars.ids);
+      const nextMainFlow = applyOptimisticList(
+        previous.mainFlow,
+        vars.ids,
+        vars.action,
+        filters.state
+      );
+      // Facet counts only change when rows leave the current state view:
+      // done/unsubscribe out of unread, unread out of done. All other
+      // combos keep counts until the refetch confirms.
+      const removesFromView =
+        (vars.action === "done" || vars.action === "unsubscribe") &&
+        filters.state === "unread";
+      const restoresFromDone =
+        vars.action === "unread" && filters.state === "done";
+      let next: NotificationsResponse = { ...previous, mainFlow: nextMainFlow };
+      if (removesFromView || restoresFromDone) {
+        const removed = previous.mainFlow.filter((item) => idsSet.has(item.id));
+        if (removed.length > 0) {
+          const nextTypes = previous.facets.types.map((facet) => {
+            if (facet.value === "all") {
+              return { ...facet, count: Math.max(0, facet.count - removed.length) };
+            }
+            const dec = removed.filter((item) =>
+              matchesTypeFilter(item.reason, item.subjectType ?? null, facet.value, {
+                prMerged: item.prMerged ?? false,
+                subjectState: item.subjectState ?? null,
+              })
+            ).length;
+            return { ...facet, count: Math.max(0, facet.count - dec) };
+          });
+          const nextRepos = previous.facets.repos.map((repo) => {
+            const dec = removed.filter((item) => item.repositoryId === repo.id).length;
+            if (dec === 0) return repo;
+            return { ...repo, main: Math.max(0, repo.main - dec) };
+          });
+          next = { ...next, facets: { types: nextTypes, repos: nextRepos } };
+        }
+      }
+      client.setQueryData<NotificationsResponse>(key, next);
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) client.setQueryData(key, context.previous);
+    },
     onSettled: () => {
       client.invalidateQueries({ queryKey: key });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });

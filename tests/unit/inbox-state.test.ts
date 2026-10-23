@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   applyLocalAction,
+  applyOptimisticList,
   nextFocusIndex,
   nextSelection,
   pollWindow,
@@ -91,6 +92,58 @@ describe("optimistic triage", () => {
     const before = [...rows];
     applyLocalAction(rows, ["a"], "read");
     expect(rows).toEqual(before);
+  });
+});
+
+describe("state-aware optimistic list", () => {
+  test("done in the unread view removes the rows", () => {
+    expect(applyOptimisticList(rows, ["b"], "done", "unread").map((r) => r.id)).toEqual([
+      "a",
+      "c",
+    ]);
+  });
+
+  test("unsubscribe in the unread view removes the rows", () => {
+    expect(
+      applyOptimisticList(rows, ["a"], "unsubscribe", "unread").map((r) => r.id)
+    ).toEqual(["b", "c"]);
+  });
+
+  test("done in the done view changes nothing", () => {
+    expect(applyOptimisticList(rows, ["a"], "done", "done")).toEqual(rows);
+  });
+
+  test("done in the all view removes the rows", () => {
+    expect(applyOptimisticList(rows, ["b"], "done", "all").map((r) => r.id)).toEqual([
+      "a",
+      "c",
+    ]);
+  });
+
+  test("read marks the rows as read and keeps them", () => {
+    const next = applyOptimisticList(rows, ["a"], "read", "unread");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[0]?.isRead).toBe(1);
+  });
+
+  test("unread in the done view removes the restored rows", () => {
+    expect(applyOptimisticList(rows, ["c"], "unread", "done").map((r) => r.id)).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  test("unread in the unread view clears the flags and keeps the rows", () => {
+    const next = applyOptimisticList(rows, ["c"], "unread", "unread");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[2]?.isDone).toBe(0);
+    expect(next[2]?.isRead).toBe(0);
+  });
+
+  test("unread in the all view clears the flags and keeps the rows", () => {
+    const next = applyOptimisticList(rows, ["c"], "unread", "all");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[2]?.isDone).toBe(0);
   });
 });
 
