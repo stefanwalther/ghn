@@ -4,19 +4,19 @@
     <img src="docs/logo/wordmark-light.svg" alt="ghn." width="160">
   </picture>
 
-  # ghn. — the better GitHub notification UI
+  # The better GitHub notification UI
 
   Clear 20 GitHub notifications in under 5 minutes with half the clicks.
 </div>
 
-Zero friction. If `gh` works, ghn works. No tokens, no env files.
+Zero friction. Based on the [`gh` CLI](https://cli.github.com/). If `gh` works, ghn works. No tokens, no env files.
 
 ## Why ghn
 
 - **Fewer clicks** - bulk select and clear 20 threads in one action. Full keyboard flow, no mouse needed.
 - **Quicker insights** - no more jumping to a PR or Action to decide. Thread body, checks, and Dependabot detail show inline in the drawer.
 - **Clever filtering** - slice by repo, type, age, and read or done state. The queue narrows to what matters now.
-- **Clever snoozing** - daily or weekly digests per repo, plus snooze for an hour, this evening, or next week.
+- **Repo rhythms** - define which repos show immediately, weekly, or monthly, plus snooze for an hour, this evening, or next week.
 - **No API key wrangling** - reuses your `gh` login. No tokens to copy, no env files to maintain.
 
 ## Get going
