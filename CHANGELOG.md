@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.1.0...ghn-v0.2.0) (2026-10-23)
+
+
+### Features
+
+* **brand:** add ghn wordmark and sync indicator ([#55](https://github.com/stefanwalther/ghn/issues/55)) ([cb51581](https://github.com/stefanwalther/ghn/commit/cb51581705ecc07565a50bd6f7025c874776e95c))
+* **inbox:** pin bulk bar and item count as one sticky toolbar ([#66](https://github.com/stefanwalther/ghn/issues/66)) ([9407e88](https://github.com/stefanwalther/ghn/commit/9407e880a2b86447f94b3173b08543027b5f415e))
+* **search:** show keyboard shortcuts in universal search ([#63](https://github.com/stefanwalther/ghn/issues/63)) ([3518833](https://github.com/stefanwalther/ghn/commit/35188333b59c73203a2cfcef979c9d8a282f85f6))
+* **settings:** add dev Settings page for database and auth status ([#62](https://github.com/stefanwalther/ghn/issues/62)) ([4c67ed4](https://github.com/stefanwalther/ghn/commit/4c67ed4c15a411815f6c32273793f03683455670))
+* **update:** show sidebar badge and dialog on new releases ([#67](https://github.com/stefanwalther/ghn/issues/67)) ([0812e58](https://github.com/stefanwalther/ghn/commit/0812e5865a621c54baa5b799422fd8add480472c))
+
+
+### Bug Fixes
+
+* **inbox:** remap Done to d and details to Shift+D ([#60](https://github.com/stefanwalther/ghn/issues/60)) ([cbec958](https://github.com/stefanwalther/ghn/commit/cbec9582a894d5d8546770d0f316d01f921cdd1e))
+* **web:** rebuild and relaunch stale local server ([#64](https://github.com/stefanwalther/ghn/issues/64)) ([a509b85](https://github.com/stefanwalther/ghn/commit/a509b85b7b24fc8f313c726758e7eeea3d018714))
+
 ## 0.1.0 (2026-10-21)
 
 
