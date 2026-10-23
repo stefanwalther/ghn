@@ -20,6 +20,7 @@ import {
   useNotifications,
   useSyncFlow,
   useThreadSync,
+  useUpdateRepository,
 } from "@/lib/queries";
 import { useUIStore } from "@/lib/ui-store";
 import { selectByQuickFilter } from "@/lib/filters";
@@ -49,6 +50,7 @@ function InboxView() {
     syncingIds,
     isPending: threadBusy,
   } = useThreadSync(filters);
+  const updateRepo = useUpdateRepository();
   const busy = bulkMutation.isPending || threadBusy;
   // Central sync flow: manual refresh, poll window, and the truthful header
   // state derived from the shared notifications and connection entries.
@@ -212,6 +214,16 @@ function InboxView() {
     } catch {
       setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
+    }
+  }
+
+  async function snoozeRepo(id: string, snoozedUntil: number | null) {
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { snoozedUntil } });
+      await notifQuery.refetch();
+    } catch {
+      setNotice("Snooze failed. Previous setting restored.");
     }
   }
 
@@ -481,6 +493,8 @@ function InboxView() {
             activeRepo={filters.repo}
             onType={(type) => setFilters({ ...filters, type })}
             onRepo={(repo) => setFilters({ ...filters, repo })}
+            onSnooze={snoozeRepo}
+            snoozeDisabled={updateRepo.isPending}
           />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -571,7 +585,11 @@ function InboxView() {
         />
           ) : null}
           {status === "ready" && collapsed.length > 0 ? (
-            <DigestSection groups={collapsed} />
+            <DigestSection
+              groups={collapsed}
+              onSnooze={snoozeRepo}
+              snoozeDisabled={updateRepo.isPending}
+            />
           ) : null}
         </div>
       </div>

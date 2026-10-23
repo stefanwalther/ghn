@@ -528,6 +528,65 @@ describe("FilterSidebar", () => {
     expect(screen.queryByRole("button", { name: "Filter by acme/empty" })).not.toBeInTheDocument();
   });
 
+  test("lists snoozed repositories in their own section", () => {
+    renderSidebar();
+
+    expect(
+      screen.getByRole("button", { name: "Collapse snoozed repositories" })
+    ).toBeInTheDocument();
+    // The snoozed repo is no longer mixed into the main repository list.
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filter by acme/api" })).toBeInTheDocument();
+  });
+
+  test("collapses and expands the snoozed section", () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse snoozed repositories" }));
+    expect(screen.queryByRole("button", { name: "Filter by acme/api" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand snoozed repositories" }));
+    expect(screen.getByRole("button", { name: "Filter by acme/api" })).toBeInTheDocument();
+  });
+
+  test("shows no snoozed section when nothing is snoozed", () => {
+    renderSidebar({
+      repos: [{ id: "acme--web", fullName: "acme/web", main: 3, quiet: 0, isSnoozed: false }],
+    });
+
+    expect(screen.queryByRole("button", { name: /snoozed repositories/ })).not.toBeInTheDocument();
+  });
+
+  test("opens the actions menu on right-click", () => {
+    renderSidebar({ onSnooze: vi.fn() });
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+
+    expect(
+      screen.getByRole("menu", { name: "Actions for acme/web" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Snooze/ })).toBeInTheDocument();
+  });
+
+  test("a preset click reports the repo and a future snooze time", () => {
+    const onSnooze = vi.fn();
+    renderSidebar({ onSnooze });
+    const before = Date.now();
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Snooze/ }));
+
+    const submenu = screen.getByRole("menu", { name: "Snooze acme/web" });
+    fireEvent.click(within(submenu).getByRole("menuitem", { name: /In 1 hour/ }));
+
+    expect(onSnooze).toHaveBeenCalledTimes(1);
+    const [id, at] = onSnooze.mock.calls[0]!;
+    expect(id).toBe("acme--web");
+    expect(at).toBeGreaterThanOrEqual(before + 3600 * 1000);
+    expect(at).toBeLessThanOrEqual(Date.now() + 3600 * 1000);
+  });
+
   test("reports the repository that was chosen", () => {
     const props = renderSidebar();
 
@@ -650,6 +709,16 @@ describe("DigestSection", () => {
     const { container } = render(<DigestSection groups={[]} />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  test("opens the actions menu on right-click", () => {
+    render(<DigestSection groups={groups} onSnooze={vi.fn()} />);
+
+    fireEvent.contextMenu(screen.getByText("acme/api"));
+
+    expect(
+      screen.getByRole("menu", { name: "Actions for acme/api" })
+    ).toBeInTheDocument();
   });
 });
 
