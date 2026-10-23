@@ -571,8 +571,7 @@ describe("inbox screen", () => {
     expect(screen.getByText(/Last synced/)).toBeInTheDocument();
   });
 
-  test("the refresh button waits for the poll window to pass", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+  test("the refresh button waits for the poll window to pass", async () => {    vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-01-15T10:00:00Z"));
     installFetch({
       notifications: {
@@ -595,5 +594,81 @@ describe("inbox screen", () => {
       },
       { timeout: 5000 }
     );
+  });
+
+  function sidebarWidth(): string | null {
+    const aside = screen.getByRole("complementary", { name: "Inbox filters" });
+    return aside.style.getPropertyValue("--filter-w") || null;
+  }
+
+  test("applies the stored sidebar width before showing the filters", async () => {
+    installFetch();
+    localStorage.setItem("ghn:filter-width", "320");
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    expect(sidebarWidth()).toBe("320px");
+    expect(screen.getByRole("complementary", { name: "Inbox filters" })).toBeVisible();
+  });
+
+  test("the arrow keys resize the sidebar and persist the width", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const handle = screen.getByRole("separator", { name: "Resize filters sidebar" });
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+
+    expect(sidebarWidth()).toBe("272px");
+    expect(localStorage.getItem("ghn:filter-width")).toBe("272");
+
+    fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    expect(sidebarWidth()).toBe("256px");
+  });
+
+  test("hovering or focusing the edge reveals the resize indicator", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const handle = screen.getByRole("separator", { name: "Resize filters sidebar" });
+    const line = () => handle.querySelector("span")?.style.opacity ?? null;
+    expect(line()).toBe("0");
+
+    fireEvent.mouseOver(handle);
+    expect(line()).toBe("1");
+    fireEvent.mouseOut(handle);
+    expect(line()).toBe("0");
+
+    fireEvent.focus(handle);
+    expect(line()).toBe("1");
+    fireEvent.blur(handle);
+    expect(line()).toBe("0");
+  });
+
+  test("dragging the separator resizes and double-click resets the width", async () => {
+    installFetch();
+    const originalCapture = window.HTMLElement.prototype.setPointerCapture;
+    window.HTMLElement.prototype.setPointerCapture = vi.fn();
+    try {
+      renderWithQuery(<InboxPage />);
+      await screen.findByText("Fix flaky login redirect");
+
+      const handle = screen.getByRole("separator", { name: "Resize filters sidebar" });
+      // happy-dom reports a zero rect, so the width lands on the pointer x.
+      fireEvent.pointerDown(handle, { clientX: 300 });
+      fireEvent.pointerMove(handle, { clientX: 500 });
+      fireEvent.pointerUp(handle);
+
+      expect(sidebarWidth()).toBe("480px");
+      expect(localStorage.getItem("ghn:filter-width")).toBe("480");
+
+      fireEvent.doubleClick(handle);
+      expect(sidebarWidth()).toBe("256px");
+      expect(localStorage.getItem("ghn:filter-width")).toBe("256");
+    } finally {
+      window.HTMLElement.prototype.setPointerCapture = originalCapture;
+    }
   });
 });
