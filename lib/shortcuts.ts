@@ -2,27 +2,28 @@ export interface ShortcutDef {
   key: string;
   label: string;
   description: string;
+  group: "Navigate" | "Triage" | "App";
 }
 
 export const SHORTCUTS: ShortcutDef[] = [
-  { key: "j / k", label: "Move down / up", description: "Move focus between rows, or to the next / previous thread when details are open" },
-  { key: "[ / ]", label: "Prev / next in details", description: "Jump to the previous / next thread while details are open" },
-  { key: "x", label: "Select", description: "Toggle the focused row" },
-  { key: "d", label: "Done", description: "Mark selection done (or the focused row)" },
-  { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row)" },
-  { key: "u", label: "Unread", description: "Mark selection unread (or the focused row)" },
-  { key: "r", label: "Read", description: "Mark selection read (or the focused row)" },
-  { key: "s", label: "Sync", description: "Refresh selection from GitHub (or the focused row)" },
-  { key: "o", label: "Open", description: "Open the focused thread in a new tab" },
-  { key: "c", label: "Copy", description: "Copy the focused thread link" },
-  { key: "Shift+D", label: "Details", description: "Open the focused thread details in the side panel" },
-  { key: "a", label: "All", description: "Select or clear all visible rows" },
-  { key: "Cmd+K", label: "Search", description: "Search threads, repos, commands, and filters" },
-  { key: "Cmd+B", label: "Sidebar", description: "Show or hide the main menu" },
-  { key: "Cmd+F12", label: "Theme", description: "Cycle light / dark / system" },
-  { key: "Alt", label: "Hints", description: "Hold to reveal key hints" },
-  { key: "Esc", label: "Clear", description: "Clear selection, or close this help" },
-  { key: "?", label: "Help", description: "Show this shortcut list" },
+  { key: "j / k", label: "Move down / up", description: "Move focus between rows, or to the next / previous thread when details are open", group: "Navigate" },
+  { key: "[ / ]", label: "Prev / next in details", description: "Jump to the previous / next thread while details are open", group: "Navigate" },
+  { key: "o", label: "Open", description: "Open the focused thread in a new tab", group: "Navigate" },
+  { key: "Shift+D", label: "Details", description: "Open the focused thread details in the side panel", group: "Navigate" },
+  { key: "x", label: "Select", description: "Toggle the focused row", group: "Triage" },
+  { key: "d", label: "Done", description: "Mark selection done (or the focused row)", group: "Triage" },
+  { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row)", group: "Triage" },
+  { key: "u", label: "Unread", description: "Mark selection unread (or the focused row)", group: "Triage" },
+  { key: "r", label: "Read", description: "Mark selection read (or the focused row)", group: "Triage" },
+  { key: "s", label: "Sync", description: "Refresh selection from GitHub (or the focused row)", group: "Triage" },
+  { key: "c", label: "Copy", description: "Copy the focused thread link", group: "Triage" },
+  { key: "a", label: "All", description: "Select or clear all visible rows", group: "Triage" },
+  { key: "Cmd+K", label: "Search", description: "Search threads, repos, commands, and filters", group: "App" },
+  { key: "Cmd+B", label: "Sidebar", description: "Show or hide the main menu", group: "App" },
+  { key: "Cmd+F12", label: "Theme", description: "Cycle light / dark / system", group: "App" },
+  { key: "Alt", label: "Hints", description: "Hold to reveal key hints", group: "App" },
+  { key: "Esc", label: "Clear", description: "Clear selection, or close this help", group: "App" },
+  { key: "?", label: "Help", description: "Show this shortcut list", group: "App" },
 ];
 
 export function isToggleSidebarEvent(e: KeyboardEvent): boolean {
