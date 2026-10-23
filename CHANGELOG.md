@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.2.0...ghn-v0.3.0) (2026-10-23)
+
+
+### Features
+
+* **bulk:** update sidebar counts optimistically ([#69](https://github.com/stefanwalther/ghn/issues/69)) ([254e3a9](https://github.com/stefanwalther/ghn/commit/254e3a9eeb1caac6d0b7b96eae45dcbe89c8c620))
+
+
+### Bug Fixes
+
+* **ui:** rename rate-limits heading and add repos loading skeleton ([#70](https://github.com/stefanwalther/ghn/issues/70)) ([a127c9f](https://github.com/stefanwalther/ghn/commit/a127c9f48263bf9501d4d7e5aee2802ea906b82a))
+
 ## [0.2.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.1.0...ghn-v0.2.0) (2026-10-23)
 
 
