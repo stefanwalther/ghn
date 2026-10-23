@@ -50,7 +50,7 @@ export default function RateLimitsPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Rate limits</h1>
+          <h1 className="text-xl font-semibold">GitHub rate limits</h1>
           <p className="text-sm text-muted-foreground">
             Live GitHub API buckets from response headers. Each refresh spends one request per bucket.
           </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
+import { ErrorInbox, LoadingRepositories } from "@/components/inbox/empty-states";
 import { RepoRow } from "@/components/repos/repo-row";
 import { useRepositories, useUpdateRepository } from "@/lib/queries";
 
@@ -55,7 +55,7 @@ export default function ReposPage() {
           immediate by default.
         </p>
       </div>
-      {status === "loading" ? <LoadingInbox /> : null}
+      {status === "loading" ? <LoadingRepositories /> : null}
       {status === "error" ? <ErrorInbox onRetry={() => void reposQuery.refetch()} /> : null}
       {notice ? (
         <p role="alert" className="text-xs text-destructive">

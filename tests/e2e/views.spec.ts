@@ -90,7 +90,7 @@ test.describe("rate-limit view", () => {
   test("shows the buckets the stand-in reports", async ({ page }) => {
     await page.goto("/rate-limits");
 
-    await expect(page.getByRole("heading", { name: "Rate limits", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "GitHub rate limits", level: 1 })).toBeVisible();
 
     // The stand-in answers every probe with the same headers, so all three
     // buckets show the same numbers.
