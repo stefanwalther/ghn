@@ -1,13 +1,25 @@
 import { Inbox } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export function EmptyInbox() {
+export function EmptyInbox({ state = "unread" }: { state?: "unread" | "all" | "done" }) {
+  const heading =
+    state === "done"
+      ? "Nothing finished yet"
+      : state === "all"
+        ? "Nothing here"
+        : "All caught up";
+  const copy =
+    state === "done"
+      ? "Triage from the unread inbox and finished items land here."
+      : state === "all"
+        ? "No notifications match. New ones appear here as they arrive."
+        : "No unread items. Either everything is peaceful, or the upstream is suspiciously quiet. New digests appear here when due.";
   return (
     <div className="rounded-lg bg-card p-10 text-center shadow-sm">
       <Inbox className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden />
-      <h2 className="mt-3 font-semibold">All caught up</h2>
+      <h2 className="mt-3 font-semibold">{heading}</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-        No unread items. Either everything is peaceful, or the upstream is
-        suspiciously quiet. New digests appear here when due.
+        {copy}
       </p>
     </div>
   );
@@ -32,7 +44,7 @@ export function LoadingInbox() {
           </div>
         </div>
       ))}
-      <p className="text-sm text-muted-foreground">Loading inbox…</p>
+      <p className="sr-only">Loading inbox…</p>
     </div>
   );
 }
@@ -80,7 +92,7 @@ export function LoadingRepositories() {
           </div>
         </div>
       ))}
-      <p className="text-sm text-muted-foreground">Loading repositories…</p>
+      <p className="sr-only">Loading repositories…</p>
     </div>
   );
 }
@@ -98,25 +110,59 @@ export function LoadingRateLimits() {
           </div>
         ))}
       </div>
-      <p className="text-sm text-muted-foreground">Loading rate limits…</p>
+      <p className="sr-only">Loading rate limits…</p>
     </div>
   );
 }
 
-export function ErrorRateLimits({ onRetry }: { onRetry: () => void }) {
+export function LoadingSettings() {
+  return (
+    <div className="flex flex-col gap-4" role="status" aria-label="Loading settings">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          aria-hidden
+          className="rounded-lg bg-card p-4 shadow-sm"
+        >
+          <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-3 w-48 animate-pulse rounded bg-muted" />
+          <div className="mt-4 h-4 w-full animate-pulse rounded bg-muted" />
+        </div>
+      ))}
+      <p className="sr-only">Loading settings…</p>
+    </div>
+  );
+}
+
+export function ErrorRateLimits({ onRetry, detail }: { onRetry: () => void; detail?: string | null }) {
   return (
     <div className="rounded-lg bg-card p-10 text-center shadow-sm" role="alert">
       <h2 className="font-semibold">Rate limits failed to load</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
         Could not fetch the current GitHub API quota. Retry to fetch again.
       </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-4 cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
+      {detail ? (
+        <p className="mx-auto mt-2 max-w-sm font-mono text-xs text-destructive">
+          {detail}
+        </p>
+      ) : null}
+      <Button variant="outline" onClick={onRetry} className="mt-4">
         Retry
-      </button>
+      </Button>
+    </div>
+  );
+}
+
+export function ErrorRepositories({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-lg bg-card p-10 text-center shadow-sm" role="alert">
+      <h2 className="font-semibold">Repositories failed to load</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+        Could not fetch the repository list. Retry to fetch again.
+      </p>
+      <Button variant="outline" onClick={onRetry} className="mt-4">
+        Retry
+      </Button>
     </div>
   );
 }
@@ -128,13 +174,9 @@ export function ErrorInbox({ onRetry }: { onRetry: () => void }) {
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
         Cached items stay readable where possible. Retry to fetch again.
       </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-4 cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
+      <Button variant="outline" onClick={onRetry} className="mt-4">
         Retry
-      </button>
+      </Button>
     </div>
   );
 }

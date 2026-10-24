@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/clipboard";
+import { useDialogFocus } from "@/lib/dialog-focus";
 
 export const SOURCE_UPDATE_COMMANDS = [
   "git pull",
@@ -26,10 +28,15 @@ interface UpdatePopoverProps {
  */
 export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePopoverProps) {
   const [copied, setCopied] = React.useState<"source" | "docker" | null>(null);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
 
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -45,12 +52,13 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
   }
 
   return (
-    <div className="fixed inset-0 z-50" data-testid="update-backdrop" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-background/80" data-testid="update-backdrop" onClick={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Update available"
-        className="absolute bottom-16 left-4 w-[calc(100%_-_2rem)] max-w-md rounded-lg border border-border bg-card p-6 shadow-lg"
+        className="absolute bottom-16 left-4 w-[calc(100%_-_2rem)] max-w-md rounded-lg bg-card p-6 shadow-md"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -58,6 +66,7 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
           onClick={onClose}
           aria-label="Close update dialog"
           title="Close"
+          data-autofocus
           className="absolute top-3 right-3 cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="h-4 w-4" aria-hidden />
@@ -69,13 +78,9 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
         <div className="mt-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium">Source checkout</h3>
-            <button
-              type="button"
-              onClick={() => copyCommands("source")}
-              className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <Button variant="ghost" size="sm" onClick={() => copyCommands("source")}>
               {copied === "source" ? "Copied" : "Copy"}
-            </button>
+            </Button>
           </div>
           <pre className="mt-1 overflow-x-auto rounded-md border border-input bg-background p-3 font-mono text-xs">
             {SOURCE_UPDATE_COMMANDS}
@@ -84,13 +89,9 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
         <div className="mt-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium">Docker</h3>
-            <button
-              type="button"
-              onClick={() => copyCommands("docker")}
-              className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <Button variant="ghost" size="sm" onClick={() => copyCommands("docker")}>
               {copied === "docker" ? "Copied" : "Copy"}
-            </button>
+            </Button>
           </div>
           <pre className="mt-1 overflow-x-auto rounded-md border border-input bg-background p-3 font-mono text-xs">
             {DOCKER_UPDATE_COMMANDS}
@@ -105,13 +106,9 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
           >
             View release notes for v{latest}
           </a>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button onClick={onClose}>
             Not now
-          </button>
+          </Button>
         </div>
       </div>
     </div>

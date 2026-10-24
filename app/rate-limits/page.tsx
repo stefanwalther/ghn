@@ -70,14 +70,7 @@ export default function RateLimitsPage() {
 
       {status === "loading" ? <LoadingRateLimits /> : null}
       {status === "error" ? (
-        <>
-          <ErrorRateLimits onRetry={() => void rateQuery.refetch()} />
-          {error ? (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          ) : null}
-        </>
+        <ErrorRateLimits onRetry={() => void rateQuery.refetch()} detail={error} />
       ) : null}
       {status === "ready" && error ? (
         <p role="alert" className="text-xs text-destructive">

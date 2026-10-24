@@ -17,6 +17,9 @@ const OPTIONS: { mode: ThemeMode; label: string; Icon: typeof Sun }[] = [
 
 const MENU_WIDTH = 160;
 const MENU_GAP = 8;
+// Three options at ~37px each plus padding; used to flip the menu above
+// the trigger when there is no room below (sidebar footer near viewport).
+const MENU_HEIGHT = 140;
 
 function nextMode(mode: string | undefined): ThemeMode {
   if (mode === "system" || mode === undefined) return "light";
@@ -51,8 +54,10 @@ export function ThemeSwitcher() {
   function openMenu() {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
+      const opensUpward =
+        rect.bottom + MENU_GAP + MENU_HEIGHT > window.innerHeight;
       setPos({
-        top: rect.bottom + MENU_GAP,
+        top: opensUpward ? rect.top - MENU_GAP - MENU_HEIGHT : rect.bottom + MENU_GAP,
         left: Math.max(
           MENU_GAP,
           Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - MENU_GAP)
@@ -70,7 +75,7 @@ export function ThemeSwitcher() {
 
   function choose(mode: ThemeMode) {
     setTheme(mode);
-    closeMenu(false);
+    closeMenu(true);
   }
 
   React.useEffect(() => {
@@ -153,6 +158,11 @@ export function ThemeSwitcher() {
                 if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                   e.preventDefault();
                   moveFocus(e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
+                }
+              }}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  closeMenu(false);
                 }
               }}
               className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-md"

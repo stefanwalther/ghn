@@ -309,7 +309,7 @@ test.describe("inbox filter", () => {
     await page.getByLabel("Filter by state", { exact: true }).selectOption("done");
     await expect(page).toHaveURL(/\?state=done/);
     await expect(inboxRows(page)).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "All caught up" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Nothing finished yet" })).toBeVisible();
 
     await page.getByLabel("Filter by state", { exact: true }).selectOption("all");
     await expect(page).toHaveURL(/\?state=all/);

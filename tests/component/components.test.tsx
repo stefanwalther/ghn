@@ -120,7 +120,7 @@ describe("NotificationList", () => {
   test("shows the repository, the badges and the subject of every item", () => {
     renderList();
 
-    const list = within(screen.getByRole("list"));
+    const list = within(screen.getByRole("listbox"));
     expect(list.getByText("Fix flaky login redirect")).toBeInTheDocument();
     expect(list.getByText("Bump the linter")).toBeInTheDocument();
     expect(list.getByText("acme/web")).toBeInTheDocument();
@@ -177,6 +177,25 @@ describe("NotificationList", () => {
 
     expect(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Select Bump the linter" })).not.toBeChecked();
+  });
+
+  test("exposes rows as options with selection state", () => {
+    renderList({ selected: new Set(["n_001"]) });
+
+    const listbox = screen.getByRole("listbox", { name: "Notifications" });
+    const options = within(listbox).getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    expect(options[1]).toHaveAttribute("aria-selected", "false");
+  });
+
+  test("marks select-all as mixed for a partial selection", () => {
+    renderList({ selected: new Set(["n_001"]) });
+
+    expect(screen.getByRole("checkbox", { name: "Select all visible" })).toHaveAttribute(
+      "aria-checked",
+      "mixed"
+    );
   });
 
   test("shows the keyboard hints when they are enabled", () => {
@@ -942,7 +961,7 @@ describe("ShortcutsHelp", () => {
     expect(within(dialog).getByText("j / k")).toBeInTheDocument();
     expect(within(dialog).getByText(/Move focus between rows/)).toBeInTheDocument();
     expect(within(dialog).getByText(/Jump to the previous \/ next thread/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/Press Esc or click outside to close/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/First Esc clears the search/)).toBeInTheDocument();
   });
 
   test("closes when the backdrop is clicked", () => {

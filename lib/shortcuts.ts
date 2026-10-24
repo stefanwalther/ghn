@@ -12,7 +12,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { key: "Shift+D", label: "Details", description: "Open the focused thread details in the side panel", group: "Navigate" },
   { key: "x", label: "Select", description: "Toggle the focused row", group: "Triage" },
   { key: "d", label: "Done", description: "Mark selection done (or the focused row)", group: "Triage" },
-  { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row)", group: "Triage" },
+  { key: "Shift+U", label: "Unsubscribe", description: "Unsubscribe selection (or the focused row), with confirmation", group: "Triage" },
   { key: "u", label: "Unread", description: "Mark selection unread (or the focused row)", group: "Triage" },
   { key: "r", label: "Read", description: "Mark selection read (or the focused row)", group: "Triage" },
   { key: "s", label: "Sync", description: "Refresh selection from GitHub (or the focused row)", group: "Triage" },

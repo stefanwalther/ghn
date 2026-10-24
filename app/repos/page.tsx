@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { ErrorInbox, LoadingRepositories } from "@/components/inbox/empty-states";
+import { ErrorRepositories, LoadingRepositories } from "@/components/inbox/empty-states";
+import { Button } from "@/components/ui/button";
 import { RepoRow } from "@/components/repos/repo-row";
 import { useRepositories, useUpdateRepository } from "@/lib/queries";
 
@@ -56,7 +57,7 @@ export default function ReposPage() {
         </p>
       </div>
       {status === "loading" ? <LoadingRepositories /> : null}
-      {status === "error" ? <ErrorInbox onRetry={() => void reposQuery.refetch()} /> : null}
+      {status === "error" ? <ErrorRepositories onRetry={() => void reposQuery.refetch()} /> : null}
       {notice ? (
         <p role="alert" className="text-xs text-destructive">
           {notice}
@@ -82,13 +83,9 @@ export default function ReposPage() {
             {visible.length} of {repos.length}
           </span>
           {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <Button variant="ghost" size="sm" onClick={() => setQuery("")}>
               Clear
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -98,13 +95,9 @@ export default function ReposPage() {
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             Try a shorter fragment of the owner or repository name.
           </p>
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            className="mt-4 cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button variant="outline" onClick={() => setQuery("")} className="mt-4">
             Clear filter
-          </button>
+          </Button>
         </div>
       ) : null}
       {status === "ready"

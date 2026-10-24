@@ -13,6 +13,7 @@ import { ListToolbar, NotificationList, type InboxItem } from "@/components/inbo
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
+import { useDialogFocus } from "@/lib/dialog-focus";
 import { copyText } from "@/lib/clipboard";
 import { describeBulkResult } from "@/lib/bulk";
 import {
@@ -58,6 +59,9 @@ function InboxView() {
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [confirmUnsub, setConfirmUnsub] = React.useState<string[] | null>(null);
+  const confirmDialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(confirmDialogRef, confirmUnsub !== null);
   // Filter sidebar width persists across visits. It stays hidden until the
   // stored value is applied before first paint, so the wrong width never
   // flashes on screen.
@@ -226,9 +230,13 @@ function InboxView() {
     }
   }
 
-  async function apply(action: BulkAction, ids?: string[]) {
+  async function apply(action: BulkAction, ids?: string[], opts?: { confirmed?: boolean }) {
     const targets = ids ?? [...selected];
     if (targets.length === 0) return;
+    if (action === "unsubscribe" && !opts?.confirmed) {
+      setConfirmUnsub(targets);
+      return;
+    }
     setNotice(null);
     const targetSet = new Set(targets);
     const prevItems = items;
@@ -383,12 +391,17 @@ function InboxView() {
         // The shortcuts dialog now lives in the global AppShell. When it is
         // open, leave selection and drawer alone so Escape only closes help.
         if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
+        if (confirmUnsub) {
+          setConfirmUnsub(null);
+          return;
+        }
         if (drawerItem) setDrawerItem(null);
         else setSelected(new Set());
         return;
       }
       if (isEditableTarget(e.target)) return;
       if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
+      if (confirmUnsub) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const drawerOpen = drawerItem !== null;
       const activeId = drawerOpen ? drawerItem.id : focusIdx !== null ? items[focusIdx]?.id : undefined;
@@ -489,7 +502,11 @@ function InboxView() {
         <div>
           <h1 className="text-xl font-semibold">Notifications</h1>
           <p className="text-sm text-muted-foreground">
-            Triage unread notifications. Digests stay collapsed until due.
+            {filters.state === "done"
+              ? "Finished items. Mark anything unread to bring it back."
+              : filters.state === "all"
+                ? "Every notification in one place. Digests stay collapsed until due."
+                : "Triage unread notifications. Digests stay collapsed until due."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -679,7 +696,9 @@ function InboxView() {
           ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
           {status === "error" ? <ErrorInbox onRetry={() => void notifQuery.refetch()} /> : null}
-          {status === "ready" && items.length === 0 && collapsed.length === 0 ? <EmptyInbox /> : null}
+          {status === "ready" && items.length === 0 && collapsed.length === 0 ? (
+            <EmptyInbox state={filters.state} />
+          ) : null}
           {status === "ready" && items.length > 0 ? (
         <NotificationList
           items={items}
@@ -704,6 +723,41 @@ function InboxView() {
           ) : null}
         </div>
       </div>
+      {confirmUnsub ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
+          <div
+            ref={confirmDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-unsub-title"
+            aria-describedby="confirm-unsub-desc"
+            className="w-full max-w-sm rounded-lg bg-card p-6 shadow-md"
+          >
+            <h2 id="confirm-unsub-title" className="font-semibold">
+              Unsubscribe from {confirmUnsub.length} {confirmUnsub.length === 1 ? "thread" : "threads"}?
+            </h2>
+            <p id="confirm-unsub-desc" className="mt-2 text-sm text-muted-foreground">
+              You will stop receiving notifications for{" "}
+              {confirmUnsub.length === 1 ? "this thread" : "these threads"}. This cannot be
+              undone from here.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button variant="ghost" data-autofocus onClick={() => setConfirmUnsub(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const targets = confirmUnsub;
+                  setConfirmUnsub(null);
+                  void apply("unsubscribe", targets, { confirmed: true });
+                }}
+              >
+                Unsubscribe
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {drawerItem ? (
         <ItemDrawer
           item={drawerItem}

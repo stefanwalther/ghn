@@ -33,9 +33,11 @@ export function VersionIndicator() {
   }, []);
 
   const latest = info?.updateAvailable === true ? info.latest : null;
+  const badgeRef = React.useRef<HTMLButtonElement>(null);
 
   function close() {
     setOpen(false);
+    requestAnimationFrame(() => badgeRef.current?.focus());
   }
 
   if (!latest || !info) {
@@ -45,6 +47,7 @@ export function VersionIndicator() {
   return (
     <>
       <button
+        ref={badgeRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`New ghn version ${info.latest} available, running ${info.current}. Open the update dialog.`}
