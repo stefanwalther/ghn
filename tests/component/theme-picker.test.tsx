@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { Providers } from "@/app/providers";
 import { ThemePicker } from "@/components/theme-picker";
 import {
   THEMES,
@@ -86,5 +87,58 @@ describe("ThemePicker", () => {
     expect(
       screen.getByRole("radio", { name: "Gruvbox theme" })
     ).toHaveAttribute("aria-checked", "true");
+  });
+});
+
+describe("theme storage failures", () => {
+  test("read falls back to default when storage throws", () => {
+    const getItem = vi
+      .spyOn(window.localStorage, "getItem")
+      .mockImplementation(() => {
+        throw new Error("denied");
+      });
+    try {
+      expect(readThemeId()).toBe("default");
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
+  test("write still applies the theme when storage throws", () => {
+    const setItem = vi
+      .spyOn(window.localStorage, "setItem")
+      .mockImplementation(() => {
+        throw new Error("denied");
+      });
+    try {
+      expect(writeThemeId("nord")).toBe("nord");
+      expect(document.documentElement.getAttribute("data-theme")).toBe("nord");
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+});
+
+describe("Providers theme wiring", () => {
+  test("applies the stored theme on mount", () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "kanagawa");
+    render(
+      <Providers>
+        <span>child</span>
+      </Providers>
+    );
+    expect(screen.getByText("child")).toBeInTheDocument();
+    expect(document.documentElement.getAttribute("data-theme")).toBe(
+      "kanagawa"
+    );
+  });
+
+  test("leaves the default theme alone on mount", () => {
+    render(
+      <Providers>
+        <span>child</span>
+      </Providers>
+    );
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
   });
 });

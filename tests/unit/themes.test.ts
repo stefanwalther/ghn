@@ -1,7 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_THEME_ID, THEMES, isThemeId, normalizeThemeId } from "@/lib/themes";
+import {
+  DEFAULT_THEME_ID,
+  THEMES,
+  isThemeId,
+  normalizeThemeId,
+  readThemeId,
+} from "@/lib/themes";
 
 const REQUIRED_VARS = [
   "--background",
@@ -57,6 +63,11 @@ describe("theme registry", () => {
     expect(normalizeThemeId(undefined)).toBe("default");
     expect(isThemeId("dracula")).toBe(true);
     expect(isThemeId("nope")).toBe(false);
+  });
+
+  test("read falls back to default without a window", () => {
+    // The unit layer runs in node, so the SSR guard returns the default.
+    expect(readThemeId()).toBe("default");
   });
 });
 
