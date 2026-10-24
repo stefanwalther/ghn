@@ -1,0 +1,10 @@
+# Historical false positives: documentation example token in vendored
+# third-party spec-kit extension docs. The working tree no longer contains
+# the string; these suppress the historical commits only.
+# Evidence: sub-agent full-history sweep 2026-10-24, rule generic-api-key.
+878cf74295f27efea36a191b3ba44e66f47419f4:.specify/extensions/ext/.specify-dev/agent-commands/claude/speckit-ext-code-review/SKILL.md:generic-api-key:183
+9773ebbf68e55ea397a45aa0e855d924670e3eb8:.specify/extensions/ext/.specify-dev/agent-commands/claude/speckit-ext-code-review/SKILL.md:generic-api-key:183
+e3b791f07f04fa746d504d5169c6db9b3408443f:.specify/extensions/ext/.specify-dev/agent-commands/claude/speckit-ext-code-review/SKILL.md:generic-api-key:183
+878cf74295f27efea36a191b3ba44e66f47419f4:.specify/extensions/ext/commands/speckit.ext.code-review.md:generic-api-key:189
+9773ebbf68e55ea397a45aa0e855d924670e3eb8:.specify/extensions/ext/commands/speckit.ext.code-review.md:generic-api-key:189
+e3b791f07f04fa746d504d5169c6db9b3408443f:.specify/extensions/ext/commands/speckit.ext.code-review.md:generic-api-key:189
