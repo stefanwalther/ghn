@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Markdown } from "@/components/inbox/markdown";
 import { isClosedItem, isMergedItem } from "@/lib/filters";
+import { LoadingThread } from "@/components/inbox/empty-states";
 import type { DependabotAlertDetails, WorkflowRun } from "@/lib/github";
 import { SecurityAlertPreview } from "@/components/inbox/security-alert-preview";
 import {
@@ -92,7 +93,12 @@ export function ItemDrawer({
   // the previous direct fetch: alerts win, an explicit null content means no
   // preview with runs, otherwise the payload itself is the thread content.
   const detailsQuery = useThreadDetails(item.id);
-  const contentState = detailsQuery.isPending
+  // With keepPreviousData the previous thread stays as placeholder data while
+  // the new thread fetches. Treat placeholder as loading so selecting another
+  // item shows a skeleton immediately instead of flashing stale content.
+  const loadingThread =
+    detailsQuery.isPending || detailsQuery.isPlaceholderData;
+  const contentState = loadingThread
     ? "loading"
     : detailsQuery.isError
       ? "unavailable"
@@ -120,7 +126,12 @@ export function ItemDrawer({
     }
     return { content: data as ThreadDetails, runs: [], alert: null };
   }, [detailsQuery.data]);
-  const { content, runs, alert } = derived;
+  const raw = derived;
+  // While the new thread loads, ignore placeholder (previous thread) data so
+  // the header badge and runs never flash stale content under the skeleton.
+  const content = loadingThread ? null : raw.content;
+  const runs = loadingThread ? [] : raw.runs;
+  const alert = loadingThread ? null : raw.alert;
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
   const scrollRef = React.useRef<HTMLElement>(null);
@@ -307,11 +318,7 @@ export function ItemDrawer({
           </div>
         </div>
         <div className="flex min-w-0 flex-col gap-2 border-t border-border pt-4">
-          {contentState === "loading" ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              Loading thread…
-            </p>
-          ) : null}
+          {contentState === "loading" ? <LoadingThread /> : null}
           {contentState === "ready" && alert ? (
             <SecurityAlertPreview alert={alert} repositoryUrl={repositoryUrl} />
           ) : null}
