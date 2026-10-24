@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import { BulkBar, type BulkAction } from "@/components/inbox/bulk-bar";
 import { DigestSection } from "@/components/inbox/digest-section";
-import { EmptyInbox, ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
+import { EmptyInbox, ErrorInbox, LoadingInbox, QuietEmptyState } from "@/components/inbox/empty-states";
 import { FilterSidebar } from "@/components/inbox/filter-sidebar";
 import { InboxFilters } from "@/components/inbox/inbox-filters";
 import { ItemDrawer } from "@/components/inbox/item-drawer";
@@ -130,6 +130,16 @@ function InboxView() {
     [notifQuery.data]
   );
   const collapsed = notifQuery.data?.collapsedSection ?? [];
+  const quietTotal = collapsed.reduce((n, g) => n + g.pendingCount, 0);
+  // The quiet group matching the repo filter, if the filter points at a
+  // repo whose items are all still collapsed. Its panel explains where the
+  // items are instead of claiming everything is done.
+  const activeQuietGroup =
+    filters.repo === "all"
+      ? undefined
+      : collapsed.find((g) => g.repositoryId === filters.repo);
+  const showQuietNotice =
+    collapsed.length > 0 && (filters.repo === "all" || activeQuietGroup !== undefined);
   const typeFacets = notifQuery.data?.facets?.types ?? [];
   const repoFacets = notifQuery.data?.facets?.repos ?? [];
   const refreshing = notifQuery.isFetching && !notifQuery.isPending;
@@ -177,6 +187,23 @@ function InboxView() {
 
   function setFilters(next: Filters) {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
+  }
+
+  /** The quiet digest list takes over the main column until a real filter is picked. */
+  const [quietView, setQuietView] = React.useState(false);
+
+  function selectType(type: string) {
+    setQuietView(false);
+    setFilters({ ...filters, type });
+  }
+
+  function selectRepo(repo: string) {
+    setQuietView(false);
+    setFilters({ ...filters, repo });
+  }
+
+  function showQuietDigests() {
+    setQuietView(true);
   }
 
   function toggle(id: string) {
@@ -282,6 +309,17 @@ function InboxView() {
       await notifQuery.refetch();
     } catch {
       setNotice("Snooze failed. Previous setting restored.");
+    }
+  }
+
+  /** Promotes one repo to the immediate rhythm so its quiet items surface now. */
+  async function promoteRepo(id: string) {
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { rhythm: "immediate" } });
+      await notifQuery.refetch();
+    } catch {
+      setNotice("Promotion failed. Previous setting restored.");
     }
   }
 
@@ -661,14 +699,17 @@ function InboxView() {
             activeType={filters.type}
             repos={repoFacets}
             activeRepo={filters.repo}
-            onType={(type) => setFilters({ ...filters, type })}
-            onRepo={(repo) => setFilters({ ...filters, repo })}
+            onType={selectType}
+            onRepo={selectRepo}
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}
             markAllDoneBusy={markAllDoneBusy}
             onMarkAllRead={markRepoRead}
             markAllReadBusy={markAllDoneBusy}
+            quietGroups={collapsed}
+            quietActive={quietView}
+            onQuietView={showQuietDigests}
           />
           <div
             role="separator"
@@ -795,10 +836,33 @@ function InboxView() {
           ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
           {status === "error" ? <ErrorInbox onRetry={() => void notifQuery.refetch()} /> : null}
-          {status === "ready" && items.length === 0 && collapsed.length === 0 ? (
-            <EmptyInbox state={filters.state} />
+          {status === "ready" && items.length === 0 && !quietView ? (
+            showQuietNotice ? (
+              <QuietEmptyState
+                total={quietTotal}
+                repoName={activeQuietGroup?.repositoryName}
+                pendingCount={activeQuietGroup?.pendingCount}
+                isSnoozed={activeQuietGroup?.isSnoozed ?? false}
+                snoozeLabel={activeQuietGroup?.snoozeLabel}
+                rhythm={activeQuietGroup?.rhythm}
+                nextDueLabel={activeQuietGroup?.nextDueLabel}
+                onUnsnooze={
+                  activeQuietGroup
+                    ? () => void snoozeRepo(activeQuietGroup.repositoryId, null)
+                    : undefined
+                }
+                onPromote={
+                  activeQuietGroup
+                    ? () => void promoteRepo(activeQuietGroup.repositoryId)
+                    : undefined
+                }
+                busy={updateRepo.isPending}
+              />
+            ) : (
+              <EmptyInbox state={filters.state} />
+            )
           ) : null}
-          {status === "ready" && items.length > 0 ? (
+          {status === "ready" && !quietView && items.length > 0 ? (
         <NotificationList
           items={items}
           selected={selected}
@@ -813,7 +877,7 @@ function InboxView() {
           hideToolbar
         />
           ) : null}
-          {status === "ready" && collapsed.length > 0 ? (
+          {status === "ready" && quietView && collapsed.length > 0 ? (
             <DigestSection
               groups={collapsed}
               onSnooze={snoozeRepo}
@@ -823,6 +887,9 @@ function InboxView() {
               onMarkAllRead={markRepoRead}
               markAllReadBusy={markAllDoneBusy}
             />
+          ) : null}
+          {status === "ready" && quietView && collapsed.length === 0 ? (
+            <EmptyInbox state={filters.state} />
           ) : null}
         </div>
       </div>
