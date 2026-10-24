@@ -3,6 +3,7 @@ import {
   applyLocalAction,
   applyOptimisticList,
   nextFocusIndex,
+  nextRepoAfterMarkDone,
   nextSelection,
   pollWindow,
   toggleAllSelection,
@@ -201,5 +202,45 @@ describe("the poll window", () => {
   test("the countdown rounds up to whole seconds", () => {
     expect(pollWindow(lastSyncAt, 60, lastSyncAt + 1).countdownSecs).toBe(60);
     expect(pollWindow(lastSyncAt, 60, lastSyncAt + 59_001).countdownSecs).toBe(1);
+  });
+});
+
+describe("next repo after mark done", () => {
+  const repos = [
+    { id: "a", main: 1, quiet: 0 },
+    { id: "b", main: 1, quiet: 0 },
+    { id: "c", main: 1, quiet: 0 },
+  ];
+
+  test("selects the next repo when one follows", () => {
+    expect(nextRepoAfterMarkDone(repos, "b", "b")).toBe("c");
+    expect(nextRepoAfterMarkDone(repos, "a", "a")).toBe("b");
+  });
+
+  test("selects the previous repo when the emptied one was last", () => {
+    expect(nextRepoAfterMarkDone(repos, "c", "c")).toBe("b");
+  });
+
+  test("selects all when nothing else remains", () => {
+    expect(nextRepoAfterMarkDone([{ id: "a", main: 1, quiet: 0 }], "a", "a")).toBe(
+      "all"
+    );
+  });
+
+  test("needs no navigation when another repo is active", () => {
+    expect(nextRepoAfterMarkDone(repos, "a", "b")).toBeNull();
+  });
+
+  test("needs no navigation from the all view", () => {
+    expect(nextRepoAfterMarkDone(repos, "all", "b")).toBeNull();
+  });
+
+  test("skips repos that are already empty", () => {
+    const mixed = [
+      { id: "a", main: 0, quiet: 0 },
+      { id: "b", main: 1, quiet: 0 },
+      { id: "c", main: 0, quiet: 0 },
+    ];
+    expect(nextRepoAfterMarkDone(mixed, "b", "b")).toBe("all");
   });
 });

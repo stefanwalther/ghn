@@ -30,6 +30,7 @@ import { selectByQuickFilter } from "@/lib/filters";
 import {
   applyOptimisticList,
   nextFocusIndex,
+  nextRepoAfterMarkDone,
   nextSelection,
   toggleAllSelection,
 } from "@/lib/inbox-state";
@@ -319,6 +320,24 @@ function InboxView() {
           error: typeof body?.error === "string" ? body.error : null,
         });
         if (queuedNotice) setNotice(queuedNotice);
+        // The sidebar hides zero-item repos unless they are the active
+        // filter. When the active repo was just emptied, move the filter to
+        // the next visible repo (previous when last, "all" when none
+        // remain) so the emptied row disappears immediately instead of
+        // lingering until the next click. Only the unread view hides the
+        // repo: the "all" view keeps its done rows, and the done view
+        // disables this action.
+        if (filters.state === "unread" && filters.repo === repositoryId) {
+          const nextRepo = nextRepoAfterMarkDone(
+            repoFacets,
+            filters.repo,
+            repositoryId
+          );
+          if (nextRepo !== null) {
+            setFocusIdx(null);
+            setFilters({ ...filters, repo: nextRepo });
+          }
+        }
       }
       await notifQuery.refetch();
     } catch {

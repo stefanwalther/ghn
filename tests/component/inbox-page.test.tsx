@@ -899,4 +899,51 @@ describe("repo-wide inbox actions", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
   });
+
+  test("moves the filter to the next repo when the active repo is emptied", async () => {
+    nav.params = new URLSearchParams("repo=acme--web");
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (1)" }));
+
+    await waitFor(() => {
+      expect(nav.replace).toHaveBeenCalledWith("/?repo=acme--api", {
+        scroll: false,
+      });
+    });
+  });
+
+  test("moves the filter to all when the last remaining repo is emptied", async () => {
+    nav.params = new URLSearchParams("repo=acme--web");
+    installFetch({
+      notifications: {
+        ...notificationsPayload,
+        mainFlow: [firstItem],
+        facets: {
+          types: notificationsPayload.facets.types,
+          repos: [
+            {
+              id: "acme--web",
+              fullName: "acme/web",
+              main: 1,
+              quiet: 0,
+              isSnoozed: false,
+            },
+          ],
+        },
+      },
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (1)" }));
+
+    await waitFor(() => {
+      expect(nav.replace).toHaveBeenCalledWith("/", { scroll: false });
+    });
+  });
 });
