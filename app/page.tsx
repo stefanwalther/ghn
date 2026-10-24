@@ -433,6 +433,10 @@ function InboxView() {
     }
   }
 
+  function handleRepoCopied(_id: string, ok: boolean) {
+    setNotice(ok ? "Repo link copied to clipboard." : "Copy failed in this browser.");
+  }
+
   function moveFocus(delta: number) {
     const next = nextFocusIndex(items.length, focusIdx, delta);
     if (next === null) return;
@@ -748,6 +752,7 @@ function InboxView() {
             markAllDoneBusy={markAllDoneBusy}
             onMarkAllRead={markRepoRead}
             markAllReadBusy={markAllDoneBusy}
+            onCopied={handleRepoCopied}
             quietGroups={collapsed}
             quietActive={quietView}
             onQuietView={showQuietDigests}
@@ -928,6 +933,7 @@ function InboxView() {
               markAllDoneBusy={markAllDoneBusy}
               onMarkAllRead={markRepoRead}
               markAllReadBusy={markAllDoneBusy}
+              onCopied={handleRepoCopied}
             />
           ) : null}
           {status === "ready" && quietView && collapsed.length === 0 ? (

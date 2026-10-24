@@ -25,6 +25,7 @@ export function DigestSection({
   markAllDoneBusy,
   onMarkAllRead,
   markAllReadBusy,
+  onCopied,
 }: {
   groups: DigestGroup[];
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
@@ -33,6 +34,7 @@ export function DigestSection({
   markAllDoneBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
+  onCopied?: (id: string, ok: boolean) => void;
 }) {
   if (groups.length === 0) return null;
   const total = groups.reduce((n, g) => n + g.pendingCount, 0);
@@ -51,6 +53,7 @@ export function DigestSection({
           markAllDoneBusy={markAllDoneBusy}
           onMarkAllRead={onMarkAllRead}
           markAllReadBusy={markAllReadBusy}
+          onCopied={onCopied}
         />
       ))}
     </section>
@@ -66,6 +69,7 @@ function DigestRow({
   markAllDoneBusy,
   onMarkAllRead,
   markAllReadBusy,
+  onCopied,
 }: {
   group: DigestGroup;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
@@ -74,6 +78,7 @@ function DigestRow({
   markAllDoneBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
+  onCopied?: (id: string, ok: boolean) => void;
 }) {
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
@@ -121,6 +126,7 @@ function DigestRow({
             onMarkAllRead={onMarkAllRead}
             markAllReadDisabled={markAllReadBusy || g.pendingCount === 0}
             markAllReadCount={g.pendingCount}
+            onCopied={onCopied}
             visible={visible}
             contextAnchor={contextAnchor}
             onContextClose={() => setContextAnchor(null)}

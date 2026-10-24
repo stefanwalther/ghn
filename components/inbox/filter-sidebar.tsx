@@ -63,6 +63,7 @@ function RepoFilterRow({
   markAllDoneBusy,
   onMarkAllRead,
   markAllReadBusy,
+  onCopied,
 }: {
   repo: RepoFacet;
   active: boolean;
@@ -74,6 +75,7 @@ function RepoFilterRow({
   markAllDoneBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
+  onCopied?: (id: string, ok: boolean) => void;
 }) {
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
@@ -118,6 +120,7 @@ function RepoFilterRow({
           onMarkAllRead={onMarkAllRead}
           markAllReadDisabled={markAllReadBusy || pendingTotal === 0}
           markAllReadCount={pendingTotal}
+          onCopied={onCopied}
           visible={visible}
           contextAnchor={contextAnchor}
           onContextClose={() => setContextAnchor(null)}
@@ -148,6 +151,7 @@ export function FilterSidebar({
   markAllDoneBusy,
   onMarkAllRead,
   markAllReadBusy,
+  onCopied,
   quietGroups = [],
   quietActive = false,
   onQuietView,
@@ -164,6 +168,7 @@ export function FilterSidebar({
   markAllDoneBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
+  onCopied?: (id: string, ok: boolean) => void;
   quietGroups?: DigestGroup[];
   quietActive?: boolean;
   onQuietView?: () => void;
@@ -321,6 +326,7 @@ export function FilterSidebar({
               markAllDoneBusy={markAllDoneBusy}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
+              onCopied={onCopied}
             />
           ))}
         </div>
@@ -362,6 +368,7 @@ export function FilterSidebar({
               markAllDoneBusy={markAllDoneBusy}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
+              onCopied={onCopied}
             />
           ))}
         </div>

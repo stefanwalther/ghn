@@ -709,6 +709,7 @@ describe("FilterSidebar", () => {
       "Mark all as read (4)",
       expect.stringMatching(/^Snooze/),
       "Open repo",
+      "Copy repo link",
     ]);
 
     fireEvent.click(screen.getByRole("menuitem", { name: /Mark all as read/ }));
@@ -901,6 +902,7 @@ describe("DigestSection", () => {
       "Mark all as read (2)",
       expect.stringMatching(/^Snooze/),
       "Open repo",
+      "Copy repo link",
     ]);
 
     fireEvent.click(screen.getByRole("menuitem", { name: /Mark all as read/ }));
@@ -1005,6 +1007,7 @@ describe("RepoSnoozeMenu", () => {
       "Mark all as read (4)",
       expect.stringMatching(/^Snooze/),
       "Open repo",
+      "Copy repo link",
     ]);
 
     fireEvent.click(screen.getByRole("menuitem", { name: /Mark all as read/ }));
@@ -1062,12 +1065,12 @@ describe("RepoSnoozeMenu", () => {
     openRepo.focus();
     fireEvent.keyDown(openRepo, { key: "ArrowDown" });
 
-    expect(within(menu).getByRole("menuitem", { name: /^Snooze/ })).toHaveFocus();
+    expect(within(menu).getByRole("menuitem", { name: "Copy repo link" })).toHaveFocus();
 
     const snooze = within(menu).getByRole("menuitem", { name: /^Snooze/ });
     fireEvent.keyDown(snooze, { key: "ArrowUp" });
 
-    expect(within(menu).getByRole("menuitem", { name: "Open repo" })).toHaveFocus();
+    expect(within(menu).getByRole("menuitem", { name: "Copy repo link" })).toHaveFocus();
   });
 
   test("opens the repository root in a new window", () => {
@@ -1102,6 +1105,36 @@ describe("RepoSnoozeMenu", () => {
       );
     } finally {
       openSpy.mockRestore();
+    }
+  });
+
+  test("copies the repository link and reports the repo", async () => {
+    const onCopied = vi.fn();
+    renderSnoozeMenu({ onCopied });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy repo link" }));
+
+    await waitFor(() => expect(onCopied).toHaveBeenCalledWith("acme--web", true));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("copies the given repository URL when provided", async () => {
+    const onCopied = vi.fn();
+    const writeSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText: writeSpy },
+      configurable: true,
+    });
+    renderSnoozeMenu({ repoUrl: "https://ghe.example.com/acme/web", onCopied });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy repo link" }));
+
+      await waitFor(() => expect(writeSpy).toHaveBeenCalledWith("https://ghe.example.com/acme/web"));
+      expect(onCopied).toHaveBeenCalledWith("acme--web", true);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
