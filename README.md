@@ -18,6 +18,7 @@ Zero friction. Based on the [`gh` CLI](https://cli.github.com/). If `gh` works, 
 - **Clever filtering** - slice by repo, type, age, and read or done state. The queue narrows to what matters now.
 - **Repo rhythms** - define which repos show immediately, weekly, or monthly, plus snooze for an hour, this evening, or next week.
 - **No API key wrangling** - reuses your `gh` login. No tokens to copy, no env files to maintain.
+- **16 color themes** - pick from Default, GitHub, Dracula, Nord, and more in Settings. Each pairs with light, dark, or system mode.
 
 ## Get going
 

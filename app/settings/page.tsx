@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
+import { ThemePicker } from "@/components/theme-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSettings } from "@/lib/queries";
 
@@ -89,6 +90,20 @@ export default function SettingsPage() {
 
       {status === "ready" && data ? (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                Appearance
+              </CardTitle>
+              <CardDescription>
+                Color theme, stored in this browser. Light and dark mode stays
+                on the theme button in the header.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ThemePicker />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
