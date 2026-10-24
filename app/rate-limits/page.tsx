@@ -47,7 +47,7 @@ export default function RateLimitsPage() {
   const refreshing = rateQuery.isFetching && !rateQuery.isPending;
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-4">
+    <div className="flex w-full max-w-6xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">GitHub rate limits</h1>

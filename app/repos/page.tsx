@@ -47,7 +47,7 @@ export default function ReposPage() {
   }
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-4">
+    <div className="flex w-full max-w-6xl flex-col gap-4">
       <div>
         <h1 className="text-xl font-semibold">Repositories</h1>
         <p className="text-sm text-muted-foreground">
