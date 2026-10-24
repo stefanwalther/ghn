@@ -7,13 +7,34 @@ export function unwrapDetails(md: string): string {
 }
 
 /**
- * Strip HTML tags from a short label. Removes complete `<...>` tags first,
- * then any unterminated tag fragment (`<script`, `<img src="...`) so a
- * `<` without a closing `>` can never survive. A bare `<` followed by
- * whitespace (e.g. `a < b`) is kept as text.
+ * Strip HTML tags from a short label without regex replacement (CodeQL
+ * flags multi-character tag-stripping patterns as incomplete sanitizers).
+ * Skips `<...>` tags and drops an unterminated `<tag` fragment. A `<`
+ * not followed by a letter, `/` or `!` (e.g. `a < b`) is kept as text.
  */
 function stripTags(value: string): string {
-  return value.replace(/<[^>]*>/g, "").replace(/<[A-Za-z/!][^<>]*$/g, "");
+  let out = "";
+  let i = 0;
+  while (i < value.length) {
+    const lt = value.indexOf("<", i);
+    if (lt === -1) {
+      out += value.slice(i);
+      break;
+    }
+    if (lt + 1 < value.length && /[A-Za-z/!]/.test(value[lt + 1] as string)) {
+      const gt = value.indexOf(">", lt + 1);
+      if (gt === -1) {
+        out += value.slice(i, lt);
+        break;
+      }
+      out += value.slice(i, lt);
+      i = gt + 1;
+    } else {
+      out += value.slice(i, lt + 1);
+      i = lt + 1;
+    }
+  }
+  return out;
 }
 
 interface MdNode {

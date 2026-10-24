@@ -48,4 +48,12 @@ describe("unwrapDetails", () => {
       "**a < b**\n\nbody"
     );
   });
+
+  test("nested tag soup leaves no script fragment", () => {
+    const label = unwrapDetails(
+      "<details><summary>A <script<script>> B</summary>\nbody\n</details>"
+    );
+    expect(label).not.toContain("<script");
+    expect(label).toBe("**A > B**\n\nbody");
+  });
 });
