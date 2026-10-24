@@ -197,15 +197,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Kbd>
             ) : null}
           </span>
-          <div className="min-w-0 flex-1 text-sm text-muted-foreground">
-            {pathname === "/repos"
-              ? "Digest settings per repository"
-              : pathname === "/rate-limits"
-                ? "GitHub API buckets from response headers"
-                : pathname === "/settings"
-                  ? "Database location and GitHub auth status"
-                  : null}
-          </div>
+          <div className="min-w-0 flex-1" />
           <button
             type="button"
             aria-label="Search and commands"

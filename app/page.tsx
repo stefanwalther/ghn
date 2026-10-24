@@ -488,6 +488,9 @@ function InboxView() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Notifications</h1>
+          <p className="text-sm text-muted-foreground">
+            Triage unread notifications. Digests stay collapsed until due.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
