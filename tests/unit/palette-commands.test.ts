@@ -25,7 +25,7 @@ describe("palette static entries", () => {
         expect(e.action.href.startsWith("/")).toBe(true);
       }
       if (e.action.type === "external") {
-        expect(e.action.href.startsWith("https://github.com")).toBe(true);
+        expect(e.action.href.startsWith("https://github.com/")).toBe(true);
       }
     }
   });
