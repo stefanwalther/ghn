@@ -295,7 +295,11 @@ export function RepoSnoozeMenu({
   }, [open, snoozeOpen]);
 
   function moveFocus(container: React.RefObject<HTMLDivElement | null>, target: HTMLElement, delta: 1 | -1) {
-    const buttons = [...(container.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    // Disabled entries cannot take focus; stepping onto one stalls
+    // arrow-key navigation, so they are left out of the cycle.
+    const buttons = [...(container.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
+      (b) => !b.disabled
+    );
     const idx = buttons.indexOf(target as HTMLButtonElement);
     const next = buttons[(idx + delta + buttons.length) % buttons.length];
     next?.focus();

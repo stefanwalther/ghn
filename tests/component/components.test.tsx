@@ -940,6 +940,30 @@ describe("RepoSnoozeMenu", () => {
     expect(screen.getByRole("menuitem", { name: /^Snooze/ })).toHaveFocus();
   });
 
+  test("arrow keys skip disabled entries", () => {
+    renderSnoozeMenu({
+      onMarkAllDone: vi.fn(),
+      markAllDoneCount: 0,
+      markAllDoneDisabled: true,
+      onMarkAllRead: vi.fn(),
+      markAllReadCount: 0,
+      markAllReadDisabled: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    const menu = screen.getByRole("menu", { name: "Actions for acme/web" });
+    const openRepo = within(menu).getByRole("menuitem", { name: "Open repo" });
+    openRepo.focus();
+    fireEvent.keyDown(openRepo, { key: "ArrowDown" });
+
+    expect(within(menu).getByRole("menuitem", { name: /^Snooze/ })).toHaveFocus();
+
+    const snooze = within(menu).getByRole("menuitem", { name: /^Snooze/ });
+    fireEvent.keyDown(snooze, { key: "ArrowUp" });
+
+    expect(within(menu).getByRole("menuitem", { name: "Open repo" })).toHaveFocus();
+  });
+
   test("opens the repository root in a new window", () => {
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     renderSnoozeMenu();
