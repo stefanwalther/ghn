@@ -78,22 +78,36 @@ test.describe("inbox load", () => {
     await expect(first.getByText("merged", { exact: true })).toBeVisible();
   });
 
-  test("collapses the quiet repositories into seven digest groups", async ({ page }) => {
+  test("shows the quiet digest list after choosing All repositories", async ({ page }) => {
     await page.goto("/");
 
-    const digests = page.locator('section[aria-label="Quiet digests"]');
-    await expect(digests).toBeVisible();
-    await expect(digests.getByText("Quiet until due (170 pending)", { exact: true })).toBeVisible();
+    const sidebar = page.locator('aside section[aria-label="Quiet digests"]');
+    await expect(sidebar).toBeVisible();
+    await expect(
+      sidebar.getByText("Quiet until due (170 pending)", { exact: true })
+    ).toBeVisible();
+
+    // Only the sidebar section exists until the quiet view opens.
+    const sections = page.locator('section[aria-label="Quiet digests"]');
+    await expect(sections).toHaveCount(1);
+
+    await sidebar.getByRole("button", { name: "Show all quiet repositories" }).click();
+
+    await expect(sections).toHaveCount(2);
+    const list = sections.nth(1);
+    await expect(
+      list.getByText("Quiet until due (170 pending)", { exact: true })
+    ).toBeVisible();
     // Each group has a collapsible toggle plus a hover actions button, so
     // count only the toggles here (the actions buttons are icon-only with
     // an "Actions for ..." accessible name).
-    const toggles = digests.getByRole("button", { name: /^(?!Actions for )/ });
+    const toggles = list.getByRole("button", { name: /^(?!Actions for )/ });
     await expect(toggles).toHaveCount(7);
 
     // The pending counts of the seven groups: two repositories with 25, five
     // with 24.
-    await expect(digests.getByText("25 pending", { exact: true })).toHaveCount(2);
-    await expect(digests.getByText("24 pending", { exact: true })).toHaveCount(5);
+    await expect(list.getByText("25 pending", { exact: true })).toHaveCount(2);
+    await expect(list.getByText("24 pending", { exact: true })).toHaveCount(5);
 
     for (const repo of [
       "vendor/slow-dep",
@@ -104,7 +118,7 @@ test.describe("inbox load", () => {
       "vendor/analytics",
       "oss/docs",
     ]) {
-      await expect(digests.getByRole("button", { name: new RegExp(`^${repo}\\b`) })).toBeVisible();
+      await expect(list.getByRole("button", { name: new RegExp(`^${repo}\\b`) })).toBeVisible();
     }
   });
 
@@ -431,19 +445,20 @@ test.describe("inbox triage", () => {
 
     // The menu offers the triage actions, each with its shortcut hint.
     const items = menu.getByRole("menuitem");
-    await expect(items).toHaveCount(7);
+    await expect(items).toHaveCount(8);
     expect(
       await items.evaluateAll((elements) =>
         elements.map((element) => element.querySelector("span")?.textContent ?? "")
       )
     ).toEqual([
-      "Open source",
-      "Open details",
-      "Copy link",
-      "Sync this item",
       "Mark as done",
       "Mark as unread",
       "Unsubscribe and mute",
+      "Open details",
+      "Open source",
+      "Copy link",
+      "Sync this item",
+      "Select this repository",
     ]);
   });
 

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import { BulkBar, type BulkAction } from "@/components/inbox/bulk-bar";
 import { DigestSection } from "@/components/inbox/digest-section";
-import { EmptyInbox, ErrorInbox, LoadingInbox } from "@/components/inbox/empty-states";
+import { EmptyInbox, ErrorInbox, LoadingInbox, QuietEmptyState } from "@/components/inbox/empty-states";
 import { FilterSidebar } from "@/components/inbox/filter-sidebar";
 import { InboxFilters } from "@/components/inbox/inbox-filters";
 import { ItemDrawer } from "@/components/inbox/item-drawer";
@@ -130,6 +130,16 @@ function InboxView() {
     [notifQuery.data]
   );
   const collapsed = notifQuery.data?.collapsedSection ?? [];
+  const quietTotal = collapsed.reduce((n, g) => n + g.pendingCount, 0);
+  // The quiet group matching the repo filter, if the filter points at a
+  // repo whose items are all still collapsed. Its panel explains where the
+  // items are instead of claiming everything is done.
+  const activeQuietGroup =
+    filters.repo === "all"
+      ? undefined
+      : collapsed.find((g) => g.repositoryId === filters.repo);
+  const showQuietNotice =
+    collapsed.length > 0 && (filters.repo === "all" || activeQuietGroup !== undefined);
   const typeFacets = notifQuery.data?.facets?.types ?? [];
   const repoFacets = notifQuery.data?.facets?.repos ?? [];
   const refreshing = notifQuery.isFetching && !notifQuery.isPending;
@@ -179,6 +189,23 @@ function InboxView() {
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
   }
 
+  /** The quiet digest list takes over the main column until a real filter is picked. */
+  const [quietView, setQuietView] = React.useState(false);
+
+  function selectType(type: string) {
+    setQuietView(false);
+    setFilters({ ...filters, type });
+  }
+
+  function selectRepo(repo: string) {
+    setQuietView(false);
+    setFilters({ ...filters, repo });
+  }
+
+  function showQuietDigests() {
+    setQuietView(true);
+  }
+
   function toggle(id: string) {
     setSelected((prev) => nextSelection(items, prev, id));
   }
@@ -214,6 +241,13 @@ function InboxView() {
     }
     if (action === "sync") {
       await syncOne(item.id);
+      return;
+    }
+    if (action === "select-repo") {
+      setFilters({
+        ...filters,
+        repo: filters.repo === item.repositoryId ? "all" : item.repositoryId,
+      });
       return;
     }
     void apply(action, [item.id]);
@@ -282,6 +316,17 @@ function InboxView() {
       await notifQuery.refetch();
     } catch {
       setNotice("Snooze failed. Previous setting restored.");
+    }
+  }
+
+  /** Promotes one repo to the immediate rhythm so its quiet items surface now. */
+  async function promoteRepo(id: string) {
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { rhythm: "immediate" } });
+      await notifQuery.refetch();
+    } catch {
+      setNotice("Promotion failed. Previous setting restored.");
     }
   }
 
@@ -490,6 +535,9 @@ function InboxView() {
         // The shortcuts dialog now lives in the global AppShell. When it is
         // open, leave selection and drawer alone so Escape only closes help.
         if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
+        // An open context menu owns its own Escape to close; leave selection
+        // and drawer alone with it.
+        if (document.querySelector('div[role="menu"]')) return;
         if (confirmUnsub) {
           setConfirmUnsub(null);
           return;
@@ -500,6 +548,9 @@ function InboxView() {
       }
       if (isEditableTarget(e.target)) return;
       if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
+      // A visible context menu owns the keyboard: list shortcuts stay quiet
+      // while it is open so j/k and triage keys never act behind it.
+      if (document.querySelector('div[role="menu"]')) return;
       if (confirmUnsub) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const drawerOpen = drawerItem !== null;
@@ -574,6 +625,15 @@ function InboxView() {
         case "c": {
           const item = drawerOpen ? drawerItem : focusIdx !== null ? items[focusIdx] : undefined;
           if (item) void menuAction(item, "copy");
+          break;
+        }
+        case "m": {
+          // Single-key context menu for the focused row. Skipped while the
+          // drawer is open: it has its own triage actions, and the row menu
+          // would float above it.
+          if (drawerOpen) break;
+          const id = focusIdx !== null ? items[focusIdx]?.id : undefined;
+          if (id) useUIStore.getState().requestMenu(id);
           break;
         }
         case "a":
@@ -665,8 +725,8 @@ function InboxView() {
             activeType={filters.type}
             repos={repoFacets}
             activeRepo={filters.repo}
-            onType={(type) => setFilters({ ...filters, type })}
-            onRepo={(repo) => setFilters({ ...filters, repo })}
+            onType={selectType}
+            onRepo={selectRepo}
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}
@@ -674,6 +734,9 @@ function InboxView() {
             onMarkAllRead={markRepoRead}
             markAllReadBusy={markAllDoneBusy}
             onCopied={handleRepoCopied}
+            quietGroups={collapsed}
+            quietActive={quietView}
+            onQuietView={showQuietDigests}
           />
           <div
             role="separator"
@@ -800,16 +863,40 @@ function InboxView() {
           ) : null}
           {status === "loading" ? <LoadingInbox /> : null}
           {status === "error" ? <ErrorInbox onRetry={() => void notifQuery.refetch()} /> : null}
-          {status === "ready" && items.length === 0 && collapsed.length === 0 ? (
-            <EmptyInbox state={filters.state} />
+          {status === "ready" && items.length === 0 && !quietView ? (
+            showQuietNotice ? (
+              <QuietEmptyState
+                total={quietTotal}
+                repoName={activeQuietGroup?.repositoryName}
+                pendingCount={activeQuietGroup?.pendingCount}
+                isSnoozed={activeQuietGroup?.isSnoozed ?? false}
+                snoozeLabel={activeQuietGroup?.snoozeLabel}
+                rhythm={activeQuietGroup?.rhythm}
+                nextDueLabel={activeQuietGroup?.nextDueLabel}
+                onUnsnooze={
+                  activeQuietGroup
+                    ? () => void snoozeRepo(activeQuietGroup.repositoryId, null)
+                    : undefined
+                }
+                onPromote={
+                  activeQuietGroup
+                    ? () => void promoteRepo(activeQuietGroup.repositoryId)
+                    : undefined
+                }
+                busy={updateRepo.isPending}
+              />
+            ) : (
+              <EmptyInbox state={filters.state} />
+            )
           ) : null}
-          {status === "ready" && items.length > 0 ? (
+          {status === "ready" && !quietView && items.length > 0 ? (
         <NotificationList
           items={items}
           selected={selected}
           focusedId={focusIdx !== null ? items[focusIdx]?.id : undefined}
           showHints={showHints}
           syncingIds={syncingIds}
+          activeRepo={filters.repo}
           onToggle={toggle}
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
@@ -818,7 +905,7 @@ function InboxView() {
           hideToolbar
         />
           ) : null}
-          {status === "ready" && collapsed.length > 0 ? (
+          {status === "ready" && quietView && collapsed.length > 0 ? (
             <DigestSection
               groups={collapsed}
               onSnooze={snoozeRepo}
@@ -829,6 +916,9 @@ function InboxView() {
               markAllReadBusy={markAllDoneBusy}
               onCopied={handleRepoCopied}
             />
+          ) : null}
+          {status === "ready" && quietView && collapsed.length === 0 ? (
+            <EmptyInbox state={filters.state} />
           ) : null}
         </div>
       </div>

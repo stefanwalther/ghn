@@ -4,6 +4,7 @@ import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RepoSnoozeMenu, useRowVisibility } from "@/components/inbox/repo-snooze-menu";
+import type { DigestGroup } from "@/components/inbox/digest-section";
 import { cn } from "@/lib/utils";
 
 export interface TypeFacet {
@@ -136,7 +137,7 @@ function RepoFilterRow({
   );
 }
 
-/** Sidebar with type filters, repository filters, and snoozed repositories. */
+/** Sidebar with type filters, repository filters, snoozed and quiet digests. */
 export function FilterSidebar({
   types,
   activeType,
@@ -151,6 +152,9 @@ export function FilterSidebar({
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
+  quietGroups = [],
+  quietActive = false,
+  onQuietView,
 }: {
   types: TypeFacet[];
   activeType: string;
@@ -165,21 +169,36 @@ export function FilterSidebar({
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
+  quietGroups?: DigestGroup[];
+  quietActive?: boolean;
+  onQuietView?: () => void;
 }) {
   // Render open on the server and first client paint; saved prefs apply after
   // mount so hydration stays consistent.
-  const [collapsed, setCollapsed] = React.useState({ types: false, repos: false, snoozed: false });
+  const [collapsed, setCollapsed] = React.useState({
+    types: false,
+    repos: false,
+    snoozed: false,
+    quiet: false,
+  });
 
   React.useEffect(() => {
     try {
       const saved = localStorage.getItem("ghn:filter-sections");
-      if (saved) setCollapsed({ types: false, repos: false, snoozed: false, ...JSON.parse(saved) });
+      if (saved)
+        setCollapsed({
+          types: false,
+          repos: false,
+          snoozed: false,
+          quiet: false,
+          ...JSON.parse(saved),
+        });
     } catch {
       // ignore corrupt prefs and keep both sections open
     }
   }, []);
 
-  function toggle(key: "types" | "repos" | "snoozed") {
+  function toggle(key: "types" | "repos" | "snoozed" | "quiet") {
     setCollapsed((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       try {
@@ -199,6 +218,7 @@ export function FilterSidebar({
   const regularRepos = visibleRepos.filter((r) => !r.isSnoozed);
   const snoozedRepos = visibleRepos.filter((r) => r.isSnoozed);
   const activeSnoozedName = snoozedRepos.find((r) => r.id === activeRepo)?.fullName;
+  const quietTotal = quietGroups.reduce((n, g) => n + g.pendingCount, 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -351,6 +371,40 @@ export function FilterSidebar({
               onCopied={onCopied}
             />
           ))}
+        </div>
+        )}
+      </section>
+      ) : null}
+      {quietGroups.length > 0 ? (
+      <section aria-label="Quiet digests">
+        <button
+          type="button"
+          aria-expanded={!collapsed.quiet}
+          aria-label={collapsed.quiet ? "Expand quiet digests" : "Collapse quiet digests"}
+          onClick={() => toggle("quiet")}
+          className="mb-1 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-1 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="min-w-0 truncate text-left">
+            Quiet until due ({quietTotal} pending)
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+              collapsed.quiet && "-rotate-90"
+            )}
+            aria-hidden
+          />
+        </button>
+        {collapsed.quiet ? null : (
+        <div className="flex flex-col gap-0.5">
+          <SidebarButton
+            active={quietActive}
+            label="Show all quiet repositories"
+            onClick={() => onQuietView?.()}
+          >
+            <span className="truncate">All repositories</span>
+            <Badge variant="muted">{quietTotal}</Badge>
+          </SidebarButton>
         </div>
         )}
       </section>
