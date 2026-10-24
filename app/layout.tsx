@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
-import { THEME_STORAGE_KEY, DEFAULT_THEME_ID } from "@/lib/themes";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -17,9 +16,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/*
+          Static inline script on purpose: it must run before paint to avoid a
+          theme flash, and keeping it a string literal (no interpolation) keeps
+          it out of CodeQL's code-construction taint. Values mirror
+          THEME_STORAGE_KEY / DEFAULT_THEME_ID in lib/themes.ts and are pinned
+          by tests/unit/theme-init.test.ts - update both together.
+        */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var k=${JSON.stringify(THEME_STORAGE_KEY)};var d=${JSON.stringify(DEFAULT_THEME_ID)};var t=localStorage.getItem(k)||d;if(t&&t!==d)document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`,
+            __html: `(function(){try{var k="ghn:theme";var d="default";var t=localStorage.getItem(k)||d;if(t&&t!==d)document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`,
           }}
         />
       </head>
