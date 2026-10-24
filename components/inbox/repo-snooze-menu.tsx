@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { CheckCheck, ChevronRight, Clock, ExternalLink, MailOpen, MoreHorizontal } from "lucide-react";
+import { CheckCheck, ChevronRight, Clock, ExternalLink, Link2, MailOpen, MoreHorizontal } from "lucide-react";
+import { copyText } from "@/lib/clipboard";
 import { snoozePresets } from "@/lib/snooze";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +76,7 @@ export function RepoSnoozeMenu({
   markAllReadDisabled,
   markAllReadCount,
   repoUrl,
+  onCopied,
   triggerClassName,
   triggerStyle,
   visible = true,
@@ -103,6 +105,8 @@ export function RepoSnoozeMenu({
    * used across the app when no stored URL exists.
    */
   repoUrl?: string;
+  /** Reports the clipboard result after "Copy repo link". Omit to stay silent. */
+  onCopied?: (id: string, ok: boolean) => void;
   /** Extra classes for the trigger, e.g. background. */
   triggerClassName?: string;
   /** Inline style for the trigger, e.g. absolute overlay positioning. */
@@ -142,6 +146,8 @@ export function RepoSnoozeMenu({
   onMarkAllDoneRef.current = onMarkAllDone;
   const onMarkAllReadRef = React.useRef(onMarkAllRead);
   onMarkAllReadRef.current = onMarkAllRead;
+  const onCopiedRef = React.useRef(onCopied);
+  onCopiedRef.current = onCopied;
 
   /** Opens the menu below the trigger, flipping above when space is short. */
   function openMenu() {
@@ -149,7 +155,7 @@ export function RepoSnoozeMenu({
     setPresets(fresh);
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
-      const rows = 2 + (onMarkAllDone ? 1 : 0) + (onMarkAllRead ? 1 : 0);
+      const rows = 3 + (onMarkAllDone ? 1 : 0) + (onMarkAllRead ? 1 : 0);
       const height = rows * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
       const below = rect.bottom + MENU_GAP;
       const top =
@@ -182,7 +188,7 @@ export function RepoSnoozeMenu({
     if (!contextAnchor) return;
     setPresets(inboxPresets(Date.now()));
     const rows =
-      2 + (onMarkAllDoneRef.current ? 1 : 0) + (onMarkAllReadRef.current ? 1 : 0);
+      3 + (onMarkAllDoneRef.current ? 1 : 0) + (onMarkAllReadRef.current ? 1 : 0);
     const height = rows * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
     setPos({
       top: Math.max(MENU_GAP, Math.min(contextAnchor.y, window.innerHeight - height - MENU_GAP)),
@@ -250,6 +256,13 @@ export function RepoSnoozeMenu({
   function openRepo() {
     closeAll(true);
     window.open(rootUrl, "_blank", "noopener");
+  }
+
+  /** Copies the repository link and reports the clipboard result. */
+  async function copyRepoLink() {
+    const ok = await copyText(rootUrl);
+    closeAll(true);
+    onCopiedRef.current?.(repoId, ok);
   }
 
   React.useEffect(() => {
@@ -426,6 +439,16 @@ export function RepoSnoozeMenu({
               >
                 <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
                 <span className="min-w-0 flex-1 truncate">Open repo</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                title={`Copy link to ${fullName}`}
+                onClick={copyRepoLink}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <Link2 className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">Copy repo link</span>
               </button>
             </div>,
             document.body

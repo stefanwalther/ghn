@@ -62,6 +62,7 @@ function RepoFilterRow({
   markAllDoneBusy,
   onMarkAllRead,
   markAllReadBusy,
+  onCopied,
 }: {
   repo: RepoFacet;
   active: boolean;
@@ -73,6 +74,7 @@ function RepoFilterRow({
   markAllDoneBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
+  onCopied?: (id: string, ok: boolean) => void;
 }) {
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
@@ -117,6 +119,7 @@ function RepoFilterRow({
           onMarkAllRead={onMarkAllRead}
           markAllReadDisabled={markAllReadBusy || pendingTotal === 0}
           markAllReadCount={pendingTotal}
+          onCopied={onCopied}
           visible={visible}
           contextAnchor={contextAnchor}
           onContextClose={() => setContextAnchor(null)}
@@ -147,6 +150,7 @@ export function FilterSidebar({
   markAllDoneBusy,
   onMarkAllRead,
   markAllReadBusy,
+  onCopied,
 }: {
   types: TypeFacet[];
   activeType: string;
@@ -160,6 +164,7 @@ export function FilterSidebar({
   markAllDoneBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
+  onCopied?: (id: string, ok: boolean) => void;
 }) {
   // Render open on the server and first client paint; saved prefs apply after
   // mount so hydration stays consistent.
@@ -301,6 +306,7 @@ export function FilterSidebar({
               markAllDoneBusy={markAllDoneBusy}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
+              onCopied={onCopied}
             />
           ))}
         </div>
@@ -342,6 +348,7 @@ export function FilterSidebar({
               markAllDoneBusy={markAllDoneBusy}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
+              onCopied={onCopied}
             />
           ))}
         </div>
