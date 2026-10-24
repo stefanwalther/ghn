@@ -17,7 +17,7 @@
 #
 # Explicit override: when PORT or WEB_PORT is already set in the environment
 # (or passed via ensure-web.sh --port), the resolver keeps it and reports
-# GHN_PORT_SLOT=manual. This preserves `PORT=21121 make web-dev`.
+# GHN_PORT_SLOT=manual. This preserves `PORT=21121 make dev`.
 #
 # Config (env overrides):
 #   GHN_PORT_RANGE_START (default 21120)
@@ -178,7 +178,7 @@ else
 fi
 
 # Explicit override wins: keep a user-supplied PORT/WEB_PORT untouched so
-# `PORT=21121 make web-dev` and `ensure-web.sh --port 21121` keep working.
+# `PORT=21121 make dev` and `ensure-web.sh --port 21121` keep working.
 manual_port="${WEB_PORT:-${PORT:-}}"
 if [[ -n "$manual_port" ]]; then
   if ! [[ "$manual_port" =~ ^[0-9]+$ ]]; then
