@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { QUICK_SELECTS, isClosedItem, isMergedItem } from "@/lib/filters";
+import { useUIStore } from "@/lib/ui-store";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
 import { ItemMenu, type ItemMenuAction } from "@/components/inbox/item-menu";
@@ -120,6 +122,7 @@ export function NotificationList({
   focusedId,
   showHints,
   syncingIds,
+  activeRepo,
   onToggle,
   onToggleAll,
   onQuickSelect,
@@ -132,6 +135,7 @@ export function NotificationList({
   focusedId?: string;
   showHints: boolean;
   syncingIds?: Set<string>;
+  activeRepo?: string;
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onQuickSelect: (reason: string) => void;
@@ -151,32 +155,98 @@ export function NotificationList({
         />
       )}
       <ul className="divide-y divide-border/40">
-        {items.map((item) => {
-          const checked = selected.has(item.id);
-          const syncing = syncingIds?.has(item.id) ?? false;
-          const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
-          const closed = isClosedItem({
-            reason: item.reason,
-            prMerged: item.prMerged ?? false,
-            subjectState: item.subjectState ?? null,
-          });
-          const tone = merged ? "merged" : closed ? "secondary" : reasonTone(item.reason);
-          return (
+        {items.map((item) => (
+          <NotificationRow
+            key={item.id}
+            item={item}
+            checked={selected.has(item.id)}
+            focused={focusedId === item.id}
+            syncing={syncingIds?.has(item.id) ?? false}
+            isRepoSelected={activeRepo != null && activeRepo !== "all" && activeRepo === item.repositoryId}
+            onToggle={onToggle}
+            onMenuAction={onMenuAction}
+            onOpen={onOpen}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function NotificationRow({
+  item,
+  checked,
+  focused,
+  syncing,
+  isRepoSelected,
+  onToggle,
+  onMenuAction,
+  onOpen,
+}: {
+  item: InboxItem;
+  checked: boolean;
+  focused: boolean;
+  syncing: boolean;
+  isRepoSelected: boolean;
+  onToggle: (id: string) => void;
+  onMenuAction: (item: InboxItem, action: ItemMenuAction) => void;
+  onOpen: (item: InboxItem) => void;
+}) {
+  const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  // Single-key menu opener ("m"): rows open on a matching store request.
+  // The seen-ref starts at the current sequence so a stale request never
+  // replays on mount; each request opens at most once per row.
+  const menuReq = useUIStore((s) => s.menuRequest);
+  const seenMenu = React.useRef(menuReq?.n ?? 0);
+  React.useEffect(() => {
+    if (!menuReq || menuReq.n === seenMenu.current) return;
+    seenMenu.current = menuReq.n;
+    if (menuReq.id === item.id) setContextAnchor({ x: 0, y: 0 });
+  }, [menuReq, item.id]);
+  const merged = isMergedItem({ reason: item.reason, prMerged: item.prMerged ?? false });
+  const closed = isClosedItem({
+    reason: item.reason,
+    prMerged: item.prMerged ?? false,
+    subjectState: item.subjectState ?? null,
+  });
+  const tone = merged ? "merged" : closed ? "secondary" : reasonTone(item.reason);
+  return (
             <li
-              key={item.id}
               id={`notification-${item.id}`}
               aria-busy={syncing || undefined}
               className={cn(
                 "flex cursor-pointer scroll-mt-48 items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 item.isRead === 0 && "bg-accent/30",
-                focusedId === item.id && "ring-2 ring-inset ring-ring"
+                focused && "ring-2 ring-inset ring-ring"
               )}
               onClick={() => onOpen(item)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Keyboard-initiated menus (Shift+F10 / Menu key) arrive
+                // with a (0, 0) anchor; the menu falls back to the trigger.
+                setContextAnchor({ x: e.clientX, y: e.clientY });
+              }}
               onKeyDown={(e) => {
                 if ((e.target as HTMLElement).tagName === "INPUT") return;
-                if (e.key === "Enter" || e.key === " ") {
+                if (e.key === "F10" && e.shiftKey) {
+                  // Standard keyboard alternative to right-click. Browsers
+                  // that synthesize a contextmenu event for it are covered
+                  // above; this covers the ones that don't.
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextAnchor({ x: 0, y: 0 });
+                  return;
+                }
+                // Row keys apply only when the row itself is focused so inner
+                // controls keep their native keys (Space activates buttons).
+                if (e.target !== e.currentTarget) return;
+                if (e.key === "Enter") {
                   e.preventDefault();
                   onOpen(item);
+                } else if (e.key === " ") {
+                  e.preventDefault();
+                  onToggle(item.id);
                 }
               }}
               tabIndex={0}
@@ -243,7 +313,14 @@ export function NotificationList({
                     <span className="sr-only">Syncing…</span>
                   </span>
                 ) : null}
-                <ItemMenu item={item} syncing={syncing} onAction={onMenuAction} />
+                <ItemMenu
+                  item={item}
+                  syncing={syncing}
+                  onAction={onMenuAction}
+                  isRepoSelected={isRepoSelected}
+                  contextAnchor={contextAnchor}
+                  onContextClose={() => setContextAnchor(null)}
+                />
                 <a
                   href={item.sourceUrl}
                   target="_blank"
@@ -259,9 +336,5 @@ export function NotificationList({
                 </a>
               </div>
             </li>
-          );
-        })}
-      </ul>
-    </div>
   );
 }

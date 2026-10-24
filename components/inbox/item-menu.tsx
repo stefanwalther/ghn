@@ -2,55 +2,134 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { BellOff, Check, ExternalLink, Link2, Mail, MailOpen, MoreHorizontal, PanelRight } from "lucide-react";
+import { BellOff, Check, ExternalLink, Link2, Mail, MailOpen, MoreHorizontal, MousePointerClick, PanelRight } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import type { BulkAction } from "@/components/inbox/bulk-bar";
 import type { InboxItem } from "@/components/inbox/notification-list";
 import { cn } from "@/lib/utils";
 
-export type ItemMenuAction = "open" | "drawer" | "copy" | "sync" | BulkAction;
+export type ItemMenuAction = "open" | "drawer" | "copy" | "sync" | "select-repo" | BulkAction;
 
 const MENU_WIDTH = 240;
 const MENU_GAP = 8;
 const ITEM_HEIGHT = 37;
 const MENU_PADDING = 16;
+/** Heading plus divider added between menu sections (cursor-anchored height). */
+const SECTION_EXTRA = 34;
 
-function menuItems(item: InboxItem): { value: ItemMenuAction; label: string; hint: string }[] {
+interface MenuEntry {
+  value: ItemMenuAction;
+  label: string;
+  hint?: string;
+}
+
+interface MenuSection {
+  heading: string;
+  items: MenuEntry[];
+}
+
+function menuSections(item: InboxItem, isRepoSelected?: boolean): MenuSection[] {
   return [
-    { value: "open", label: "Open source", hint: "O" },
-    { value: "drawer", label: "Open details", hint: "⇧D" },
-    { value: "copy", label: "Copy link", hint: "C" },
-    { value: "sync", label: "Sync this item", hint: "S" },
-    { value: "done", label: "Mark as done", hint: "D" },
-    item.isRead === 0
-      ? { value: "read", label: "Mark as read", hint: "R" }
-      : { value: "unread", label: "Mark as unread", hint: "U" },
-    { value: "unsubscribe", label: "Unsubscribe and mute", hint: "⇧U" },
+    {
+      heading: "Triage",
+      items: [
+        { value: "done", label: "Mark as done", hint: "d" },
+        item.isRead === 0
+          ? { value: "read", label: "Mark as read", hint: "r" }
+          : { value: "unread", label: "Mark as unread", hint: "u" },
+        { value: "unsubscribe", label: "Unsubscribe and mute", hint: "⇧U" },
+      ],
+    },
+    {
+      heading: "Open",
+      items: [
+        { value: "drawer", label: "Open details", hint: "⇧D" },
+        { value: "open", label: "Open source", hint: "o" },
+        { value: "copy", label: "Copy link", hint: "c" },
+      ],
+    },
+    {
+      heading: "Manage",
+      items: [
+        { value: "sync", label: "Sync this item", hint: "s" },
+        isRepoSelected
+          ? { value: "select-repo", label: "Show all repositories" }
+          : { value: "select-repo", label: "Select this repository" },
+      ],
+    },
   ];
+}
+
+function menuHeight(sections: MenuSection[]): number {
+  const rows = sections.reduce((n, s) => n + s.items.length, 0);
+  return rows * ITEM_HEIGHT + sections.length * SECTION_EXTRA + MENU_PADDING;
 }
 
 export function ItemMenu({
   item,
   syncing,
   onAction,
+  isRepoSelected,
+  contextAnchor,
+  onContextClose,
 }: {
   item: InboxItem;
   syncing?: boolean;
   onAction: (item: InboxItem, action: ItemMenuAction) => void;
+  /** True when the list is already showing only this item's repository. */
+  isRepoSelected?: boolean;
+  /**
+   * Cursor position from a row right-click. A new object opens the same menu
+   * at the cursor instead of at the trigger. Cleared via onContextClose.
+   */
+  contextAnchor?: { x: number; y: number } | null;
+  onContextClose?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  function openMenu() {
-    // Anchor to the whole action group (menu trigger + source link) so the
-    // dropdown clears both buttons instead of touching the external link.
+  const sections = React.useMemo(
+    () => menuSections(item, isRepoSelected),
+    [item, isRepoSelected]
+  );
+
+  // Parent callback without re-subscribing effects on every parent render.
+  const contextCloseRef = React.useRef(onContextClose);
+  contextCloseRef.current = onContextClose;
+
+  /** Closes the menu and the context anchor, refocusing the trigger on request. */
+  function closeAll(focusTrigger = false) {
+    setOpen(false);
+    contextCloseRef.current?.();
+    if (focusTrigger) triggerRef.current?.focus();
+  }
+
+  const openMenu = React.useCallback(
+    (at?: { x: number; y: number } | null) => {
+    if (at && (at.x > 0 || at.y > 0)) {
+      // Right-click: open at the cursor, clamped into the viewport.
+      const height = menuHeight(sections);
+      setPos({
+        top: Math.max(MENU_GAP, Math.min(at.y, window.innerHeight - height - MENU_GAP)),
+        left: Math.max(
+          MENU_GAP,
+          Math.min(at.x, window.innerWidth - MENU_WIDTH - MENU_GAP)
+        ),
+      });
+      setOpen(true);
+      return;
+    }
+    // Keyboard-initiated (Shift+F10 / Menu key carries no cursor position)
+    // or "..." click: anchor to the whole action group (menu trigger +
+    // source link) so the dropdown clears both buttons instead of touching
+    // the external link.
     const anchor = triggerRef.current?.parentElement ?? triggerRef.current;
     const rect = anchor?.getBoundingClientRect();
     if (rect) {
-      const height = items.length * ITEM_HEIGHT + MENU_PADDING;
+      const height = menuHeight(sections);
       const below = rect.bottom + MENU_GAP;
       const top =
         below + height + MENU_GAP > window.innerHeight
@@ -62,7 +141,9 @@ export function ItemMenu({
       });
     }
     setOpen(true);
-  }
+    },
+    [sections]
+  );
 
   React.useEffect(() => {
     if (!open) return;
@@ -74,17 +155,16 @@ export function ItemMenu({
         !menuRef.current?.contains(target) &&
         !triggerRef.current?.contains(target)
       ) {
-        setOpen(false);
+        closeAll();
       }
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
+        closeAll(true);
       }
     }
     function onScroll() {
-      setOpen(false);
+      closeAll();
     }
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKey);
@@ -98,6 +178,15 @@ export function ItemMenu({
     };
   }, [open ]);
 
+  // Right-click on the row opens the same menu at the cursor. Each
+  // right-click passes a new anchor object, so repeats reposition.
+  // Keyboard-initiated context menus (Shift+F10 / Menu key) arrive with a
+  // (0, 0) anchor; openMenu falls back to the trigger in that case.
+  React.useEffect(() => {
+    if (!contextAnchor) return;
+    openMenu(contextAnchor);
+  }, [contextAnchor, openMenu]);
+
   function moveFocus(current: HTMLElement, delta: 1 | -1) {
     const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
     const idx = buttons.indexOf(current as HTMLButtonElement);
@@ -106,12 +195,9 @@ export function ItemMenu({
   }
 
   function choose(action: ItemMenuAction) {
-    setOpen(false);
-    triggerRef.current?.focus();
+    closeAll(true);
     onAction(item, action);
   }
-
-  const items = menuItems(item);
 
   return (
     <>
@@ -121,10 +207,10 @@ export function ItemMenu({
         aria-label={`Actions for ${item.subject}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={`Actions for ${item.subject}`}
+        title={`Actions for ${item.subject} (m)`}
         onClick={(e) => {
           e.stopPropagation();
-          if (open) setOpen(false);
+          if (open) closeAll();
           else openMenu();
         }}
         className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -138,20 +224,32 @@ export function ItemMenu({
               role="menu"
               aria-label={`Actions for ${item.subject}`}
               onKeyDown={(e) => {
-                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                const down = e.key === "ArrowDown" || e.key === "j";
+                const up = e.key === "ArrowUp" || e.key === "k";
+                if (down || up) {
                   e.preventDefault();
-                  moveFocus(e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
+                  moveFocus(e.target as HTMLElement, down ? 1 : -1);
                 }
               }}
               className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-md"
               style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
             >
-              {items.map((entry) => (
+              {sections.map((section) => (
+                <React.Fragment key={section.heading}>
+                  <div role="separator" aria-hidden="true" className="my-1 border-t border-border/40" />
+                  <div role="group" aria-label={section.heading}>
+                    <p
+                      aria-hidden="true"
+                      className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                      {section.heading}
+                    </p>
+                    {section.items.map((entry) => (
                 <button
                   key={entry.value}
                   type="button"
                   role="menuitem"
-                  title={`${entry.label} (${entry.hint})`}
+                  title={entry.hint ? `${entry.label} (${entry.hint})` : entry.label}
                   onClick={() => choose(entry.value)}
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -165,6 +263,8 @@ export function ItemMenu({
                     <Link2 className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "sync" ? (
                     <SyncSpinner spinning={syncing} className="shrink-0" />
+                  ) : entry.value === "select-repo" ? (
+                    <MousePointerClick className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "done" ? (
                     <Check className="h-4 w-4 shrink-0" aria-hidden />
                   ) : entry.value === "read" ? (
@@ -177,8 +277,11 @@ export function ItemMenu({
                   <span className="min-w-0 flex-1 truncate">
                     {entry.value === "sync" && syncing ? "Syncing…" : entry.label}
                   </span>
-                  <Kbd>{entry.hint}</Kbd>
+                  {entry.hint ? <Kbd>{entry.hint}</Kbd> : null}
                 </button>
+                    ))}
+                  </div>
+                </React.Fragment>
               ))}
             </div>,
             document.body
