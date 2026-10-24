@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.4.0...ghn-v0.5.0) (2026-10-24)
+
+
+### Features
+
+* **heatmap:** show day tooltips without delay ([#108](https://github.com/stefanwalther/ghn/issues/108)) ([25ab6a1](https://github.com/stefanwalther/ghn/commit/25ab6a15f330ea536ba255c21f2794cf7222bd16))
+* **inbox:** add copy repo link menu entry ([#107](https://github.com/stefanwalther/ghn/issues/107)) ([74aadaf](https://github.com/stefanwalther/ghn/commit/74aadaf69251d72db91f90da5910460a988ee411))
+* **inbox:** repo-wide done, read, open actions ([#102](https://github.com/stefanwalther/ghn/issues/102)) ([bda5481](https://github.com/stefanwalther/ghn/commit/bda54810089b027227576ed2afb988c2f950f48f))
+* **inbox:** sectioned row context menu with keyboard flow ([#104](https://github.com/stefanwalther/ghn/issues/104)) ([ffa4ce1](https://github.com/stefanwalther/ghn/commit/ffa4ce1a0320eff0fde45ae7347ded3e01970102))
+* **inbox:** show quiet digests in sidebar menu with main-column list ([#105](https://github.com/stefanwalther/ghn/issues/105)) ([1496081](https://github.com/stefanwalther/ghn/commit/1496081fed6b0412c34397a3907194165ad47d52))
+* **themes:** logo dot follows the selected color theme ([#87](https://github.com/stefanwalther/ghn/issues/87)) ([ea9d9bf](https://github.com/stefanwalther/ghn/commit/ea9d9bf31e22f6c448d3586ff01bb0c0f85b2162))
+
+
+### Bug Fixes
+
+* **ci:** set least-privilege GITHUB_TOKEN permissions ([#97](https://github.com/stefanwalther/ghn/issues/97)) ([910dcbf](https://github.com/stefanwalther/ghn/commit/910dcbfe28009e8ede7c244649feafda18e89d41))
+* **inbox:** advance repo filter when mark-all-as-done empties it ([#106](https://github.com/stefanwalther/ghn/issues/106)) ([ec7483b](https://github.com/stefanwalther/ghn/commit/ec7483b13bc0efa4d9f026d457e99dcdb12ec357))
+* **markdown:** strip unterminated tag fragments from details labels ([#99](https://github.com/stefanwalther/ghn/issues/99)) ([70f6b68](https://github.com/stefanwalther/ghn/commit/70f6b68ff3759576eb0a2551eb217de5942d14ee))
+* **tests:** require trailing slash in external URL assertion ([#98](https://github.com/stefanwalther/ghn/issues/98)) ([5542830](https://github.com/stefanwalther/ghn/commit/5542830ea2b86d0a26dde0a29071c6a4fbff94c7))
+* **theme:** use static inline script for theme init ([#100](https://github.com/stefanwalther/ghn/issues/100)) ([46b3e46](https://github.com/stefanwalther/ghn/commit/46b3e467971a7344de3c37226d229259b9646727))
+
 ## [0.4.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.3.0...ghn-v0.4.0) (2026-10-24)
 
 
