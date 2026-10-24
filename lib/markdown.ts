@@ -1,9 +1,19 @@
 export function unwrapDetails(md: string): string {
   const pattern = /<details\b[^>]*>\s*<summary\b[^>]*>([\s\S]*?)<\/summary\b[^>]*>([\s\S]*?)<\/details\b[^>]*>/gi;
   return md.replace(pattern, (_match, summary: string, body: string) => {
-    const label = summary.replace(/<[^>]*>/g, "").trim();
+    const label = stripTags(summary).trim();
     return `**${label}**\n\n${body.trim()}`;
   });
+}
+
+/**
+ * Strip HTML tags from a short label. Removes complete `<...>` tags first,
+ * then any unterminated tag fragment (`<script`, `<img src="...`) so a
+ * `<` without a closing `>` can never survive. A bare `<` followed by
+ * whitespace (e.g. `a < b`) is kept as text.
+ */
+function stripTags(value: string): string {
+  return value.replace(/<[^>]*>/g, "").replace(/<[A-Za-z/!][^<>]*$/g, "");
 }
 
 interface MdNode {

@@ -36,4 +36,16 @@ describe("unwrapDetails", () => {
       unwrapDetails("<details><summary><h3>Diagram</h3></summary>\n\n```mermaid\nA-->B\n```\n</details>")
     ).toBe("**Diagram**\n\n```mermaid\nA-->B\n```");
   });
+
+  test("unterminated tag fragment in summary is removed", () => {
+    expect(unwrapDetails("<details><summary>Hi <script</summary>\nbody\n</details>")).toBe(
+      "**Hi**\n\nbody"
+    );
+  });
+
+  test("bare less-than in summary is kept as text", () => {
+    expect(unwrapDetails("<details><summary>a < b</summary>\nbody\n</details>")).toBe(
+      "**a < b**\n\nbody"
+    );
+  });
 });
