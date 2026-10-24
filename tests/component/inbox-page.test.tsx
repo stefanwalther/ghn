@@ -584,7 +584,11 @@ describe("inbox screen", () => {
     renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
-    expect(screen.getByRole("button", { name: "Next refresh in 60 seconds" })).toBeDisabled();
+    // Accessible name stays stable so the button never changes width or
+    // forces screen readers to re-announce every second. The countdown
+    // lives in a fixed-width, aria-hidden slot next to the synced time.
+    expect(screen.getByRole("button", { name: "Refresh inbox from GitHub" })).toBeDisabled();
+    expect(screen.getByText("· 60s")).toBeInTheDocument();
 
     // Two minutes later the poll window has passed and the refresh is allowed.
     vi.setSystemTime(new Date("2026-01-15T10:02:00Z"));
