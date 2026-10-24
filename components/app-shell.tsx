@@ -176,7 +176,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
       <div className="flex min-w-0 flex-1 flex-col">
         <DemoBanner />
-        <header className="flex items-center gap-2 px-4 py-3">
+        <header className="px-4 py-3">
+          <div className="flex w-full max-w-6xl items-center gap-2">
           <span className="relative inline-flex">
             <button
               type="button"
@@ -236,6 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center text-sm font-medium">?</span>
           </button>
           <ThemeSwitcher />
+          </div>
         </header>
         <main className="min-w-0 flex-1 px-4 pb-10">{children}</main>
       </div>

@@ -484,7 +484,7 @@ function InboxView() {
   }, []);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="flex w-full max-w-6xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Notifications</h1>
@@ -523,11 +523,11 @@ function InboxView() {
           ) : null}
         </div>
       </div>
-      <div className="flex flex-col gap-4 lg:flex-row">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <aside
           ref={sidebarRef}
           aria-label="Inbox filters"
-          className="filter-aside relative w-full shrink-0 lg:w-[var(--filter-w)]"
+          className="filter-aside relative w-full shrink-0 lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:w-[var(--filter-w)] lg:self-start lg:overflow-y-auto"
           style={
             {
               "--filter-w": `${sidebarWidth}px`,

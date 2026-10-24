@@ -45,7 +45,7 @@ export default function SettingsPage() {
   const refreshing = settingsQuery.isFetching && !settingsQuery.isPending;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+    <div className="flex w-full max-w-4xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Settings</h1>
