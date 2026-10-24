@@ -180,6 +180,64 @@ describe("inbox screen", () => {
     expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
   });
 
+  test("explains the quiet backlog instead of claiming all is caught up", async () => {
+    installFetch({ notifications: { ...digestPayload, mainFlow: [] } });
+
+    renderWithQuery(<InboxPage />);
+
+    expect(await screen.findByText("Main flow is clear")).toBeInTheDocument();
+    expect(screen.getByText(/2 pending in Quiet until due/)).toBeInTheDocument();
+    expect(screen.queryByText("All caught up")).not.toBeInTheDocument();
+  });
+
+  test("a quiet repo filter explains the backlog and offers immediate", async () => {
+    const fetchMock = installFetch({
+      notifications: { ...digestPayload, mainFlow: [] },
+    });
+    nav.params = new URLSearchParams("repo=acme--api");
+
+    renderWithQuery(<InboxPage />);
+
+    expect(await screen.findByText("2 pending in acme/api")).toBeInTheDocument();
+    expect(screen.getByText(/until the weekly digest is due/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to immediate" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/repositories/acme--api")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/repositories/acme--api")[0]!;
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ rhythm: "immediate" });
+  });
+
+  test("a snoozed repo filter offers unsnooze instead of immediate", async () => {
+    const fetchMock = installFetch({
+      notifications: {
+        ...digestPayload,
+        mainFlow: [],
+        collapsedSection: [
+          { ...digestPayload.collapsedSection[0]!, isSnoozed: true, snoozeLabel: "tomorrow" },
+        ],
+      },
+    });
+    nav.params = new URLSearchParams("repo=acme--api");
+
+    renderWithQuery(<InboxPage />);
+
+    expect(await screen.findByText("2 pending in acme/api")).toBeInTheDocument();
+    expect(screen.getByText(/Snoozed until tomorrow/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unsnooze" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/repositories/acme--api")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/repositories/acme--api")[0]!;
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ snoozedUntil: null });
+  });
+
   test("shows the error state and recovers when the retry succeeds", async () => {
     const fetchMock = installFetch({ failFirstNotifications: true });
 
@@ -520,15 +578,42 @@ describe("inbox screen", () => {
     expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
   });
 
-  test("renders the quiet digest section for collapsed repositories", async () => {
+  test("renders the quiet digest list after opening the quiet view", async () => {
     installFetch({ notifications: digestPayload });
 
     renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
 
-    expect(await screen.findByText("Quiet until due (2 pending)")).toBeInTheDocument();
-    const digest = within(screen.getByRole("region", { name: "Quiet digests" }));
-    expect(digest.getByText("acme/api")).toBeInTheDocument();
-    expect(digest.getByText("weekly")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show all quiet repositories" }));
+
+    const lists = await screen.findAllByRole("region", { name: "Quiet digests" });
+    expect(lists).toHaveLength(2);
+    const main = within(lists[1]!);
+    expect(main.getByText("acme/api")).toBeInTheDocument();
+    expect(main.getByText("weekly")).toBeInTheDocument();
+  });
+
+  test("the quiet menu shows the full digest list in the main column", async () => {
+    installFetch({ notifications: digestPayload });
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Sidebar holds only the All entry; the digest rows live in the main column.
+    expect(screen.queryByText("due in 7 days")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all quiet repositories" }));
+
+    // Main column now shows the full-width digest list.
+    expect(await screen.findByText("due in 7 days")).toBeInTheDocument();
+
+    // Picking a real filter leaves the quiet view again.
+    fireEvent.click(screen.getByRole("button", { name: "Filter by Pull requests" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("due in 7 days")).not.toBeInTheDocument();
+    });
+    expect(nav.replace).toHaveBeenCalledWith("/?type=pull_request", { scroll: false });
   });
 
   test("the shortcuts help opens from the header and closes with Escape", async () => {

@@ -25,6 +25,59 @@ export function EmptyInbox({ state = "unread" }: { state?: "unread" | "all" | "d
   );
 }
 
+/** Shown instead of {@link EmptyInbox} when the main flow is empty but quiet
+ * digests are still pending. Explains where the items are and, for a single
+ * filtered repo, offers the one-click way to bring them back early. */
+export function QuietEmptyState({
+  total,
+  repoName,
+  pendingCount,
+  isSnoozed,
+  snoozeLabel,
+  rhythm,
+  nextDueLabel,
+  onUnsnooze,
+  onPromote,
+  busy,
+}: {
+  total: number;
+  repoName?: string;
+  pendingCount?: number;
+  isSnoozed?: boolean;
+  snoozeLabel?: string | null;
+  rhythm?: string | null;
+  nextDueLabel?: string | null;
+  onUnsnooze?: () => void;
+  onPromote?: () => void;
+  busy?: boolean;
+}) {
+  const heading =
+    repoName != null ? `${pendingCount ?? 0} pending in ${repoName}` : "Main flow is clear";
+  const copy =
+    repoName != null
+      ? isSnoozed
+        ? `Snoozed${snoozeLabel ? ` until ${snoozeLabel}` : ""}. Items stay hidden until then.`
+        : `New items stay here until the ${rhythm ?? "digest"} digest is due${nextDueLabel ? ` (${nextDueLabel})` : ""}.`
+      : `${total} pending in Quiet until due. They appear here automatically when each digest is due.`;
+  return (
+    <div className="rounded-lg bg-card p-10 text-center shadow-sm">
+      <Inbox className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden />
+      <h2 className="mt-3 font-semibold">{heading}</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{copy}</p>
+      {repoName != null && isSnoozed && onUnsnooze ? (
+        <Button variant="secondary" size="sm" onClick={onUnsnooze} disabled={busy} className="mt-4">
+          Unsnooze
+        </Button>
+      ) : null}
+      {repoName != null && !isSnoozed && onPromote ? (
+        <Button variant="secondary" size="sm" onClick={onPromote} disabled={busy} className="mt-4">
+          Switch to immediate
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function LoadingInbox() {
   return (
     <div className="flex flex-col gap-2" role="status" aria-label="Loading inbox">
