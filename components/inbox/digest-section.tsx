@@ -16,6 +16,7 @@ export interface DigestGroup {
   snoozeLabel?: string;
 }
 
+/** Collapsed quiet-digest repositories waiting for their due date. */
 export function DigestSection({
   groups,
   onSnooze,
@@ -56,6 +57,7 @@ export function DigestSection({
   );
 }
 
+/** One quiet repository row with hover actions and a right-click menu. */
 function DigestRow({
   group: g,
   onSnooze,

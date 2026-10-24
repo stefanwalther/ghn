@@ -50,6 +50,7 @@ function SidebarButton({
   );
 }
 
+/** One repository filter row with hover actions and a right-click menu. */
 function RepoFilterRow({
   repo: r,
   active,
@@ -132,6 +133,7 @@ function RepoFilterRow({
   );
 }
 
+/** Sidebar with type filters, repository filters, and snoozed repositories. */
 export function FilterSidebar({
   types,
   activeType,

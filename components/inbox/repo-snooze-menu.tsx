@@ -143,6 +143,7 @@ export function RepoSnoozeMenu({
   const onMarkAllReadRef = React.useRef(onMarkAllRead);
   onMarkAllReadRef.current = onMarkAllRead;
 
+  /** Opens the menu below the trigger, flipping above when space is short. */
   function openMenu() {
     const fresh = inboxPresets(Date.now());
     setPresets(fresh);
@@ -167,6 +168,7 @@ export function RepoSnoozeMenu({
     setOpen(true);
   }
 
+  /** Closes menus and the context anchor, refocusing the trigger on request. */
   function closeAll(focusTrigger = false) {
     setSnoozeOpen(false);
     setOpen(false);
@@ -193,6 +195,7 @@ export function RepoSnoozeMenu({
     setOpen(true);
   }, [contextAnchor]);
 
+  /** Opens the snooze presets next to the Snooze row, flipping sides as needed. */
   function openSubmenu(focusFirst: boolean) {
     const rowRect = snoozeRowRef.current?.getBoundingClientRect();
     if (rowRect) {
@@ -213,17 +216,20 @@ export function RepoSnoozeMenu({
     }
   }
 
+  /** Applies one snooze preset choice and closes the menu. */
   function choose(at: number | null) {
     closeAll(true);
     onSnooze(repoId, at);
   }
 
+  /** Reports the repo-wide done action unless the entry is disabled. */
   function chooseMarkAllDone() {
     if (markAllDoneDisabled) return;
     closeAll(true);
     onMarkAllDone?.(repoId);
   }
 
+  /** Reports the repo-wide read action unless the entry is disabled. */
   function chooseMarkAllRead() {
     if (markAllReadDisabled) return;
     closeAll(true);
@@ -240,6 +246,7 @@ export function RepoSnoozeMenu({
       : "Mark all as read";
   const rootUrl = repoUrl ?? `https://github.com/${fullName}`;
 
+  /** Opens the repository root in a new window and closes the menu. */
   function openRepo() {
     closeAll(true);
     window.open(rootUrl, "_blank", "noopener");
@@ -294,6 +301,7 @@ export function RepoSnoozeMenu({
     };
   }, [open, snoozeOpen]);
 
+  /** Moves keyboard focus between enabled menu entries, wrapping at the ends. */
   function moveFocus(container: React.RefObject<HTMLDivElement | null>, target: HTMLElement, delta: 1 | -1) {
     // Disabled entries cannot take focus; stepping onto one stalls
     // arrow-key navigation, so they are left out of the cycle.

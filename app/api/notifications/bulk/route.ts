@@ -105,6 +105,7 @@ async function applyRead(
   return NextResponse.json({ ...base, ...extra });
 }
 
+/** Bulk triage endpoint: id-list actions plus repo-wide done/read. */
 export async function POST(request: Request) {
   const { db } = await import("@/db/client");
   const body = await request.json().catch(() => null);

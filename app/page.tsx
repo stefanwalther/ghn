@@ -274,6 +274,7 @@ function InboxView() {
     }
   }
 
+  /** Marks every pending item of one repo done, with rollback on failure. */
   async function markRepoDone(repositoryId: string) {
     if (markRepoDoneMutation.isPending) return;
     setNotice(null);
@@ -320,6 +321,7 @@ function InboxView() {
 
   const markAllDoneBusy = busy || filters.state === "done";
 
+  /** Marks every pending item of one repo read, with rollback on failure. */
   async function markRepoRead(repositoryId: string) {
     if (markRepoReadMutation.isPending) return;
     setNotice(null);
