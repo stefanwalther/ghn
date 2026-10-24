@@ -2,6 +2,14 @@
   "name": "ghn",
   "version": "0.4.0",
   "private": true,
+  "description": "Bulk-triage GitHub notifications in minutes. Local-first, uses your gh login.",
+  "author": "Stefan Walther",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stefanwalther/ghn.git"
+  },
+  "bugs": "https://github.com/stefanwalther/ghn/issues",
   "scripts": {
     "dev": "./scripts/dev.sh",
     "build": "next build",
