@@ -1,12 +1,58 @@
+# Dependencies and build output (rebuilt inside the image, never copied in)
 node_modules/
-.git/
 .next/
 out/
-dist/
 build/
+dist/
 coverage/
-*.log
+playwright-report/
+test-results/
+
+# Runtime data: SQLite lives in the ghn-data volume, never in the image
 data/
-.next-env.d.ts
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+
+# Env and secrets are mounted via env_file, never baked into the image
 .env
+.env.*
 !.env.example
+
+# VCS and CI
+.git/
+.github/
+
+# Local tooling and editor state
+.agents/
+.claude/
+.opencode/
+.pi/
+.specify/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docs and specs: not needed to build or run
+*.md
+docs/
+specs/
+context/
+
+# Tests: not needed for `bun run build` or `next start`
+tests/
+
+# Generated migration output (recreated by db:push via ensure-schema)
+drizzle/
+
+# Logs
+*.log
+
+# Docker and compose files themselves
+Dockerfile*
+.dockerignore
+compose*.yaml
+docker-compose*.yml

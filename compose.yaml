@@ -1,5 +1,6 @@
 services:
   app:
+    image: ghcr.io/stefanwalther/ghn:latest
     build: .
     ports:
       - "${PORT:-21120}:21120"
