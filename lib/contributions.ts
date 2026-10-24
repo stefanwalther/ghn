@@ -23,6 +23,19 @@ export function todayUTC(): string {
   return new Date(nowMs()).toISOString().slice(0, 10);
 }
 
+export function lastNDates(today: string, n: number): string[] {
+  const dates: string[] = [];
+  const base = Date.parse(`${today}T00:00:00Z`);
+  for (let i = n - 1; i >= 0; i--) {
+    dates.push(new Date(base - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+export function rangeWindowUTC(from: string, to: string): { from: string; to: string } {
+  return { from: `${from}T00:00:00Z`, to: `${to}T23:59:59Z` };
+}
+
 export function isFresh(
   fetchedAt: number,
   now: number,
@@ -57,41 +70,25 @@ async function fetchViewerLogin(token: string): Promise<string | null> {
   }
 }
 
-async function fetchDayCountViaApi(token: string, login: string, date: string): Promise<number | null> {
-  const { from, to } = dayWindowUTC(date);
-  try {
-    const { graphqlUrl } = apiBases();
-    const res = await fetch(graphqlUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      body: JSON.stringify({ query: QUERY, variables: { login, from, to } }),
-    });
-    if (!res.ok) return null;
-    return pickDay(await res.json(), date);
-  } catch {
-    return null;
-  }
+export function pickDay(payload: unknown, date: string): number | null {
+  return pickRange(payload)[date] ?? null;
 }
 
-export function pickDay(payload: unknown, date: string): number | null {
+export function pickRange(payload: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
   const weeks = (payload as { data?: { user?: { contributionsCollection?: { contributionCalendar?: { weeks?: { contributionDays?: CalendarDay[] }[] } } } } })
     ?.data?.user?.contributionsCollection?.contributionCalendar?.weeks;
-  if (!Array.isArray(weeks)) return null;
+  if (!Array.isArray(weeks)) return out;
   for (const week of weeks) {
     const days = week?.contributionDays;
     if (!Array.isArray(days)) continue;
     for (const day of days) {
-      if (day?.date === date && typeof day?.contributionCount === "number") {
-        return day.contributionCount;
+      if (typeof day?.date === "string" && typeof day?.contributionCount === "number") {
+        out[day.date] = day.contributionCount;
       }
     }
   }
-  return null;
+  return out;
 }
 
 export async function getViewerLogin(token?: string | null): Promise<string | null> {
@@ -114,15 +111,43 @@ export async function fetchDayCount(
   date: string,
   token?: string | null
 ): Promise<number | null> {
-  if (token) return fetchDayCountViaApi(token, login, date);
+  const range = await fetchRangeCounts(login, date, date, token);
+  return range?.[date] ?? null;
+}
+
+export async function fetchRangeCounts(
+  login: string,
+  fromDate: string,
+  toDate: string,
+  token?: string | null
+): Promise<Record<string, number> | null> {
+  const { from, to } = rangeWindowUTC(fromDate, toDate);
+  if (token) {
+    try {
+      const { graphqlUrl } = apiBases();
+      const res = await fetch(graphqlUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({ query: QUERY, variables: { login, from, to } }),
+      });
+      if (!res.ok) return null;
+      return pickRange(await res.json());
+    } catch {
+      return null;
+    }
+  }
   if (tokenDisabled()) return null;
-  const { from, to } = dayWindowUTC(date);
   try {
     const { $ } = await import("bun");
     const proc = await $`gh api graphql -f query=${QUERY} -f login=${login} -f from=${from} -f to=${to}`.quiet().nothrow();
     if (proc.exitCode !== 0) return null;
     const payload = JSON.parse(proc.text());
-    return pickDay(payload, date);
+    return pickRange(payload);
   } catch {
     return null;
   }

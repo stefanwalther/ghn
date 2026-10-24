@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (next-themes toggles `.dark` on <html>), so the
+   `dark:` variant follows the app theme instead of the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: oklch(0.9892 0.0054 117.9205);
   --foreground: oklch(0.2077 0.0398 265.7549);
