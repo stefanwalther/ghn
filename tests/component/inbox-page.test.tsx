@@ -536,6 +536,17 @@ describe("inbox screen", () => {
     expect(await screen.findByText("Link copied to clipboard.")).toBeInTheDocument();
   });
 
+  test("the repo menu copies the repo link and says so", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy repo link" }));
+
+    expect(await screen.findByText("Repo link copied to clipboard.")).toBeInTheDocument();
+  });
+
   test("the question mark opens the shortcuts help", async () => {
     installFetch();
     renderWithQuery(
