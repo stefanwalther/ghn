@@ -212,7 +212,10 @@ function InboxView() {
   }
 
   function drawerAction(item: InboxItem, action: ItemMenuAction) {
-    if (action === "done" || action === "unsubscribe") setDrawerItem(null);
+    // Done closes the drawer right away. Unsubscribe waits for the
+    // confirm dialog: cancel must leave the drawer exactly as it was,
+    // and apply() closes it on the confirmed path.
+    if (action === "done") setDrawerItem(null);
     menuAction(item, action);
   }
 

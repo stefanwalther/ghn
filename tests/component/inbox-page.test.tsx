@@ -161,7 +161,7 @@ describe("inbox screen", () => {
 
     renderWithQuery(<InboxPage />);
 
-    const list = within(await screen.findByRole("listbox"));
+    const list = within(await screen.findByRole("list"));
     expect(list.getByText("Fix flaky login redirect")).toBeInTheDocument();
     expect(list.getByText("Bump the linter")).toBeInTheDocument();
     expect(list.getByText("acme/web")).toBeInTheDocument();
@@ -660,6 +660,26 @@ describe("inbox screen", () => {
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     });
     expect(screen.getByText("1 selected")).toBeInTheDocument();
+  });
+
+  test("canceling unsubscribe from the drawer leaves the drawer open", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByText("Fix flaky login redirect"));
+    const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Unsubscribe" }));
+
+    const confirm = await screen.findByRole("alertdialog", { name: /Unsubscribe from/ });
+    expect(screen.getByRole("dialog", { name: "Preview drawer" })).toBeInTheDocument();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("dialog", { name: "Preview drawer" })).toBeInTheDocument();
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
   });
 
   test("the refresh button waits for the poll window to pass", async () => {    vi.useFakeTimers({ toFake: ["Date"] });

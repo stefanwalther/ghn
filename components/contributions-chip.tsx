@@ -53,6 +53,11 @@ export function ContributionsChip() {
   const [loadingDays, setLoadingDays] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A click that immediately follows a hover-open must keep the overlay
+  // open: the toggle would otherwise read open === true and close it in
+  // the same interaction (touch taps can produce the same sequence when
+  // the browser emits a compatibility mouseenter before click).
+  const hoverOpened = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -186,6 +191,9 @@ export function ContributionsChip() {
   }, [open ]);
 
   const toggleOverlay = () => {
+    const openedByHover = hoverOpened.current;
+    hoverOpened.current = false;
+    if (openedByHover && open) return;
     if (open) {
       cancelClose();
       setOpen(false);
@@ -278,14 +286,30 @@ export function ContributionsChip() {
           Contributions unavailable (offline or not signed in).
         </div>
       )}
+      {login && (!days || days.length === 0) ? (
+        <a
+          href={`https://github.com/${login}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block text-[11px] text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Full graph on github.com/{login}
+        </a>
+      ) : null}
     </div>
   ) : null;
 
   return (
     <div
       className="relative"
-      onMouseEnter={showOverlay}
-      onMouseLeave={scheduleClose}
+      onMouseEnter={() => {
+        hoverOpened.current = true;
+        showOverlay();
+      }}
+      onMouseLeave={() => {
+        hoverOpened.current = false;
+        scheduleClose();
+      }}
     >
       <button
         ref={triggerRef}

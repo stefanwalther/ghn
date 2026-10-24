@@ -150,7 +150,7 @@ export function NotificationList({
           onQuickSelect={onQuickSelect}
         />
       )}
-      <ul className="divide-y divide-border/40" role="listbox" aria-label="Notifications">
+      <ul className="divide-y divide-border/40">
         {items.map((item) => {
           const checked = selected.has(item.id);
           const syncing = syncingIds?.has(item.id) ?? false;
@@ -165,8 +165,6 @@ export function NotificationList({
             <li
               key={item.id}
               id={`notification-${item.id}`}
-              role="option"
-              aria-selected={checked}
               aria-busy={syncing || undefined}
               className={cn(
                 "flex cursor-pointer scroll-mt-48 items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

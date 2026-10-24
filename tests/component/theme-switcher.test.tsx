@@ -73,4 +73,36 @@ describe("ThemeSwitcher menu placement", () => {
       expect(screen.queryByRole("menu", { name: "Theme" })).toBeNull();
     });
   });
+
+  test("clamps the menu into a short viewport", () => {
+    Object.defineProperty(window, "innerHeight", { value: 200, configurable: true });
+    vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect").mockReturnValue(
+      rect({ top: 100, bottom: 132, right: 200, left: 168 })
+    );
+    render(<ThemeSwitcher />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Theme" }));
+    const menu = screen.getByRole("menu", { name: "Theme" });
+    // 100 - 8 - 140 goes negative, so the top clamps to the 8px gap.
+    expect(menu.style.top).toBe("8px");
+  });
+
+  test("clicking the trigger toggles instead of reopening", async () => {
+    vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect").mockReturnValue(rect({}));
+    Object.defineProperty(window, "innerHeight", { value: 1000, configurable: true });
+    render(<ThemeSwitcher />);
+    const trigger = screen.getByRole("button", { name: "Theme" });
+
+    fireEvent.click(trigger);
+    const menu = await screen.findByRole("menu", { name: "Theme" });
+    const firstItem = screen.getByRole("menuitemradio", { name: "Light" });
+    firstItem.focus();
+    fireEvent.blur(menu, { relatedTarget: trigger });
+    expect(screen.getByRole("menu", { name: "Theme" })).toBeTruthy();
+
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(screen.queryByRole("menu", { name: "Theme" })).toBeNull();
+    });
+  });
 });

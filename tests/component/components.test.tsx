@@ -120,7 +120,7 @@ describe("NotificationList", () => {
   test("shows the repository, the badges and the subject of every item", () => {
     renderList();
 
-    const list = within(screen.getByRole("listbox"));
+    const list = within(screen.getByRole("list"));
     expect(list.getByText("Fix flaky login redirect")).toBeInTheDocument();
     expect(list.getByText("Bump the linter")).toBeInTheDocument();
     expect(list.getByText("acme/web")).toBeInTheDocument();
@@ -177,16 +177,6 @@ describe("NotificationList", () => {
 
     expect(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Select Bump the linter" })).not.toBeChecked();
-  });
-
-  test("exposes rows as options with selection state", () => {
-    renderList({ selected: new Set(["n_001"]) });
-
-    const listbox = screen.getByRole("listbox", { name: "Notifications" });
-    const options = within(listbox).getAllByRole("option");
-    expect(options).toHaveLength(2);
-    expect(options[0]).toHaveAttribute("aria-selected", "true");
-    expect(options[1]).toHaveAttribute("aria-selected", "false");
   });
 
   test("marks select-all as mixed for a partial selection", () => {

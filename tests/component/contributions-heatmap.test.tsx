@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, within, cleanup } from "@testing-library/react";
 import { describe, expect, test, vi, afterEach } from "vitest";
 import { ContributionsChip } from "@/components/contributions-chip";
 
@@ -76,6 +76,36 @@ describe("contributions heatmap overlay", () => {
     fireEvent.click(trigger);
     expect(screen.queryByRole("region", { name: "Contributions in the last 180 days" })).toBeNull();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("a click right after hover keeps the overlay open", async () => {
+    mockFetch([]);
+    render(<ContributionsChip />);
+    const trigger = await screen.findByRole("button", { name: /GitHub contributions/ });
+
+    fireEvent.mouseEnter(trigger);
+    expect(await screen.findByRole("region", { name: "Contributions in the last 180 days" })).toBeTruthy();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole("region", { name: "Contributions in the last 180 days" })).toBeTruthy();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("the profile link shows even when the graph days fail to load", async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn((url: unknown) => {
+      const u = String(url);
+      if (u.includes("?days=180")) {
+        return Promise.resolve({ ok: false, json: () => Promise.resolve(null) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ count: 84, login: "someone" }) });
+    });
+    render(<ContributionsChip />);
+    const trigger = await screen.findByRole("button", { name: /GitHub contributions/ });
+    fireEvent.click(trigger);
+
+    const region = await screen.findByRole("region", { name: "Contributions in the last 180 days" });
+    expect(within(region).getByText("Contributions unavailable (offline or not signed in).")).toBeTruthy();
+    expect(within(region).getByRole("link", { name: /Full graph on github\.com\/someone/ })).toBeTruthy();
   });
 
   test("Escape closes the overlay and returns focus to the trigger", async () => {
