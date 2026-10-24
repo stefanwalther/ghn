@@ -2,6 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Kbd } from "@/components/ui/kbd";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
@@ -78,10 +79,12 @@ export function ListToolbar({
   onQuickSelect: (reason: string) => void;
 }) {
   const allSelected = items.length > 0 && items.every((i) => selected.has(i.id));
+  const someSelected = !allSelected && items.some((i) => selected.has(i.id));
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-border/40 px-4 py-2">
       <Checkbox
         checked={allSelected}
+        indeterminate={someSelected}
         onChange={onToggleAll}
         aria-label="Select all visible"
       />
@@ -96,14 +99,15 @@ export function ListToolbar({
         ) : null}
         <span className="text-xs text-muted-foreground">Quick select:</span>
         {QUICK_SELECTS.map((q) => (
-          <button
+          <Button
             key={q.value}
-            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onQuickSelect(q.value)}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="px-2 text-xs text-muted-foreground"
           >
             {q.label}
-          </button>
+          </Button>
         ))}
       </span>
     </div>
@@ -180,20 +184,24 @@ export function NotificationList({
               <span
                 onClick={(e) => {
                   e.stopPropagation();
-                  onToggle(item.id);
                 }}
                 title={`Select ${item.subject}`}
                 className="flex items-start gap-3 self-stretch py-0.5 pr-3"
               >
                 <Checkbox
                   checked={checked}
-                  onChange={() => {}}
+                  onChange={() => onToggle(item.id)}
+                  onClick={(e) => e.stopPropagation()}
                   aria-label={`Select ${item.subject}`}
                 />
                 <span
                   aria-hidden="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle(item.id);
+                  }}
                   className={cn(
-                    "mt-2 h-2 w-2 shrink-0 rounded-full",
+                    "mt-2 h-2 w-2 shrink-0 cursor-pointer rounded-full",
                     item.isRead === 0 ? (merged ? "bg-merged" : reasonDot(item.reason)) : "bg-transparent"
                   )}
                 />

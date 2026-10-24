@@ -1,29 +1,11 @@
 "use client";
 
-import * as React from "react";
+import { useConnection } from "@/lib/queries";
 
 export function DemoBanner() {
-  const [demo, setDemo] = React.useState(false);
+  const { data } = useConnection();
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/connection", { cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        if (!cancelled && data && data.lastSyncAt == null) {
-          setDemo(true);
-        }
-      } catch {
-        // Best-effort; a failed probe must not add banner noise.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!demo) return null;
+  if (!data || data.lastSyncAt != null) return null;
   return (
     <div
       role="status"

@@ -179,6 +179,15 @@ describe("NotificationList", () => {
     expect(screen.getByRole("checkbox", { name: "Select Bump the linter" })).not.toBeChecked();
   });
 
+  test("marks select-all as mixed for a partial selection", () => {
+    renderList({ selected: new Set(["n_001"]) });
+
+    expect(screen.getByRole("checkbox", { name: "Select all visible" })).toHaveAttribute(
+      "aria-checked",
+      "mixed"
+    );
+  });
+
   test("shows the keyboard hints when they are enabled", () => {
     renderList({ showHints: true });
 
@@ -942,7 +951,7 @@ describe("ShortcutsHelp", () => {
     expect(within(dialog).getByText("j / k")).toBeInTheDocument();
     expect(within(dialog).getByText(/Move focus between rows/)).toBeInTheDocument();
     expect(within(dialog).getByText(/Jump to the previous \/ next thread/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/Press Esc or click outside to close/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/First Esc clears the search/)).toBeInTheDocument();
   });
 
   test("closes when the backdrop is clicked", () => {

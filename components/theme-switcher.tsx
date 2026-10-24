@@ -17,6 +17,9 @@ const OPTIONS: { mode: ThemeMode; label: string; Icon: typeof Sun }[] = [
 
 const MENU_WIDTH = 160;
 const MENU_GAP = 8;
+// Three options at ~37px each plus padding; used to flip the menu above
+// the trigger when there is no room below (sidebar footer near viewport).
+const MENU_HEIGHT = 140;
 
 function nextMode(mode: string | undefined): ThemeMode {
   if (mode === "system" || mode === undefined) return "light";
@@ -28,7 +31,7 @@ export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(false);
-  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const [pos, setPos] = React.useState({ top: 0, left: 0, maxHeight: 320 });
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
@@ -51,12 +54,24 @@ export function ThemeSwitcher() {
   function openMenu() {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
+      const spaceBelow = window.innerHeight - rect.bottom - MENU_GAP;
+      const spaceAbove = rect.top - MENU_GAP;
+      // Prefer the side with more room; when neither side fits the whole
+      // menu, clamp it into the viewport instead of running off-screen.
+      const opensUpward = spaceBelow < MENU_HEIGHT && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(
+        80,
+        opensUpward ? rect.top - MENU_GAP : window.innerHeight - MENU_GAP
+      );
       setPos({
-        top: rect.bottom + MENU_GAP,
+        top: opensUpward
+          ? Math.max(MENU_GAP, rect.top - MENU_GAP - MENU_HEIGHT)
+          : rect.bottom + MENU_GAP,
         left: Math.max(
           MENU_GAP,
           Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - MENU_GAP)
         ),
+        maxHeight,
       });
     }
     setOpen(true);
@@ -70,7 +85,7 @@ export function ThemeSwitcher() {
 
   function choose(mode: ThemeMode) {
     setTheme(mode);
-    closeMenu(false);
+    closeMenu(true);
   }
 
   React.useEffect(() => {
@@ -155,8 +170,17 @@ export function ThemeSwitcher() {
                   moveFocus(e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
                 }
               }}
-              className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-md"
-              style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
+              onBlur={(e) => {
+                const next = e.relatedTarget as Node | null;
+                // Focus moving to the trigger is a toggle click, not a
+                // dismissal: let onClick handle it.
+                if (next && (e.currentTarget.contains(next) || triggerRef.current?.contains(next))) {
+                  return;
+                }
+                closeMenu(false);
+              }}
+              className="fixed z-50 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-md"
+              style={{ top: pos.top, left: pos.left, width: MENU_WIDTH, maxHeight: pos.maxHeight }}
             >
               {OPTIONS.map(({ mode, label, Icon }) => (
                 <button

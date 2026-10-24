@@ -591,6 +591,97 @@ describe("inbox screen", () => {
     expect(screen.getByText(/Last synced/)).toBeInTheDocument();
   });
 
+  test("the subtitle follows the state filter", async () => {
+    installFetch();
+    nav.params = new URLSearchParams("state=done");
+    renderWithQuery(<InboxPage />);
+    expect(
+      await screen.findByText("Finished items. Mark anything unread to bring it back.")
+    ).toBeInTheDocument();
+    cleanup();
+
+    nav.params = new URLSearchParams("state=all");
+    renderWithQuery(<InboxPage />);
+    expect(
+      await screen.findByText("Every notification in one place. Digests stay collapsed until due.")
+    ).toBeInTheDocument();
+    cleanup();
+
+    nav.params = new URLSearchParams("");
+    renderWithQuery(<InboxPage />);
+    expect(
+      await screen.findByText("Triage unread notifications. Digests stay collapsed until due.")
+    ).toBeInTheDocument();
+  });
+
+  test("unsubscribe asks for confirmation before sending", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" }));
+    await screen.findByText("1 selected");
+    fireEvent.click(screen.getByRole("button", { name: "Unsubscribe" }));
+
+    const confirm = await screen.findByRole("alertdialog", { name: /Unsubscribe from/ });
+    expect(within(confirm).getByText("Unsubscribe from 1 thread?")).toBeInTheDocument();
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unsubscribe" }));
+    const retry = await screen.findByRole("alertdialog", { name: /Unsubscribe from/ });
+    fireEvent.click(within(retry).getByRole("button", { name: "Unsubscribe" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/notifications/bulk")[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({ ids: ["n_001"], action: "unsubscribe" });
+  });
+
+  test("Escape closes the unsubscribe confirm without touching the selection", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" }));
+    await screen.findByText("1 selected");
+    fireEvent.click(screen.getByRole("button", { name: "Unsubscribe" }));
+    await screen.findByRole("alertdialog", { name: /Unsubscribe from/ });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+  });
+
+  test("canceling unsubscribe from the drawer leaves the drawer open", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByText("Fix flaky login redirect"));
+    const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Unsubscribe" }));
+
+    const confirm = await screen.findByRole("alertdialog", { name: /Unsubscribe from/ });
+    expect(screen.getByRole("dialog", { name: "Preview drawer" })).toBeInTheDocument();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("dialog", { name: "Preview drawer" })).toBeInTheDocument();
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+  });
+
   test("the refresh button waits for the poll window to pass", async () => {    vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-01-15T10:00:00Z"));
     installFetch({

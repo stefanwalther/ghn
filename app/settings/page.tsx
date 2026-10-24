@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { ThemePicker } from "@/components/theme-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingSettings } from "@/components/inbox/empty-states";
 import { useSettings } from "@/lib/queries";
 
 interface SettingsPayload {
@@ -46,12 +47,12 @@ export default function SettingsPage() {
   const refreshing = settingsQuery.isFetching && !settingsQuery.isPending;
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-4">
+    <div className="flex w-full max-w-6xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Settings</h1>
           <p className="text-sm text-muted-foreground">
-            Development check: where the database lives and whether GitHub auth works.
+            Appearance, database location, and GitHub auth status.
           </p>
         </div>
         <Button
@@ -67,24 +68,16 @@ export default function SettingsPage() {
         </Button>
       </div>
 
-      {status === "loading" ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          Loading settings…
-        </p>
-      ) : null}
+      {status === "loading" ? <LoadingSettings /> : null}
       {status === "error" ? (
         <div className="rounded-lg bg-card p-10 text-center shadow-sm">
           <p className="text-sm font-medium">Settings failed to load.</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             {error ?? "Try again."}
           </p>
-          <button
-            type="button"
-            onClick={() => void settingsQuery.refetch()}
-            className="mt-4 cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button variant="outline" onClick={() => void settingsQuery.refetch()} className="mt-4">
             Retry
-          </button>
+          </Button>
         </div>
       ) : null}
 

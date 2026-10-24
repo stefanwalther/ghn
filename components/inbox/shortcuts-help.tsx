@@ -1,18 +1,17 @@
 "use client";
 
 import * as React from "react";
+import { Search, X } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
+import { useDialogFocus } from "@/lib/dialog-focus";
 import { SHORTCUTS } from "@/lib/shortcuts";
 
 const GROUP_ORDER = ["Navigate", "Triage", "App"] as const;
 
 export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = React.useState("");
-  const inputRef = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, []);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -44,10 +43,11 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 p-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 p-4 pt-[10dvh] sm:pt-[12vh]"
       onClick={onClose}
     >
       <div
@@ -62,16 +62,14 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
             </span>
           </div>
           <div className="mt-3 flex items-center gap-2 rounded-md border border-input bg-background px-3">
-            <span aria-hidden="true" className="text-muted-foreground">
-              ⌕
-            </span>
+            <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
-              ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onInputKey}
               placeholder="Search shortcuts… (e.g. triage, sidebar, theme)"
               aria-label="Search keyboard shortcuts"
+              data-autofocus
               autoComplete="off"
               spellCheck={false}
               className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -83,14 +81,14 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
                 aria-label="Clear search"
                 className="cursor-pointer rounded p-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                ✕
+                <X aria-hidden="true" className="h-3 w-3" />
               </button>
             ) : (
               <Kbd>Esc</Kbd>
             )}
           </div>
         </div>
-        <div className="max-h-[50vh] overflow-y-auto px-2 pb-2">
+        <div className="max-h-[55dvh] overflow-y-auto px-2 pb-2">
           {filtered.length === 0 ? (
             <div className="px-3 py-8 text-center" role="status">
               <p className="text-sm font-medium">
@@ -130,8 +128,8 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <div className="border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
-          Shortcuts stay out of the way while typing in inputs. Press Esc or
-          click outside to close.
+          Shortcuts stay out of the way while typing in inputs. First Esc
+          clears the search, second closes. Or click outside to close.
         </div>
       </div>
     </div>

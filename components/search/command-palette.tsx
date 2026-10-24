@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import * as React from "react";
+import { Search } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
 import {
   repoEntry,
@@ -13,6 +14,7 @@ import {
   type PaletteSection,
 } from "@/lib/palette-commands";
 import { rankSearch } from "@/lib/search";
+import { useDialogFocus } from "@/lib/dialog-focus";
 import { useNotifications, useRepositories } from "@/lib/queries";
 import { useUIStore } from "@/lib/ui-store";
 import { repoFilterHref, saveLastOpened } from "@/lib/view-state";
@@ -43,7 +45,8 @@ export function CommandPalette() {
   const open = useUIStore((s) => s.paletteOpen);
   const [query, setQuery] = React.useState("");
   const [active, setActive] = React.useState(0);
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, open);
 
   // Shared cache entries: no per-open fetches while fresh. Queries stay
   // idle until the palette opens.
@@ -106,9 +109,7 @@ export function CommandPalette() {
     if (!open) {
       setQuery("");
       setActive(0);
-      return;
     }
-    requestAnimationFrame(() => inputRef.current?.focus());
   }, [open ]);
 
   const allEntries = React.useMemo<PaletteEntry[]>(() => {
@@ -240,10 +241,11 @@ export function CommandPalette() {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Search and commands"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 p-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 p-4 pt-[10dvh] sm:pt-[12vh]"
       onClick={close}
     >
       <div
@@ -251,9 +253,8 @@ export function CommandPalette() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-border/40 px-4">
-          <span aria-hidden="true" className="text-muted-foreground">⌕</span>
+          <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
-            ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKey}
@@ -263,6 +264,7 @@ export function CommandPalette() {
             aria-controls="palette-listbox"
             aria-activedescendant={activeId}
             role="combobox"
+            data-autofocus
             autoComplete="off"
             spellCheck={false}
             className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -277,7 +279,7 @@ export function CommandPalette() {
           id="palette-listbox"
           role="listbox"
           aria-label="Results"
-          className="max-h-[50vh] overflow-y-auto p-2"
+          className="max-h-[55dvh] overflow-y-auto p-2 sm:max-h-[50vh]"
         >
           {flat.length === 0 ? (
             <div className="px-3 py-8 text-center" role="status">

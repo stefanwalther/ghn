@@ -59,6 +59,12 @@ test.describe("triage writes", () => {
     );
     await menu.getByRole("menuitem", { name: /^Unsubscribe and mute/ }).click();
 
+    // Unsubscribe asks for confirmation: the shift slip (u vs Shift+U) is
+    // the one mis-triage that cannot be undone from here.
+    const confirm = page.getByRole("alertdialog", { name: /Unsubscribe from/ });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Unsubscribe", exact: true }).click();
+
     // The subscription write reached the stand-in, so nothing was queued.
     const response = await bulkResponse;
     expect(response.status()).toBe(200);
@@ -82,6 +88,9 @@ test.describe("triage writes", () => {
       .getByRole("menu")
       .getByRole("menuitem", { name: /^Unsubscribe and mute/ })
       .click();
+    const confirm = page.getByRole("alertdialog", { name: /Unsubscribe from/ });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Unsubscribe", exact: true }).click();
     await expect(inboxRows(page)).toHaveCount(28);
     await expect(page.getByText("28 items", { exact: true })).toBeVisible();
 

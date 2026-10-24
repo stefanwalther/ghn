@@ -53,6 +53,11 @@ export function ContributionsChip() {
   const [loadingDays, setLoadingDays] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A click that immediately follows a hover-open must keep the overlay
+  // open: the toggle would otherwise read open === true and close it in
+  // the same interaction (touch taps can produce the same sequence when
+  // the browser emits a compatibility mouseenter before click).
+  const hoverOpened = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -143,7 +148,7 @@ export function ContributionsChip() {
   }
 
   const badge = (
-    <Badge variant="muted" className="cursor-default">
+    <Badge variant="muted">
       {label}
     </Badge>
   );
@@ -152,13 +157,59 @@ export function ContributionsChip() {
   // as squares. Border-box keeps the cell at exactly 11px.
   const cellRing = "border-[0.5px] border-[#1f23280d] dark:border-[#0104090d]";
 
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const overlayRef = React.useRef<HTMLDivElement>(null);
+
+  // Keyboard and touch users get an explicit toggle; hover still opens on
+  // desktop. Escape closes and returns focus to the trigger, and a
+  // pointer-down outside closes without stealing focus.
+  React.useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    function onPointer(e: MouseEvent) {
+      const target = e.target as Node | null;
+      if (
+        target &&
+        !overlayRef.current?.contains(target) &&
+        !triggerRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onPointer);
+    };
+  }, [open ]);
+
+  const toggleOverlay = () => {
+    const openedByHover = hoverOpened.current;
+    hoverOpened.current = false;
+    if (openedByHover && open) return;
+    if (open) {
+      cancelClose();
+      setOpen(false);
+    } else {
+      showOverlay();
+    }
+  };
+
   const overlay = open ? (
     <div
-      role="status"
+      ref={overlayRef}
+      role="region"
       aria-label="Contributions in the last 180 days"
-      className="absolute top-full right-0 z-50 mt-2 w-[430px] max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 text-card-foreground shadow-md"
+      className="absolute top-full right-0 z-50 mt-2 w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 text-card-foreground shadow-md sm:w-[430px]"
     >
-      <div className="mb-2 flex items-baseline justify-between gap-2 whitespace-nowrap">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-xs font-semibold">Last 180 days</span>
         {total !== null ? (
           <span className="shrink-0 text-xs text-muted-foreground">{total} contributions</span>
@@ -207,7 +258,7 @@ export function ContributionsChip() {
               </div>
             </div>
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2 whitespace-nowrap">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] text-muted-foreground">
               {shortDate(days[0].date)} – {shortDate(days[days.length - 1].date)}
             </span>
@@ -235,44 +286,46 @@ export function ContributionsChip() {
           Contributions unavailable (offline or not signed in).
         </div>
       )}
+      {login && (!days || days.length === 0) ? (
+        <a
+          href={`https://github.com/${login}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block text-[11px] text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Full graph on github.com/{login}
+        </a>
+      ) : null}
     </div>
   ) : null;
 
-  const wrapperProps = {
-    className: "relative",
-    onMouseEnter: showOverlay,
-    onMouseLeave: scheduleClose,
-    onFocus: showOverlay,
-    onBlur: scheduleClose,
-  };
-
-  if (!login) {
-    return (
-      <span
-        {...wrapperProps}
-        title={
-          count === null
-            ? "GitHub contributions unavailable (offline or not signed in)"
-            : "GitHub contributions today (UTC day; the profile heatmap buckets by local day and can differ by a few near midnight)"
-        }
-      >
-        {badge}
-        {overlay}
-      </span>
-    );
-  }
   return (
-    <span {...wrapperProps}>
-      <a
-        href={`https://github.com/${login}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Open ${login}'s GitHub profile with the full contribution graph in a new tab`}
+    <div
+      className="relative"
+      onMouseEnter={() => {
+        hoverOpened.current = true;
+        showOverlay();
+      }}
+      onMouseLeave={() => {
+        hoverOpened.current = false;
+        scheduleClose();
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggleOverlay}
+        aria-expanded={open}
+        aria-label={
+          login
+            ? `GitHub contributions for ${login}, ${label}. Activate to ${open ? "hide" : "show"} the 180-day graph.`
+            : `GitHub contributions, ${label}. Activate for details.`
+        }
         className="cursor-pointer rounded-md transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {badge}
-      </a>
+      </button>
       {overlay}
-    </span>
+    </div>
   );
 }
