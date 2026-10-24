@@ -19,7 +19,7 @@ AT_RELEASE_TAG := $(shell test -n '$(MANIFEST_VERSION)' && test -z '$(SOURCE_DIR
 SOURCE_VERSION := $(if $(AT_RELEASE_TAG),$(MANIFEST_VERSION),$(if $(and $(MANIFEST_VERSION),$(SOURCE_REVISION)),$(MANIFEST_VERSION)+g$(SOURCE_REVISION)$(SOURCE_DIRTY)))
 VERSION ?= $(SOURCE_VERSION)
 
-.PHONY: help version build check test test-integration test-component test-all test-coverage coverage-check test-e2e test-help test-build-version dev web-open web-serve web-dev install uninstall clean fmt-fix fmt-check fmt lint-check lint-fix lint up down logs
+.PHONY: help version build check test test-integration test-component test-all test-coverage coverage-check test-e2e test-help test-build-version dev start web-open web-serve install uninstall clean fmt-fix fmt-check lint-check lint-fix up down logs
 
 help: ## Show available Make targets.
 	@awk 'BEGIN {FS = ":.*## "; print "Available targets:"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -89,7 +89,8 @@ web-open: ## Ensure the web UI is running and fresh (restart when stale), then o
 web-serve: build ## Build and serve production in the foreground (per-workspace port via resolve-dev-runtime.sh; explicit PORT wins).
 	$(BUN) run start
 
-web-dev: dev ## Deprecated alias for dev (foreground dev server).
+start: ## Build, serve production in the background and open it (install when stale; explicit PORT wins).
+	scripts/ensure-web.sh --prod
 
 up: ## Build and start the container in the background (needs .env with GH_TOKEN).
 	@if [ ! -f .env ]; then echo "Missing .env. Copy .env.example to .env and set GH_TOKEN first."; exit 1; fi
@@ -118,13 +119,9 @@ fmt-fix: ## No code formatter configured yet; no-op until one is adopted. Format
 fmt-check: ## No code formatter configured yet; no-op until one is adopted (prettier/biome candidate).
 	@echo "fmt-check: no code formatter configured; nothing to verify."
 
-fmt: fmt-fix ## Deprecated alias for fmt-fix.
-
 lint-check: ## Run static analysis: tsc --noEmit plus eslint on app lib db components tests.
 	$(BUN) run typecheck
 	$(BUN) x eslint app lib db components tests
 
 lint-fix: ## Autofix with eslint --fix on app lib db components tests; reports the rest. Never called from CI gates.
 	$(BUN) x eslint --fix app lib db components tests
-
-lint: lint-check ## Deprecated alias for lint-check.
