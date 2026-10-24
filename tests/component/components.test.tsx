@@ -916,6 +916,30 @@ describe("RepoSnoozeMenu", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("opening the Snooze submenu does not steal focus from Snooze", () => {
+    renderSnoozeMenu({ onMarkAllDone: vi.fn(), markAllDoneCount: 4 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    const snooze = screen.getByRole("menuitem", { name: /^Snooze/ });
+    snooze.focus();
+    fireEvent.mouseEnter(snooze);
+
+    expect(screen.getByRole("menu", { name: "Snooze acme/web" })).toBeInTheDocument();
+    expect(snooze).toHaveFocus();
+  });
+
+  test("focuses the first enabled entry when the done entry is disabled", () => {
+    renderSnoozeMenu({
+      onMarkAllDone: vi.fn(),
+      markAllDoneCount: 0,
+      markAllDoneDisabled: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+
+    expect(screen.getByRole("menuitem", { name: /^Snooze/ })).toHaveFocus();
+  });
+
   test("opens the repository root in a new window", () => {
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     renderSnoozeMenu();

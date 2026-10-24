@@ -126,7 +126,6 @@ export function RepoSnoozeMenu({
   const [subPos, setSubPos] = React.useState({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
-  const doneRowRef = React.useRef<HTMLButtonElement>(null);
   const snoozeRowRef = React.useRef<HTMLButtonElement>(null);
   const subRef = React.useRef<HTMLDivElement>(null);
 
@@ -248,7 +247,14 @@ export function RepoSnoozeMenu({
 
   React.useEffect(() => {
     if (!open) return;
-    (doneRowRef.current ?? snoozeRowRef.current)?.focus();
+    // Initial focus only: depending on snoozeOpen here re-ran this on
+    // every submenu open/close and yanked focus back to the first row.
+    const buttons = menuRef.current?.querySelectorAll("button") ?? [];
+    [...buttons].find((b) => !b.disabled)?.focus();
+  }, [open ]);
+
+  React.useEffect(() => {
+    if (!open) return;
     function onPointerDown(e: MouseEvent) {
       const target = e.target as Node | null;
       if (
@@ -346,7 +352,6 @@ export function RepoSnoozeMenu({
             >
               {onMarkAllDone ? (
                 <button
-                  ref={doneRowRef}
                   type="button"
                   role="menuitem"
                   title={markAllDoneLabel}
