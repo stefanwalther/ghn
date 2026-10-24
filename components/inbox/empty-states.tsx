@@ -15,8 +15,40 @@ export function EmptyInbox() {
 
 export function LoadingInbox() {
   return (
-    <div className="rounded-lg bg-card p-10 text-center shadow-sm" role="status">
+    <div className="flex flex-col gap-2" role="status" aria-label="Loading inbox">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          aria-hidden
+          className="flex items-start gap-3 rounded-lg bg-card px-4 py-3 shadow-sm"
+        >
+          <div className="mt-1 h-4 w-4 shrink-0 animate-pulse rounded bg-muted" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+              <div className="h-5 w-16 animate-pulse rounded-full bg-muted" />
+            </div>
+            <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-muted" />
+          </div>
+        </div>
+      ))}
       <p className="text-sm text-muted-foreground">Loading inbox…</p>
+    </div>
+  );
+}
+
+export function LoadingThread() {
+  return (
+    <div className="flex min-w-0 flex-col gap-3" role="status" aria-label="Loading thread">
+      <div className="h-3 w-40 animate-pulse rounded bg-muted" aria-hidden />
+      <div className="h-4 w-full animate-pulse rounded bg-muted" aria-hidden />
+      <div className="h-4 w-5/6 animate-pulse rounded bg-muted" aria-hidden />
+      <div className="h-4 w-2/3 animate-pulse rounded bg-muted" aria-hidden />
+      <div className="mt-2 flex flex-col gap-2 border-t border-border pt-4" aria-hidden>
+        <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+        <div className="h-16 w-full animate-pulse rounded-md bg-muted" />
+      </div>
+      <p className="sr-only">Loading thread…</p>
     </div>
   );
 }
