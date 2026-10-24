@@ -14,8 +14,7 @@ indicator, not decoration.
 | `png/favicon.ico` | Multi-res ICO (16 dot-only, 32/48 text) |
 | `png/apple-touch-180.png` | iOS home screen |
 | `png/icon-192.png`, `png/icon-512.png` | Manifest / Android |
-| `brand-ghn.svg` | Sidebar letters (theme-aware). Served as `public/brand/brand-ghn.svg` |
-| `i-dot.svg` / `i-ring.svg` / `i-bar.svg` | Sidebar indicator per sync state (ready / waiting / working). Served as `public/brand/i-*.svg`. Gap to the letters lives inside each file. One file covers both themes via an internal `prefers-color-scheme` style |
+| `brand-ghn` paths / `i-dot` / `i-ring` / `i-bar` shapes | Sidebar brand lockup (`BrandMark`), inlined in `components/brand-mark.tsx` so the indicator can use `var(--primary)` and follow the selected color theme. Geometry masters live in `make_paths.py` (`MASTERS["menu"]`) |
 | `png/wordmark-*.png` | Previews, social |
 
 SVG letters are vectorized Helvetica Bold outlines (`make_paths.py`), so the
@@ -37,9 +36,10 @@ rsvg-convert -w 256 -h 155 wordmark-dark.svg -o png/wordmark-dark.png
 magick png/tile-16.png png/tile-32.png png/tile-48.png ICO:png/favicon.ico
 cp png/favicon.ico ../../app/favicon.ico
 cp tile-text.svg ../../app/icon.svg
+# Sidebar lockup is inlined in components/brand-mark.tsx (theme-aware via
+# CSS vars), so brand-ghn / i-*.svg are not copied to public/ anymore.
 cp png/apple-touch-180.png ../../app/apple-icon.png
 cp png/icon-192.png png/icon-512.png ../../public/icons/
-cp brand-ghn.svg i-dot.svg i-ring.svg i-bar.svg ../../public/brand/
 ```
 
 ## States (sidebar `BrandMark`)
@@ -56,4 +56,5 @@ Shape is freshness, blink is activity. Syncing wins ties.
 
 - Ink `#1A2332` (tile, light-mode wordmark)
 - Paper `#FFFFFF` (dark-mode wordmark)
-- Lime `#C8F04B` (dot on dark), deep lime `#65A30D` (dot on light)
+- Sidebar dot: `var(--primary)`, so it follows the selected color theme
+  (lime `#C8F04B` / `#65A30D` only under the default theme)
