@@ -204,7 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 ? "GitHub API buckets from response headers"
                 : pathname === "/settings"
                   ? "Database location and GitHub auth status"
-                  : "Triage with fewer clicks"}
+                  : null}
           </div>
           <button
             type="button"
