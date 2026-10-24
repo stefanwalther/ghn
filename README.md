@@ -9,6 +9,8 @@
   Clear 20 GitHub notifications in under 5 minutes with half the clicks.
 </div>
 
+<br>
+
 Zero friction. Based on the [`gh` CLI](https://cli.github.com/). If `gh` works, ghn works. No tokens, no env files.
 
 ## Why ghn
@@ -26,16 +28,19 @@ Needs Bun and an authenticated `gh`, nothing else. Tested on macOS and Linux.
 ```bash
 git clone https://github.com/stefanwalther/ghn.git
 cd ghn
-bun install
-bun run dev
-# open http://localhost:21120
+make start
+# builds, serves production in the background and opens http://localhost:21120
 ```
+
+For development with hot reload, use `make dev` instead.
 
 1. Press refresh to sync from GitHub.
 2. Clear the queue: filter by repo or reason, select with `x`, press `e` for done.
 3. Silence one noisy repo in `/repos` by setting it to weekly.
 
-Trying it out? `bun run db:seed` loads demo data instead of syncing.
+Trying it out? In dev, use Reseed demo data before the first sync, or run `bun run db:seed`.
+
+Alternative: token-based Docker run, see [docs/docker.md](docs/docker.md).
 
 ## Screenshots
 
@@ -89,29 +94,6 @@ Press `Cmd+K` anywhere for search and commands: threads, repos, filters, and nav
 ## Development
 
 See [docs/development.md](docs/development.md) for gates, commands, the test layers, and layout.
-
-## Docker (optional token-based run)
-
-The app authenticates to GitHub with `GH_TOKEN` (fallback `GITHUB_TOKEN`) when set, or the host `gh` CLI session otherwise. The container path needs no `gh` install.
-
-### Setup
-
-1. `cp .env.example .env`
-2. Set `GH_TOKEN=...` in `.env` (never commit `.env`)
-3. Optional overrides in `.env`: `GH_HOST`, `GHN_API_BASE`, `GHN_LOGIN`, `PORT`
-
-### Run
-
-- `make up` - build and start (`PORT=21220 make up` to override the host port)
-- `make logs` - follow container logs
-- `make down` - stop, keeping the `ghn-data` volume (SQLite data survives restarts)
-
-### Troubleshooting
-
-- `make up` refuses without `.env`: copy `.env.example` first.
-- App up but GitHub disconnected: token missing, invalid, or expired. Check `GET /api/connection` and `make logs`, then fix `GH_TOKEN` and retry.
-- App down (connection refused): the container is not running. Check `docker compose ps` and `make logs`.
-- Local flow unchanged: with no token env vars set, the app keeps using the host `gh` session as before.
 
 ## Contributing
 
