@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.3.0...ghn-v0.4.0) (2026-10-24)
+
+
+### Features
+
+* **contributions:** add heatmap overlay to today chip ([#78](https://github.com/stefanwalther/ghn/issues/78)) ([fdfbbb4](https://github.com/stefanwalther/ghn/commit/fdfbbb4ca41f7507e2aafe2333f095e190b4b5f6))
+* **inbox:** add hover snooze actions for repositories ([#75](https://github.com/stefanwalther/ghn/issues/75)) ([8c235f5](https://github.com/stefanwalther/ghn/commit/8c235f5f0fe1bb852eeef56e9a88e7082e7dd607))
+* **inbox:** show loading skeleton immediately on item select ([#80](https://github.com/stefanwalther/ghn/issues/80)) ([ee57e79](https://github.com/stefanwalther/ghn/commit/ee57e79357a1fca79d743a4ed07c6e1877934435))
+* **shortcuts:** group help modal and add search filter ([#73](https://github.com/stefanwalther/ghn/issues/73)) ([b7b0337](https://github.com/stefanwalther/ghn/commit/b7b0337e95101899379d4243d8339ac5dbde42ef))
+* **sidebar:** pin GitHub links to bottom ([#72](https://github.com/stefanwalther/ghn/issues/72)) ([7a2eeb6](https://github.com/stefanwalther/ghn/commit/7a2eeb6df7d228c57ae4f7b25f85680c7fe2946d))
+* **sidebar:** resizable filters with saved width ([#77](https://github.com/stefanwalther/ghn/issues/77)) ([27369f1](https://github.com/stefanwalther/ghn/commit/27369f14fa11407cd252dbc90a3e030157f6e66f))
+* **themes:** add 16 selectable color themes ([#82](https://github.com/stefanwalther/ghn/issues/82)) ([8505492](https://github.com/stefanwalther/ghn/commit/8505492f05c3f93b0e8763e77f3465d971e9e64c))
+
+
+### Bug Fixes
+
+* **inbox:** keep sync countdown from shifting layout ([#81](https://github.com/stefanwalther/ghn/issues/81)) ([b8c576d](https://github.com/stefanwalther/ghn/commit/b8c576d08d4189b7c05e372618ae1ac97cf71d8a))
+* **layout:** pin app shell and sidebars to the left edge ([#79](https://github.com/stefanwalther/ghn/issues/79)) ([69969c1](https://github.com/stefanwalther/ghn/commit/69969c18e97c6391444ea55ec8bac40f1ac316fe))
+
 ## [0.3.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.2.0...ghn-v0.3.0) (2026-10-23)
 
 
