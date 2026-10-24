@@ -11,12 +11,14 @@ describe("snooze presets", () => {
       "evening",
       "tomorrow",
       "nextWeek",
+      "nextMonth",
     ]);
     for (const p of presets) expect(p.at).toBeGreaterThan(now);
     expect(presets[0]?.at).toBe(now + 3600 * 1000);
     expect(presets[2]?.at).toBe(new Date(2026, 5, 15, 18, 0, 0).getTime());
     expect(presets[3]?.at).toBe(new Date(2026, 5, 16, 9, 0, 0).getTime());
     expect(presets[4]?.at).toBe(new Date(2026, 5, 22, 9, 0, 0).getTime());
+    expect(presets[5]?.at).toBe(new Date(2026, 6, 15, 9, 0, 0).getTime());
   });
 
   test("evening rolls to tomorrow after 18:00", () => {

@@ -84,7 +84,11 @@ test.describe("inbox load", () => {
     const digests = page.locator('section[aria-label="Quiet digests"]');
     await expect(digests).toBeVisible();
     await expect(digests.getByText("Quiet until due (170 pending)", { exact: true })).toBeVisible();
-    await expect(digests.getByRole("button")).toHaveCount(7);
+    // Each group has a collapsible toggle plus a hover actions button, so
+    // count only the toggles here (the actions buttons are icon-only with
+    // an "Actions for ..." accessible name).
+    const toggles = digests.getByRole("button", { name: /^(?!Actions for )/ });
+    await expect(toggles).toHaveCount(7);
 
     // The pending counts of the seven groups: two repositories with 25, five
     // with 24.

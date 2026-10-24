@@ -453,6 +453,7 @@ export function useUpdateRepository() {
     },
     onSettled: () => {
       client.invalidateQueries({ queryKey: key });
+      client.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

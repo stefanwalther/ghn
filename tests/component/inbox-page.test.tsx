@@ -223,6 +223,26 @@ describe("inbox screen", () => {
     expect(nav.replace).toHaveBeenCalledWith("/?repo=acme--api", { scroll: false });
   });
 
+  test("snoozing a repo from the sidebar patches the repository", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Snooze/ }));
+    const submenu = screen.getByRole("menu", { name: "Snooze acme/web" });
+    fireEvent.click(within(submenu).getByRole("menuitem", { name: /In 1 hour/ }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/repositories/acme--web")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/repositories/acme--web")[0]!;
+    expect(init?.method).toBe("PATCH");
+    const body = JSON.parse(String(init?.body)) as { snoozedUntil?: unknown };
+    expect(typeof body.snoozedUntil).toBe("number");
+    expect(body.snoozedUntil as number).toBeGreaterThan(Date.now());
+  });
+
   test("Escape closes the drawer", async () => {
     installFetch();
     renderWithQuery(<InboxPage />);

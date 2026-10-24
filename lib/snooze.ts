@@ -1,5 +1,5 @@
 export interface SnoozePreset {
-  value: "1h" | "3h" | "evening" | "tomorrow" | "nextWeek";
+  value: "1h" | "3h" | "evening" | "tomorrow" | "nextWeek" | "nextMonth";
   label: string;
   at: number;
 }
@@ -31,10 +31,31 @@ export function snoozePresets(now: number): SnoozePreset[] {
   monday.setDate(monday.getDate() + daysUntilMonday);
   const mondayAt = atTime(monday, 9);
 
+  // Next month keeps the same day at 09:00, clamped to the last day of
+  // the month when the day does not exist (e.g. Jan 31 -> Feb 28).
+  const nextMonthBase = new Date(
+    base.getFullYear(),
+    base.getMonth() + 1,
+    1,
+    9,
+    0,
+    0,
+    0
+  );
+  const lastDayNextMonth = new Date(
+    base.getFullYear(),
+    base.getMonth() + 2,
+    0
+  ).getDate();
+  nextMonthBase.setDate(Math.min(base.getDate(), lastDayNextMonth));
+  const nextMonthAt = nextMonthBase.getTime();
+
   const time = (ts: number) =>
     new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const weekday = (ts: number) =>
     new Date(ts).toLocaleDateString(undefined, { weekday: "short" });
+  const monthDay = (ts: number) =>
+    new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   return [
     { value: "1h", label: `In 1 hour (${time(in1h)})`, at: in1h },
@@ -45,6 +66,11 @@ export function snoozePresets(now: number): SnoozePreset[] {
       value: "nextWeek",
       label: `Next week (${weekday(mondayAt)} ${time(mondayAt)})`,
       at: mondayAt,
+    },
+    {
+      value: "nextMonth",
+      label: `Next month (${monthDay(nextMonthAt)} ${time(nextMonthAt)})`,
+      at: nextMonthAt,
     },
   ];
 }
