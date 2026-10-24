@@ -33,10 +33,19 @@ Zero friction. Based on the [`gh` CLI](https://cli.github.com/). If `gh` works, 
 Needs Bun and an authenticated `gh`, nothing else. Tested on macOS and Linux.
 
 ```bash
+gh auth status || gh auth login
 git clone https://github.com/stefanwalther/ghn.git
 cd ghn
 make start
 # builds, serves production in the background and opens http://localhost:21120
+```
+
+No Bun, or not on macOS or Linux? Run the published image instead:
+
+```bash
+cp .env.example .env # then set GH_TOKEN=... in .env, never commit it
+docker compose pull app && docker compose up -d
+# app at http://localhost:21120, see docs/docker.md
 ```
 
 For development with hot reload, use `make dev` instead.
