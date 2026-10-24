@@ -20,10 +20,18 @@ export function DigestSection({
   groups,
   onSnooze,
   snoozeDisabled,
+  onMarkAllDone,
+  markAllDoneBusy,
+  onMarkAllRead,
+  markAllReadBusy,
 }: {
   groups: DigestGroup[];
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onMarkAllDone?: (id: string) => void;
+  markAllDoneBusy?: boolean;
+  onMarkAllRead?: (id: string) => void;
+  markAllReadBusy?: boolean;
 }) {
   if (groups.length === 0) return null;
   const total = groups.reduce((n, g) => n + g.pendingCount, 0);
@@ -38,6 +46,10 @@ export function DigestSection({
           group={g}
           onSnooze={onSnooze}
           snoozeDisabled={snoozeDisabled}
+          onMarkAllDone={onMarkAllDone}
+          markAllDoneBusy={markAllDoneBusy}
+          onMarkAllRead={onMarkAllRead}
+          markAllReadBusy={markAllReadBusy}
         />
       ))}
     </section>
@@ -48,10 +60,18 @@ function DigestRow({
   group: g,
   onSnooze,
   snoozeDisabled,
+  onMarkAllDone,
+  markAllDoneBusy,
+  onMarkAllRead,
+  markAllReadBusy,
 }: {
   group: DigestGroup;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onMarkAllDone?: (id: string) => void;
+  markAllDoneBusy?: boolean;
+  onMarkAllRead?: (id: string) => void;
+  markAllReadBusy?: boolean;
 }) {
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
@@ -93,6 +113,12 @@ function DigestRow({
             isSnoozed={g.isSnoozed ?? false}
             disabled={snoozeDisabled}
             onSnooze={onSnooze}
+            onMarkAllDone={onMarkAllDone}
+            markAllDoneDisabled={markAllDoneBusy || g.pendingCount === 0}
+            markAllDoneCount={g.pendingCount}
+            onMarkAllRead={onMarkAllRead}
+            markAllReadDisabled={markAllReadBusy || g.pendingCount === 0}
+            markAllReadCount={g.pendingCount}
             visible={visible}
             contextAnchor={contextAnchor}
             onContextClose={() => setContextAnchor(null)}

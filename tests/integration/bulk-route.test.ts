@@ -170,6 +170,139 @@ describe("the done action", () => {
   });
 });
 
+describe("the repo-wide done action", () => {
+  test("another action with a repository id is refused", async () => {
+    const { status, body } = await bulk({
+      repositoryId: "acme--web",
+      action: "unsubscribe",
+    });
+    expect(status).toBe(400);
+    expect(body.error).toBe(
+      "repositoryId must be non-empty and action one of done, read"
+    );
+    expect((await row("n_001"))?.isDone).toBe(0);
+  });
+
+  test("an empty repository id is refused", async () => {
+    const { status } = await bulk({ repositoryId: "", action: "done" });
+    expect(status).toBe(400);
+  });
+
+  test("it marks every pending notification of the repository done", async () => {
+    const before = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.repositoryId, "acme--web"));
+    expect(before.length).toBeGreaterThan(1);
+
+    const { status, body } = await bulk({
+      repositoryId: "acme--web",
+      action: "done",
+    });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: before.length,
+      action: "done",
+      repositoryId: "acme--web",
+    });
+
+    const after = await db
+      .select({ id: notifications.id, isDone: notifications.isDone })
+      .from(notifications)
+      .where(eq(notifications.repositoryId, "acme--web"));
+    expect(after.every((r) => r.isDone === 1)).toBe(true);
+
+    const other = await row("n_002");
+    expect(other?.isDone).toBe(0);
+
+    const requests = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(requests.length).toBe(before.length);
+  });
+
+  test("it reports zero when the repository has nothing pending", async () => {
+    await bulk({ repositoryId: "acme--web", action: "done" });
+    const { status, body } = await bulk({
+      repositoryId: "acme--web",
+      action: "done",
+    });
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      updated: 0,
+      action: "done",
+      repositoryId: "acme--web",
+    });
+  });
+
+  test("a failing remote call still hides the repo locally and queues the work", async () => {
+    standIn.setScenario("/notifications/threads/n_001", { status: 500 });
+    const { body } = await bulk({
+      repositoryId: "acme--web",
+      action: "done",
+    });
+    expect(body).toMatchObject({
+      action: "done",
+      repositoryId: "acme--web",
+      remote: "partial",
+      queued: 1,
+    });
+    expect((await row("n_001"))?.isDone).toBe(1);
+    const queued = await queueRows();
+    expect(queued.map((q) => q.threadId)).toContain("n_001");
+  });
+});
+
+describe("the repo-wide read action", () => {
+  test("it marks every pending notification of the repository read", async () => {
+    const before = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.repositoryId, "acme--web"));
+    expect(before.length).toBeGreaterThan(1);
+
+    const { status, body } = await bulk({
+      repositoryId: "acme--web",
+      action: "read",
+    });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: before.length,
+      action: "read",
+      repositoryId: "acme--web",
+    });
+
+    const after = await db
+      .select({
+        id: notifications.id,
+        isRead: notifications.isRead,
+        isDone: notifications.isDone,
+      })
+      .from(notifications)
+      .where(eq(notifications.repositoryId, "acme--web"));
+    expect(after.every((r) => r.isRead === 1)).toBe(true);
+    expect(after.every((r) => r.isDone === 0)).toBe(true);
+
+    const other = await row("n_002");
+    expect(other?.isRead).toBe(0);
+
+    const requests = standIn.requests.filter((r) => r.method === "PATCH");
+    expect(requests.length).toBe(before.length);
+  });
+
+  test("it reports zero when the repository has nothing pending", async () => {
+    await bulk({ repositoryId: "acme--web", action: "done" });
+    const { status, body } = await bulk({
+      repositoryId: "acme--web",
+      action: "read",
+    });
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      updated: 0,
+      action: "read",
+      repositoryId: "acme--web",
+    });
+  });
+});
+
 describe("the read action", () => {
   test("it marks the notification read and tells GitHub", async () => {
     const { status, body } = await bulk({ ids: ["n_001"], action: "read" });

@@ -17,6 +17,8 @@ import { copyText } from "@/lib/clipboard";
 import { describeBulkResult } from "@/lib/bulk";
 import {
   useBulkAction,
+  useMarkRepoDone,
+  useMarkRepoRead,
   useNotifications,
   useSyncFlow,
   useThreadSync,
@@ -91,13 +93,19 @@ function InboxView() {
   // Busy state derives from the in-flight mutations, so overlapping triage
   // and sync operations keep the controls disabled until all settle.
   const bulkMutation = useBulkAction(filters);
+  const markRepoDoneMutation = useMarkRepoDone(filters);
+  const markRepoReadMutation = useMarkRepoRead(filters);
   const {
     syncOne: syncThread,
     syncingIds,
     isPending: threadBusy,
   } = useThreadSync(filters);
   const updateRepo = useUpdateRepository();
-  const busy = bulkMutation.isPending || threadBusy;
+  const busy =
+    bulkMutation.isPending ||
+    markRepoDoneMutation.isPending ||
+    markRepoReadMutation.isPending ||
+    threadBusy;
   // Central sync flow: manual refresh, poll window, and the truthful header
   // state derived from the shared notifications and connection entries.
   const sync = useSyncFlow(filters);
@@ -263,6 +271,88 @@ function InboxView() {
       await notifQuery.refetch();
     } catch {
       setNotice("Snooze failed. Previous setting restored.");
+    }
+  }
+
+  async function markRepoDone(repositoryId: string) {
+    if (markRepoDoneMutation.isPending) return;
+    setNotice(null);
+    const repoName =
+      repoFacets.find((r) => r.id === repositoryId)?.fullName ??
+      collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
+      repositoryId;
+    const prevItems = items;
+    const prevDrawer = drawerItem;
+    const targets = items.filter((i) => i.repositoryId === repositoryId);
+    if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
+      setDrawerItem(null);
+    }
+    setItems((prev) => prev.filter((i) => i.repositoryId !== repositoryId));
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      for (const t of targets) next.delete(t.id);
+      return next;
+    });
+    try {
+      const body = await markRepoDoneMutation.mutateAsync({ repositoryId });
+      const updated = typeof body?.updated === "number" ? body.updated : 0;
+      const queued = typeof body?.queued === "number" ? body.queued : 0;
+      if (updated === 0 && queued === 0) {
+        setNotice(`No pending items for ${repoName}.`);
+      } else {
+        const queuedNotice = describeBulkResult("done", {
+          updated,
+          queued,
+          error: typeof body?.error === "string" ? body.error : null,
+        });
+        if (queuedNotice) setNotice(queuedNotice);
+      }
+      await notifQuery.refetch();
+    } catch {
+      setItems(prevItems);
+      if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
+        setDrawerItem(prevDrawer);
+      }
+      setNotice("Mark all as done failed. Restored previous state.");
+    }
+  }
+
+  const markAllDoneBusy = busy || filters.state === "done";
+
+  async function markRepoRead(repositoryId: string) {
+    if (markRepoReadMutation.isPending) return;
+    setNotice(null);
+    const repoName =
+      repoFacets.find((r) => r.id === repositoryId)?.fullName ??
+      collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
+      repositoryId;
+    const prevItems = items;
+    setItems((prev) =>
+      prev.map((i) =>
+        i.repositoryId === repositoryId
+          ? { ...i, isRead: 1, localUnread: false as const }
+          : i
+      )
+    );
+    try {
+      const body = await markRepoReadMutation.mutateAsync({ repositoryId });
+      const updated = typeof body?.updated === "number" ? body.updated : 0;
+      const queued = typeof body?.queued === "number" ? body.queued : 0;
+      if (updated === 0 && queued === 0) {
+        setNotice(`No pending items for ${repoName}.`);
+      } else {
+        const queuedNotice = describeBulkResult("read", {
+          updated,
+          queued,
+          error: typeof body?.error === "string" ? body.error : null,
+        });
+        if (queuedNotice) setNotice(queuedNotice);
+      }
+      await notifQuery.refetch();
+    } catch {
+      setItems(prevItems);
+      setNotice("Mark all as read failed. Restored previous state.");
     }
   }
 
@@ -553,6 +643,10 @@ function InboxView() {
             onRepo={(repo) => setFilters({ ...filters, repo })}
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
+            onMarkAllDone={markRepoDone}
+            markAllDoneBusy={markAllDoneBusy}
+            onMarkAllRead={markRepoRead}
+            markAllReadBusy={markAllDoneBusy}
           />
           <div
             role="separator"
@@ -700,6 +794,10 @@ function InboxView() {
               groups={collapsed}
               onSnooze={snoozeRepo}
               snoozeDisabled={updateRepo.isPending}
+              onMarkAllDone={markRepoDone}
+              markAllDoneBusy={markAllDoneBusy}
+              onMarkAllRead={markRepoRead}
+              markAllReadBusy={markAllDoneBusy}
             />
           ) : null}
         </div>
