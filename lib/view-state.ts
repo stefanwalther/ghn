@@ -95,6 +95,35 @@ export function saveDrawerWidth(px: number): void {
   }
 }
 
+const FILTER_WIDTH_KEY = "ghn:filter-width";
+
+export const FILTER_MIN_WIDTH = 200;
+export const FILTER_MAX_WIDTH = 480;
+export const FILTER_DEFAULT_WIDTH = 256;
+
+export function clampFilterWidth(px: number): number {
+  if (!Number.isFinite(px)) return FILTER_DEFAULT_WIDTH;
+  return Math.min(FILTER_MAX_WIDTH, Math.max(FILTER_MIN_WIDTH, Math.round(px)));
+}
+
+export function loadFilterWidth(): number {
+  try {
+    const raw = localStorage.getItem(FILTER_WIDTH_KEY);
+    if (raw === null) return FILTER_DEFAULT_WIDTH;
+    return clampFilterWidth(Number.parseInt(raw, 10));
+  } catch {
+    return FILTER_DEFAULT_WIDTH;
+  }
+}
+
+export function saveFilterWidth(px: number): void {
+  try {
+    localStorage.setItem(FILTER_WIDTH_KEY, String(clampFilterWidth(px)));
+  } catch {
+    // ignore private-mode failures
+  }
+}
+
 export function previewFallbackKind(subjectType?: string | null): string {
   switch (subjectType) {
     case "Release":

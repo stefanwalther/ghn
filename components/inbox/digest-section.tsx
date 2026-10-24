@@ -1,7 +1,9 @@
 "use client";
 
+import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible } from "@/components/ui/collapsible";
+import { RepoSnoozeMenu, useRowVisibility } from "@/components/inbox/repo-snooze-menu";
 
 export interface DigestGroup {
   repositoryId: string;
@@ -14,7 +16,15 @@ export interface DigestGroup {
   snoozeLabel?: string;
 }
 
-export function DigestSection({ groups }: { groups: DigestGroup[] }) {
+export function DigestSection({
+  groups,
+  onSnooze,
+  snoozeDisabled,
+}: {
+  groups: DigestGroup[];
+  onSnooze?: (id: string, snoozedUntil: number | null) => void;
+  snoozeDisabled?: boolean;
+}) {
   if (groups.length === 0) return null;
   const total = groups.reduce((n, g) => n + g.pendingCount, 0);
   return (
@@ -23,8 +33,40 @@ export function DigestSection({ groups }: { groups: DigestGroup[] }) {
         Quiet until due ({total} pending)
       </h2>
       {groups.map((g) => (
-        <Collapsible
+        <DigestRow
           key={g.repositoryId}
+          group={g}
+          onSnooze={onSnooze}
+          snoozeDisabled={snoozeDisabled}
+        />
+      ))}
+    </section>
+  );
+}
+
+function DigestRow({
+  group: g,
+  onSnooze,
+  snoozeDisabled,
+}: {
+  group: DigestGroup;
+  onSnooze?: (id: string, snoozedUntil: number | null) => void;
+  snoozeDisabled?: boolean;
+}) {
+  const { visible, rowHandlers } = useRowVisibility();
+  const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  return (
+    <div
+      className="flex items-start gap-0.5"
+      {...rowHandlers}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextAnchor({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      <div className="min-w-0 flex-1">
+        <Collapsible
           title={<span>{g.repositoryName}</span>}
           meta={
             <span className="flex items-center gap-2">
@@ -42,7 +84,21 @@ export function DigestSection({ groups }: { groups: DigestGroup[] }) {
               : `New items stay here until the ${g.rhythm} digest is due. Switch this repo to immediate to promote them now.`}
           </p>
         </Collapsible>
-      ))}
-    </section>
+      </div>
+      {onSnooze ? (
+        <span className="pt-2">
+          <RepoSnoozeMenu
+            repoId={g.repositoryId}
+            fullName={g.repositoryName}
+            isSnoozed={g.isSnoozed ?? false}
+            disabled={snoozeDisabled}
+            onSnooze={onSnooze}
+            visible={visible}
+            contextAnchor={contextAnchor}
+            onContextClose={() => setContextAnchor(null)}
+          />
+        </span>
+      ) : null}
+    </div>
   );
 }

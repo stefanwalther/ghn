@@ -28,9 +28,11 @@ export function DemoBanner() {
     <div
       role="status"
       data-testid="demo-banner"
-      className="border-b border-border bg-muted/50 px-4 py-1.5 text-center text-xs text-muted-foreground"
+      className="border-b border-border bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground"
     >
-      Demo data shown. Sync to load live GitHub notifications.
+      <p className="w-full max-w-6xl text-left">
+        Demo data shown. Sync to load live GitHub notifications.
+      </p>
     </div>
   );
 }
