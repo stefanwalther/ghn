@@ -58,11 +58,15 @@ describe("VersionIndicator", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  test("pops the update popover once for an unseen version", async () => {
+  test("stays quiet on load and opens the popover from the badge", async () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
 
+    await screen.findByRole("button", { name: /new ghn version/i });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /new ghn version/i }));
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
     expect(dialog.textContent).toContain(`This install runs v${APP_VERSION}.`);
     const blocks = dialog.querySelectorAll("pre");
@@ -77,8 +81,7 @@ describe("VersionIndicator", () => {
     );
   });
 
-  test("stays quiet when the version was already dismissed", async () => {
-    localStorage.setItem("ghn:update-seen", "9.9.9");
+  test("keeps the badge so the dialog can be revisited", async () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
@@ -94,7 +97,6 @@ describe("VersionIndicator", () => {
   });
 
   test("reopens the popover from the badge", async () => {
-    localStorage.setItem("ghn:update-seen", "9.9.9");
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
@@ -108,10 +110,13 @@ describe("VersionIndicator", () => {
     ).toBeInTheDocument();
   });
 
-  test("dismissing records the version", async () => {
+  test("dismissing closes without recording anything", async () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Not now" }));
@@ -119,13 +124,16 @@ describe("VersionIndicator", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    expect(localStorage.getItem("ghn:update-seen")).toBe("9.9.9");
+    expect(localStorage.getItem("ghn:update-seen")).toBeNull();
   });
 
   test("closes on backdrop click and stays open on content click", async () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
 
     fireEvent.click(within(dialog).getByText(/This install runs/));
@@ -141,6 +149,9 @@ describe("VersionIndicator", () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
 
     expect(dialog).toHaveClass("absolute", "bottom-16", "left-4");
@@ -151,6 +162,9 @@ describe("VersionIndicator", () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     await screen.findByRole("dialog", { name: "Update available" });
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -164,6 +178,9 @@ describe("VersionIndicator", () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Close update dialog" }));
@@ -171,7 +188,6 @@ describe("VersionIndicator", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    expect(localStorage.getItem("ghn:update-seen")).toBe("9.9.9");
   });
 
   test("copies the source commands", async () => {
@@ -179,6 +195,9 @@ describe("VersionIndicator", () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
 
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Copy" })[0]!);
@@ -194,6 +213,9 @@ describe("VersionIndicator", () => {
     stubVersion(UPDATE);
 
     render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
     const dialog = await screen.findByRole("dialog", { name: "Update available" });
 
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Copy" })[1]!);

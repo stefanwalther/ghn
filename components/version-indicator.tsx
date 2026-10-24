@@ -5,21 +5,11 @@ import { APP_VERSION } from "@/lib/app-meta";
 import type { UpdateInfo } from "@/lib/update-check";
 import { UpdatePopover } from "@/components/update-popover";
 
-const SEEN_KEY = "ghn:update-seen";
-
-function readSeenVersion(): string | null {
-  try {
-    return localStorage.getItem(SEEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Sidebar footer version. Shows the running version, and when the release
- * check finds a newer tag the badge opens an update popover anchored above
- * it, with the exact commands for a source or Docker install. The popover
- * opens once per version; the badge stays so the update can be revisited.
+ * check finds a newer tag the badge gains an update dot; the popover with
+ * the exact commands for a source or Docker install opens only on click,
+ * never on its own. The badge stays so the update can be revisited.
  */
 export function VersionIndicator() {
   const [info, setInfo] = React.useState<UpdateInfo | null>(null);
@@ -44,20 +34,7 @@ export function VersionIndicator() {
 
   const latest = info?.updateAvailable === true ? info.latest : null;
 
-  React.useEffect(() => {
-    if (!latest) return;
-    if (readSeenVersion() === latest) return;
-    setOpen(true);
-  }, [latest]);
-
   function close() {
-    if (latest) {
-      try {
-        localStorage.setItem(SEEN_KEY, latest);
-      } catch {
-        // private mode keeps the badge; the dialog may pop up again.
-      }
-    }
     setOpen(false);
   }
 
