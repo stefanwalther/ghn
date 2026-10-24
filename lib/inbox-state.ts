@@ -122,6 +122,47 @@ export function nextFocusIndex(
   return Math.min(count - 1, Math.max(0, current + delta));
 }
 
+export interface RepoCount {
+  id: string;
+  main: number;
+  quiet: number;
+  isSnoozed?: boolean;
+}
+
+/**
+ * The repository to select after its pending items are marked done.
+ *
+ * The sidebar hides repositories with zero items unless they are the active
+ * filter, so leaving the focus on an emptied repository would pin an empty
+ * row in the list. Returns the next visible repository, the previous one when
+ * the emptied row was last, "all" when nothing else remains, or null when no
+ * navigation is needed (the emptied repo was not the active filter).
+ *
+ * The display order matches the sidebar: regular repositories in facet order,
+ * then snoozed repositories in facet order.
+ */
+export function nextRepoAfterMarkDone(
+  repos: RepoCount[],
+  activeRepoId: string,
+  emptiedRepoId: string
+): string | null {
+  if (activeRepoId !== emptiedRepoId) return null;
+  if (activeRepoId === "all") return null;
+  const visible = repos.filter(
+    (r) => r.id === activeRepoId || r.main > 0 || r.quiet > 0
+  );
+  const display = [
+    ...visible.filter((r) => !r.isSnoozed),
+    ...visible.filter((r) => r.isSnoozed),
+  ];
+  const idx = display.findIndex((r) => r.id === emptiedRepoId);
+  if (idx === -1) return null;
+  const remaining = display.filter((r) => r.id !== emptiedRepoId);
+  if (remaining.length === 0) return "all";
+  if (idx < remaining.length) return remaining[idx]?.id ?? "all";
+  return remaining[remaining.length - 1]?.id ?? "all";
+}
+
 export interface PollWindow {
   /** Whether the next refresh is still being held back. */
   inWindow: boolean;
