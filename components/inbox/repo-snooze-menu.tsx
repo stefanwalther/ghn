@@ -349,9 +349,11 @@ export function RepoSnoozeMenu({
               role="menu"
               aria-label={`Actions for ${fullName}`}
               onKeyDown={(e) => {
-                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                const down = e.key === "ArrowDown" || e.key === "j";
+                const up = e.key === "ArrowUp" || e.key === "k";
+                if (down || up) {
                   e.preventDefault();
-                  moveFocus(menuRef, e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
+                  moveFocus(menuRef, e.target as HTMLElement, down ? 1 : -1);
                 } else if (e.key === "ArrowRight") {
                   if (e.target === snoozeRowRef.current) {
                     e.preventDefault();
@@ -438,9 +440,11 @@ export function RepoSnoozeMenu({
               role="menu"
               aria-label={`Snooze ${fullName}`}
               onKeyDown={(e) => {
-                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                const down = e.key === "ArrowDown" || e.key === "j";
+                const up = e.key === "ArrowUp" || e.key === "k";
+                if (down || up) {
                   e.preventDefault();
-                  moveFocus(subRef, e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
+                  moveFocus(subRef, e.target as HTMLElement, down ? 1 : -1);
                 } else if (e.key === "ArrowLeft") {
                   e.preventDefault();
                   setSnoozeOpen(false);

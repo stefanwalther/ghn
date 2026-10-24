@@ -7,11 +7,19 @@ export interface OpenThreadRequest {
   n: number;
 }
 
+export interface MenuRequest {
+  /** Row id whose context menu should open. */
+  id: string;
+  /** Monotonic sequence so repeats re-trigger. */
+  n: number;
+}
+
 interface UIState {
   sidebarOpen: boolean;
   paletteOpen: boolean;
   helpOpen: boolean;
   openThread: OpenThreadRequest | null;
+  menuRequest: MenuRequest | null;
   refreshRequest: number;
   scrollTopRequest: number;
   toggleSidebar: () => void;
@@ -22,6 +30,7 @@ interface UIState {
   closeHelp: () => void;
   requestOpenThread: (id: string, repositoryId?: string) => void;
   consumeOpenThread: () => void;
+  requestMenu: (id: string) => void;
   requestRefresh: () => void;
   requestScrollTop: () => void;
 }
@@ -49,6 +58,7 @@ function persistSidebar(open: boolean): void {
 }
 
 let openThreadSeq = 0;
+let menuSeq = 0;
 
 function baseState(): Pick<
   UIState,
@@ -56,6 +66,7 @@ function baseState(): Pick<
   | "paletteOpen"
   | "helpOpen"
   | "openThread"
+  | "menuRequest"
   | "refreshRequest"
   | "scrollTopRequest"
 > {
@@ -64,6 +75,7 @@ function baseState(): Pick<
     paletteOpen: false,
     helpOpen: false,
     openThread: null,
+    menuRequest: null,
     refreshRequest: 0,
     scrollTopRequest: 0,
   };
@@ -95,6 +107,10 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ openThread: { id, repositoryId, n: openThreadSeq } });
   },
   consumeOpenThread: () => set({ openThread: null }),
+  requestMenu: (id) => {
+    menuSeq += 1;
+    set({ menuRequest: { id, n: menuSeq } });
+  },
   requestRefresh: () => set((s) => ({ refreshRequest: s.refreshRequest + 1 })),
   requestScrollTop: () => set((s) => ({ scrollTopRequest: s.scrollTopRequest + 1 })),
 }));

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within, act } from "@testing-library/react";
 import { renderWithQuery } from "./support/render-with-query";
-import { resetUIStore } from "@/lib/ui-store";
+import { resetUIStore, useUIStore } from "@/lib/ui-store";
 import type { ComponentProps } from "react";
 import { BulkBar } from "@/components/inbox/bulk-bar";
 import { DigestSection, type DigestGroup } from "@/components/inbox/digest-section";
@@ -205,6 +205,67 @@ describe("NotificationList", () => {
     ).toHaveAttribute("href", "https://github.com/acme/web/pull/1");
   });
 
+  test("opens the row menu on keyboard-initiated context menu (Shift+F10)", () => {
+    renderList();
+
+    const row = document.getElementById("notification-n_001");
+    if (!row) throw new Error("expected the first row to exist");
+    fireEvent.contextMenu(row, { clientX: 0, clientY: 0 });
+
+    expect(
+      screen.getByRole("menu", { name: "Actions for Fix flaky login redirect" })
+    ).toBeInTheDocument();
+  });
+
+  test("opens the row menu on Shift+F10 keydown", () => {
+    renderList();
+
+    const row = document.getElementById("notification-n_001");
+    if (!row) throw new Error("expected the first row to exist");
+    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+
+    expect(
+      screen.getByRole("menu", { name: "Actions for Fix flaky login redirect" })
+    ).toBeInTheDocument();
+  });
+
+  test("selects the focused row with Space and opens it with Enter", () => {
+    const props = renderList();
+
+    const row = document.getElementById("notification-n_001");
+    if (!row) throw new Error("expected the first row to exist");
+    fireEvent.keyDown(row, { key: " " });
+
+    expect(props.onToggle).toHaveBeenCalledWith("n_001");
+    expect(props.onOpen).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(row, { key: "Enter" });
+
+    expect(props.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "n_001" }));
+  });
+
+  test("leaves Space on inner controls to their native behavior", () => {
+    const props = renderList();
+
+    const trigger = screen.getByRole("button", { name: "Actions for Fix flaky login redirect" });
+    fireEvent.keyDown(trigger, { key: " " });
+
+    expect(props.onToggle).not.toHaveBeenCalled();
+    expect(props.onOpen).not.toHaveBeenCalled();
+  });
+
+  test("opens the row menu on a menu request for its item", () => {
+    renderList();
+
+    act(() => {
+      useUIStore.getState().requestMenu("n_001");
+    });
+
+    expect(
+      screen.getByRole("menu", { name: "Actions for Fix flaky login redirect" })
+    ).toBeInTheDocument();
+  });
+
   test("shows whether an item is merged, due or only unread locally", () => {
     renderList({
       items: [
@@ -249,6 +310,27 @@ describe("ItemMenu", () => {
     expect(items.join(" ")).toContain("Mark as done");
     expect(items.join(" ")).toContain("Mark as read");
     expect(items.join(" ")).toContain("Unsubscribe and mute");
+  });
+
+  test("shows the same shortcut keys as the keyboard handler", () => {
+    renderMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Fix flaky login redirect" }));
+
+    const menu = screen.getByRole("menu", { name: "Actions for Fix flaky login redirect" });
+    const titles = within(menu)
+      .getAllByRole("menuitem")
+      .map((el) => el.getAttribute("title"));
+    expect(titles).toEqual([
+      "Mark as done (d)",
+      "Mark as read (r)",
+      "Unsubscribe and mute (⇧U)",
+      "Open details (⇧D)",
+      "Open source (o)",
+      "Copy link (c)",
+      "Sync this item (s)",
+      "Select this repository",
+    ]);
   });
 
   test("reports the action that was chosen", () => {
@@ -302,6 +384,21 @@ describe("ItemMenu", () => {
     fireEvent.keyDown(entries[0]!, { key: "ArrowDown" });
 
     expect(entries[1]).toHaveFocus();
+  });
+
+  test("moves the focus through the menu with j and k", () => {
+    renderMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Fix flaky login redirect" }));
+    const menu = screen.getByRole("menu");
+    const entries = within(menu).getAllByRole("menuitem");
+    expect(entries[0]).toHaveFocus();
+
+    fireEvent.keyDown(entries[0]!, { key: "j" });
+    expect(entries[1]).toHaveFocus();
+
+    fireEvent.keyDown(entries[1]!, { key: "k" });
+    expect(entries[0]).toHaveFocus();
   });
 
   test("closes the menu when the user clicks outside it", () => {

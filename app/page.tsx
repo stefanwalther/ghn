@@ -216,6 +216,13 @@ function InboxView() {
       await syncOne(item.id);
       return;
     }
+    if (action === "select-repo") {
+      setFilters({
+        ...filters,
+        repo: filters.repo === item.repositoryId ? "all" : item.repositoryId,
+      });
+      return;
+    }
     void apply(action, [item.id]);
   }
 
@@ -486,6 +493,9 @@ function InboxView() {
         // The shortcuts dialog now lives in the global AppShell. When it is
         // open, leave selection and drawer alone so Escape only closes help.
         if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
+        // An open context menu owns its own Escape to close; leave selection
+        // and drawer alone with it.
+        if (document.querySelector('div[role="menu"]')) return;
         if (confirmUnsub) {
           setConfirmUnsub(null);
           return;
@@ -496,6 +506,9 @@ function InboxView() {
       }
       if (isEditableTarget(e.target)) return;
       if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
+      // A visible context menu owns the keyboard: list shortcuts stay quiet
+      // while it is open so j/k and triage keys never act behind it.
+      if (document.querySelector('div[role="menu"]')) return;
       if (confirmUnsub) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const drawerOpen = drawerItem !== null;
@@ -570,6 +583,15 @@ function InboxView() {
         case "c": {
           const item = drawerOpen ? drawerItem : focusIdx !== null ? items[focusIdx] : undefined;
           if (item) void menuAction(item, "copy");
+          break;
+        }
+        case "m": {
+          // Single-key context menu for the focused row. Skipped while the
+          // drawer is open: it has its own triage actions, and the row menu
+          // would float above it.
+          if (drawerOpen) break;
+          const id = focusIdx !== null ? items[focusIdx]?.id : undefined;
+          if (id) useUIStore.getState().requestMenu(id);
           break;
         }
         case "a":
@@ -805,6 +827,7 @@ function InboxView() {
           focusedId={focusIdx !== null ? items[focusIdx]?.id : undefined}
           showHints={showHints}
           syncingIds={syncingIds}
+          activeRepo={filters.repo}
           onToggle={toggle}
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}

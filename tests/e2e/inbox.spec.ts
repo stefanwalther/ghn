@@ -431,19 +431,20 @@ test.describe("inbox triage", () => {
 
     // The menu offers the triage actions, each with its shortcut hint.
     const items = menu.getByRole("menuitem");
-    await expect(items).toHaveCount(7);
+    await expect(items).toHaveCount(8);
     expect(
       await items.evaluateAll((elements) =>
         elements.map((element) => element.querySelector("span")?.textContent ?? "")
       )
     ).toEqual([
-      "Open source",
-      "Open details",
-      "Copy link",
-      "Sync this item",
       "Mark as done",
       "Mark as unread",
       "Unsubscribe and mute",
+      "Open details",
+      "Open source",
+      "Copy link",
+      "Sync this item",
+      "Select this repository",
     ]);
   });
 
