@@ -1,5 +1,10 @@
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 function localToday(): string {
   const d = new Date();
@@ -248,13 +253,20 @@ export function ContributionsChip() {
                 {Array.from({ length: padStart }).map((_, i) => (
                   <span key={`pad-${i}`} className="h-[11px] w-[11px]" />
                 ))}
-                {days.map((d) => (
-                  <span
-                    key={d.date}
-                    title={`${shortDate(d.date)}: ${d.count} contribution${d.count === 1 ? "" : "s"}`}
-                    className={`h-[11px] w-[11px] rounded-[2px] ${cellRing} ${levelClass(d.count, max)}`}
-                  />
-                ))}
+                {days.map((d) => {
+                  const tip = `${shortDate(d.date)}: ${d.count} contribution${d.count === 1 ? "" : "s"}`;
+                  return (
+                    <Tooltip key={d.date}>
+                      <TooltipTrigger asChild>
+                        <span
+                          data-day-cell={d.date}
+                          className={`h-[11px] w-[11px] rounded-[2px] ${cellRing} ${levelClass(d.count, max)}`}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{tip}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
               </div>
             </div>
           </div>

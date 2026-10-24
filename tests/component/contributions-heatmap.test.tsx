@@ -36,9 +36,20 @@ describe("contributions heatmap overlay", () => {
     const expectedTotal = days.reduce((s, d) => s + d.count, 0);
     expect(screen.getByText(`${expectedTotal} contributions`)).toBeTruthy();
 
-    // 180 day cells have per-day tooltips; pad cells have none
-    const cells = document.querySelectorAll('span[title*="contribution"]');
+    // 180 day cells render without native title tooltips (instant shadcn tooltips instead); pad cells have no marker
+    const cells = document.querySelectorAll("span[data-day-cell]");
     expect(cells.length).toBe(180);
+    expect(document.querySelector('span[title*="contribution"]')).toBeNull();
+
+    // hovering a day cell shows its tooltip instantly (no native delay);
+    // fixture day 0 is Apr 27 with count 0
+    const firstCell = cells[0] as HTMLElement;
+    fireEvent.pointerEnter(firstCell, { pointerType: "mouse" });
+    fireEvent.mouseOver(firstCell);
+    fireEvent.focus(firstCell);
+    expect(
+      await screen.findByText("Apr 27: 0 contributions", undefined, { timeout: 3000 })
+    ).toBeTruthy();
 
     // weekday labels + month labels + legend + range all render
     expect(screen.getByText("Mon")).toBeTruthy();
