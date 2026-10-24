@@ -1,9 +1,40 @@
 export function unwrapDetails(md: string): string {
   const pattern = /<details\b[^>]*>\s*<summary\b[^>]*>([\s\S]*?)<\/summary\b[^>]*>([\s\S]*?)<\/details\b[^>]*>/gi;
   return md.replace(pattern, (_match, summary: string, body: string) => {
-    const label = summary.replace(/<[^>]*>/g, "").trim();
+    const label = stripTags(summary).trim();
     return `**${label}**\n\n${body.trim()}`;
   });
+}
+
+/**
+ * Strip HTML tags from a short label without regex replacement (CodeQL
+ * flags multi-character tag-stripping patterns as incomplete sanitizers).
+ * Skips `<...>` tags and drops an unterminated `<tag` fragment. A `<`
+ * not followed by a letter, `/` or `!` (e.g. `a < b`) is kept as text.
+ */
+function stripTags(value: string): string {
+  let out = "";
+  let i = 0;
+  while (i < value.length) {
+    const lt = value.indexOf("<", i);
+    if (lt === -1) {
+      out += value.slice(i);
+      break;
+    }
+    if (lt + 1 < value.length && /[A-Za-z/!]/.test(value[lt + 1] as string)) {
+      const gt = value.indexOf(">", lt + 1);
+      if (gt === -1) {
+        out += value.slice(i, lt);
+        break;
+      }
+      out += value.slice(i, lt);
+      i = gt + 1;
+    } else {
+      out += value.slice(i, lt + 1);
+      i = lt + 1;
+    }
+  }
+  return out;
 }
 
 interface MdNode {
