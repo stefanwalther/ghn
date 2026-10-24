@@ -7,6 +7,11 @@
   # The better GitHub notification UI
 
   Clear 20 GitHub notifications in under 5 minutes with half the clicks.
+
+  [![CI](https://github.com/stefanwalther/ghn/actions/workflows/ci.yml/badge.svg)](https://github.com/stefanwalther/ghn/actions/workflows/ci.yml)
+  [![Release](https://img.shields.io/github/v/release/stefanwalther/ghn)](https://github.com/stefanwalther/ghn/releases)
+  [![License](https://img.shields.io/github/license/stefanwalther/ghn)](https://github.com/stefanwalther/ghn/blob/main/LICENSE)
+  [![Bun](https://img.shields.io/badge/runtime-Bun-black)](https://bun.sh)
 </div>
 
 <br>
