@@ -496,17 +496,26 @@ function InboxView() {
           <Button
             variant="ghost"
             size="sm"
-            title={inPollWindow ? `Next refresh in ${countdownSecs}s` : "Refresh from GitHub"}
-            aria-label={inPollWindow ? `Next refresh in ${countdownSecs} seconds` : "Refresh inbox from GitHub"}
+            title="Refresh from GitHub"
+            aria-label="Refresh inbox from GitHub"
             onClick={() => void refresh()}
             disabled={syncing || refreshing || inPollWindow}
           >
             <SyncSpinner spinning={syncing || refreshing} />
           </Button>
           {lastSyncAt !== null ? (
-            <span className="text-xs text-muted-foreground" title={`Poll interval ${pollSecs}s`}>
-              {stale ? "Stale · " : ""}Synced {formatSyncTime(lastSyncAt)}
-              {inPollWindow ? ` · ${countdownSecs}s` : ""}
+            <span
+              className="inline-flex items-baseline gap-1 text-xs tabular-nums text-muted-foreground"
+              title={`Poll interval ${pollSecs}s`}
+            >
+              {stale ? <span>Stale ·</span> : null}
+              <span>Synced {formatSyncTime(lastSyncAt)}</span>
+              <span
+                aria-hidden="true"
+                className="inline-block min-w-[5ch] text-left"
+              >
+                {inPollWindow ? `· ${countdownSecs}s` : ""}
+              </span>
             </span>
           ) : null}
           {lastSyncAt === null ? (
