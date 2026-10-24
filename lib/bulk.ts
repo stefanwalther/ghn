@@ -23,6 +23,21 @@ export interface BulkOutcome {
   error?: string | null;
 }
 
+/** Validation for repo-wide bulk actions: { repositoryId, action }. */
+export function validateBulkRepoInput(
+  repositoryId: unknown,
+  action: unknown
+): { ok: true; repositoryId: string; action: "done" | "read" } | { ok: false; status: number } {
+  if (
+    typeof repositoryId !== "string" ||
+    repositoryId.length === 0 ||
+    (action !== "done" && action !== "read")
+  ) {
+    return { ok: false, status: 400 };
+  }
+  return { ok: true, repositoryId, action };
+}
+
 function bulkReasonText(reason: string | null | undefined): string {
   if (reason === "auth") return "GitHub access missing";
   if (reason === "rate_limited") return "GitHub rate limit reached";

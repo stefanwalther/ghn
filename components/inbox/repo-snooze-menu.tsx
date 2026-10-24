@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, Clock, MoreHorizontal } from "lucide-react";
+import { CheckCheck, ChevronRight, Clock, ExternalLink, MailOpen, MoreHorizontal } from "lucide-react";
 import { snoozePresets } from "@/lib/snooze";
 import { cn } from "@/lib/utils";
 
 const MENU_WIDTH = 220;
 const SUBMENU_WIDTH = 260;
 const MENU_GAP = 8;
+const MENU_ITEM_HEIGHT = 37;
+const MENU_LIST_PADDING = 8;
 
 /** The five inbox presets from the request, in order. */
 function inboxPresets(now: number) {
@@ -54,11 +56,11 @@ export function useRowVisibility() {
 }
 
 /** Hover actions for one repository row. More first-level entries plug in here later. */
-export type RepoRowAction = "snooze";
+export type RepoRowAction = "snooze" | "mark-all-done";
 
 /**
- * "..." button revealed on row hover/focus. Opens a menu whose single entry
- * is Snooze, with the presets as a second-level submenu.
+ * "..." button revealed on row hover/focus. Opens a menu with Snooze (plus
+ * its presets submenu) and Mark all as done for the repository.
  */
 export function RepoSnoozeMenu({
   repoId,
@@ -66,6 +68,13 @@ export function RepoSnoozeMenu({
   isSnoozed,
   disabled,
   onSnooze,
+  onMarkAllDone,
+  markAllDoneDisabled,
+  markAllDoneCount,
+  onMarkAllRead,
+  markAllReadDisabled,
+  markAllReadCount,
+  repoUrl,
   triggerClassName,
   triggerStyle,
   visible = true,
@@ -77,6 +86,23 @@ export function RepoSnoozeMenu({
   isSnoozed: boolean;
   disabled?: boolean;
   onSnooze: (id: string, snoozedUntil: number | null) => void;
+  /** Marks every pending notification of this repo done. Omit to hide. */
+  onMarkAllDone?: (id: string) => void;
+  /** Disables the done entry, e.g. while busy or with nothing pending. */
+  markAllDoneDisabled?: boolean;
+  /** Pending total shown in the done entry label. Omit for no count. */
+  markAllDoneCount?: number;
+  /** Marks every pending notification of this repo read. Omit to hide. */
+  onMarkAllRead?: (id: string) => void;
+  /** Disables the read entry, e.g. while busy or with nothing pending. */
+  markAllReadDisabled?: boolean;
+  /** Pending total shown in the read entry label. Omit for no count. */
+  markAllReadCount?: number;
+  /**
+   * Web URL of the repository root. Defaults to the github.com fallback
+   * used across the app when no stored URL exists.
+   */
+  repoUrl?: string;
   /** Extra classes for the trigger, e.g. background. */
   triggerClassName?: string;
   /** Inline style for the trigger, e.g. absolute overlay positioning. */
@@ -110,12 +136,21 @@ export function RepoSnoozeMenu({
   const contextCloseRef = React.useRef(onContextClose);
   contextCloseRef.current = onContextClose;
 
+  // Row count for the cursor-anchored height without re-subscribing the
+  // effect on every parent render.
+  const onMarkAllDoneRef = React.useRef(onMarkAllDone);
+  onMarkAllDoneRef.current = onMarkAllDone;
+  const onMarkAllReadRef = React.useRef(onMarkAllRead);
+  onMarkAllReadRef.current = onMarkAllRead;
+
+  /** Opens the menu below the trigger, flipping above when space is short. */
   function openMenu() {
     const fresh = inboxPresets(Date.now());
     setPresets(fresh);
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
-      const height = 37 + 32;
+      const rows = 2 + (onMarkAllDone ? 1 : 0) + (onMarkAllRead ? 1 : 0);
+      const height = rows * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
       const below = rect.bottom + MENU_GAP;
       const top =
         below + height + MENU_GAP > window.innerHeight
@@ -133,6 +168,7 @@ export function RepoSnoozeMenu({
     setOpen(true);
   }
 
+  /** Closes menus and the context anchor, refocusing the trigger on request. */
   function closeAll(focusTrigger = false) {
     setSnoozeOpen(false);
     setOpen(false);
@@ -145,7 +181,9 @@ export function RepoSnoozeMenu({
   React.useEffect(() => {
     if (!contextAnchor) return;
     setPresets(inboxPresets(Date.now()));
-    const height = 37 + 32;
+    const rows =
+      2 + (onMarkAllDoneRef.current ? 1 : 0) + (onMarkAllReadRef.current ? 1 : 0);
+    const height = rows * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
     setPos({
       top: Math.max(MENU_GAP, Math.min(contextAnchor.y, window.innerHeight - height - MENU_GAP)),
       left: Math.max(
@@ -157,6 +195,7 @@ export function RepoSnoozeMenu({
     setOpen(true);
   }, [contextAnchor]);
 
+  /** Opens the snooze presets next to the Snooze row, flipping sides as needed. */
   function openSubmenu(focusFirst: boolean) {
     const rowRect = snoozeRowRef.current?.getBoundingClientRect();
     if (rowRect) {
@@ -177,14 +216,52 @@ export function RepoSnoozeMenu({
     }
   }
 
+  /** Applies one snooze preset choice and closes the menu. */
   function choose(at: number | null) {
     closeAll(true);
     onSnooze(repoId, at);
   }
 
+  /** Reports the repo-wide done action unless the entry is disabled. */
+  function chooseMarkAllDone() {
+    if (markAllDoneDisabled) return;
+    closeAll(true);
+    onMarkAllDone?.(repoId);
+  }
+
+  /** Reports the repo-wide read action unless the entry is disabled. */
+  function chooseMarkAllRead() {
+    if (markAllReadDisabled) return;
+    closeAll(true);
+    onMarkAllRead?.(repoId);
+  }
+
+  const markAllDoneLabel =
+    typeof markAllDoneCount === "number"
+      ? `Mark all as done (${markAllDoneCount})`
+      : "Mark all as done";
+  const markAllReadLabel =
+    typeof markAllReadCount === "number"
+      ? `Mark all as read (${markAllReadCount})`
+      : "Mark all as read";
+  const rootUrl = repoUrl ?? `https://github.com/${fullName}`;
+
+  /** Opens the repository root in a new window and closes the menu. */
+  function openRepo() {
+    closeAll(true);
+    window.open(rootUrl, "_blank", "noopener");
+  }
+
   React.useEffect(() => {
     if (!open) return;
-    snoozeRowRef.current?.focus();
+    // Initial focus only: depending on snoozeOpen here re-ran this on
+    // every submenu open/close and yanked focus back to the first row.
+    const buttons = menuRef.current?.querySelectorAll("button") ?? [];
+    [...buttons].find((b) => !b.disabled)?.focus();
+  }, [open ]);
+
+  React.useEffect(() => {
+    if (!open) return;
     function onPointerDown(e: MouseEvent) {
       const target = e.target as Node | null;
       if (
@@ -224,8 +301,13 @@ export function RepoSnoozeMenu({
     };
   }, [open, snoozeOpen]);
 
+  /** Moves keyboard focus between enabled menu entries, wrapping at the ends. */
   function moveFocus(container: React.RefObject<HTMLDivElement | null>, target: HTMLElement, delta: 1 | -1) {
-    const buttons = [...(container.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    // Disabled entries cannot take focus; stepping onto one stalls
+    // arrow-key navigation, so they are left out of the cycle.
+    const buttons = [...(container.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
+      (b) => !b.disabled
+    );
     const idx = buttons.indexOf(target as HTMLButtonElement);
     const next = buttons[(idx + delta + buttons.length) % buttons.length];
     next?.focus();
@@ -271,13 +353,41 @@ export function RepoSnoozeMenu({
                   e.preventDefault();
                   moveFocus(menuRef, e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1);
                 } else if (e.key === "ArrowRight") {
-                  e.preventDefault();
-                  openSubmenu(true);
+                  if (e.target === snoozeRowRef.current) {
+                    e.preventDefault();
+                    openSubmenu(true);
+                  }
                 }
               }}
               className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-md"
               style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
             >
+              {onMarkAllDone ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={markAllDoneLabel}
+                  disabled={markAllDoneDisabled}
+                  onClick={chooseMarkAllDone}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCheck className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{markAllDoneLabel}</span>
+                </button>
+              ) : null}
+              {onMarkAllRead ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={markAllReadLabel}
+                  disabled={markAllReadDisabled}
+                  onClick={chooseMarkAllRead}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <MailOpen className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{markAllReadLabel}</span>
+                </button>
+              ) : null}
               <button
                 ref={snoozeRowRef}
                 type="button"
@@ -306,6 +416,16 @@ export function RepoSnoozeMenu({
                   Snooze{isSnoozed ? " (snoozed)" : ""}
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                title={`Open ${fullName} in a new window`}
+                onClick={openRepo}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">Open repo</span>
               </button>
             </div>,
             document.body

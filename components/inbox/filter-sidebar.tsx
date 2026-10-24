@@ -50,6 +50,7 @@ function SidebarButton({
   );
 }
 
+/** One repository filter row with hover actions and a right-click menu. */
 function RepoFilterRow({
   repo: r,
   active,
@@ -57,6 +58,10 @@ function RepoFilterRow({
   onSnooze,
   snoozeDisabled,
   snoozedSection,
+  onMarkAllDone,
+  markAllDoneBusy,
+  onMarkAllRead,
+  markAllReadBusy,
 }: {
   repo: RepoFacet;
   active: boolean;
@@ -64,9 +69,14 @@ function RepoFilterRow({
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
   snoozedSection?: boolean;
+  onMarkAllDone?: (id: string) => void;
+  markAllDoneBusy?: boolean;
+  onMarkAllRead?: (id: string) => void;
+  markAllReadBusy?: boolean;
 }) {
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  const pendingTotal = r.main + r.quiet;
   return (
     <div
       className="relative"
@@ -101,6 +111,12 @@ function RepoFilterRow({
           isSnoozed={r.isSnoozed}
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
+          onMarkAllDone={onMarkAllDone}
+          markAllDoneDisabled={markAllDoneBusy || pendingTotal === 0}
+          markAllDoneCount={pendingTotal}
+          onMarkAllRead={onMarkAllRead}
+          markAllReadDisabled={markAllReadBusy || pendingTotal === 0}
+          markAllReadCount={pendingTotal}
           visible={visible}
           contextAnchor={contextAnchor}
           onContextClose={() => setContextAnchor(null)}
@@ -117,6 +133,7 @@ function RepoFilterRow({
   );
 }
 
+/** Sidebar with type filters, repository filters, and snoozed repositories. */
 export function FilterSidebar({
   types,
   activeType,
@@ -126,6 +143,10 @@ export function FilterSidebar({
   onRepo,
   onSnooze,
   snoozeDisabled,
+  onMarkAllDone,
+  markAllDoneBusy,
+  onMarkAllRead,
+  markAllReadBusy,
 }: {
   types: TypeFacet[];
   activeType: string;
@@ -135,6 +156,10 @@ export function FilterSidebar({
   onRepo: (repo: string) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onMarkAllDone?: (id: string) => void;
+  markAllDoneBusy?: boolean;
+  onMarkAllRead?: (id: string) => void;
+  markAllReadBusy?: boolean;
 }) {
   // Render open on the server and first client paint; saved prefs apply after
   // mount so hydration stays consistent.
@@ -272,6 +297,10 @@ export function FilterSidebar({
               onRepo={onRepo}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
+              onMarkAllDone={onMarkAllDone}
+              markAllDoneBusy={markAllDoneBusy}
+              onMarkAllRead={onMarkAllRead}
+              markAllReadBusy={markAllReadBusy}
             />
           ))}
         </div>
@@ -309,6 +338,10 @@ export function FilterSidebar({
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
               snoozedSection
+              onMarkAllDone={onMarkAllDone}
+              markAllDoneBusy={markAllDoneBusy}
+              onMarkAllRead={onMarkAllRead}
+              markAllReadBusy={markAllReadBusy}
             />
           ))}
         </div>

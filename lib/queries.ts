@@ -177,6 +177,7 @@ export interface BulkMutationBody {
   updated?: number;
   queued?: number;
   error?: string;
+  repositoryId?: string;
 }
 
 /**
@@ -261,6 +262,118 @@ export function useBulkAction(filters: InboxFilters) {
 export type ThreadSyncResult =
   | { gone: true }
   | { gone: false; item: Partial<InboxItem> & { id: string } };
+
+/**
+ * Repo-wide done mutation: marks every pending notification of one
+ * repository done, including quiet digests and rows hidden by the current
+ * filter. The server resolves the ids; the client only names the repo.
+ */
+export function useMarkRepoDone(filters: InboxFilters) {
+  const client = useQueryClient();
+  const key = queryKeys.notifications(filters);
+  return useMutation({
+    mutationFn: (vars: { repositoryId: string }) =>
+      fetchJson<BulkMutationBody>(
+        "/api/notifications/bulk",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repositoryId: vars.repositoryId, action: "done" }),
+          cache: "no-store",
+        },
+        BULK_TIMEOUT_MS
+      ),
+    onMutate: async (vars) => {
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<NotificationsResponse>(key);
+      if (!previous) return { previous };
+      const removed = previous.mainFlow.filter(
+        (item) => item.repositoryId === vars.repositoryId
+      );
+      const nextMainFlow = previous.mainFlow.filter(
+        (item) => item.repositoryId !== vars.repositoryId
+      );
+      const nextTypes = previous.facets.types.map((facet) => {
+        if (facet.value === "all") {
+          return { ...facet, count: Math.max(0, facet.count - removed.length) };
+        }
+        const dec = removed.filter((item) =>
+          matchesTypeFilter(item.reason, item.subjectType ?? null, facet.value, {
+            prMerged: item.prMerged ?? false,
+            subjectState: item.subjectState ?? null,
+          })
+        ).length;
+        return { ...facet, count: Math.max(0, facet.count - dec) };
+      });
+      const nextRepos = previous.facets.repos.map((repo) =>
+        repo.id === vars.repositoryId ? { ...repo, main: 0, quiet: 0 } : repo
+      );
+      const nextCollapsed = (previous.collapsedSection ?? []).filter(
+        (group) => group.repositoryId !== vars.repositoryId
+      );
+      const next: NotificationsResponse = {
+        ...previous,
+        mainFlow: nextMainFlow,
+        collapsedSection: nextCollapsed,
+        facets: { types: nextTypes, repos: nextRepos },
+      };
+      client.setQueryData<NotificationsResponse>(key, next);
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) client.setQueryData(key, context.previous);
+    },
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: key });
+      client.invalidateQueries({ queryKey: queryKeys.repositories() });
+    },
+  });
+}
+
+/**
+ * Repo-wide read mutation: marks every pending notification of one
+ * repository read, including quiet digests and rows hidden by the current
+ * filter. Rows stay visible; only their read state changes.
+ */
+export function useMarkRepoRead(filters: InboxFilters) {
+  const client = useQueryClient();
+  const key = queryKeys.notifications(filters);
+  return useMutation({
+    mutationFn: (vars: { repositoryId: string }) =>
+      fetchJson<BulkMutationBody>(
+        "/api/notifications/bulk",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repositoryId: vars.repositoryId, action: "read" }),
+          cache: "no-store",
+        },
+        BULK_TIMEOUT_MS
+      ),
+    onMutate: async (vars) => {
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<NotificationsResponse>(key);
+      if (!previous) return { previous };
+      const next: NotificationsResponse = {
+        ...previous,
+        mainFlow: previous.mainFlow.map((item) =>
+          item.repositoryId === vars.repositoryId
+            ? { ...item, isRead: 1 as const, localUnread: false }
+            : item
+        ),
+      };
+      client.setQueryData<NotificationsResponse>(key, next);
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) client.setQueryData(key, context.previous);
+    },
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: key });
+      client.invalidateQueries({ queryKey: queryKeys.repositories() });
+    },
+  });
+}
 
 export interface ThreadSyncBody {
   gone?: boolean;
