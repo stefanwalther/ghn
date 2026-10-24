@@ -87,3 +87,12 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* Plain CSS (not a Tailwind utility) so it applies without depending on
+   utility generation. Keeps the filter sidebar at its content height on
+   desktop so the resize handle spans the filters, not the whole page. */
+@media (min-width: 1024px) {
+  .filter-aside {
+    align-self: flex-start;
+  }
+}

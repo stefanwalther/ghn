@@ -3,12 +3,18 @@ import {
   DRAWER_DEFAULT_WIDTH,
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
+  FILTER_DEFAULT_WIDTH,
+  FILTER_MAX_WIDTH,
+  FILTER_MIN_WIDTH,
   clampDrawerWidth,
+  clampFilterWidth,
   loadDrawerWidth,
+  loadFilterWidth,
   parsePaletteLimit,
   previewFallbackKind,
   repoFilterHref,
   saveDrawerWidth,
+  saveFilterWidth,
 } from "@/lib/view-state";
 
 describe("drawer width", () => {
@@ -22,6 +28,20 @@ describe("drawer width", () => {
   test("falls back to default without a DOM", () => {
     expect(loadDrawerWidth()).toBe(DRAWER_DEFAULT_WIDTH);
     expect(() => saveDrawerWidth(700)).not.toThrow();
+  });
+});
+
+describe("filter width", () => {
+  test("clamps into bounds and rounds", () => {
+    expect(clampFilterWidth(10)).toBe(FILTER_MIN_WIDTH);
+    expect(clampFilterWidth(100000)).toBe(FILTER_MAX_WIDTH);
+    expect(clampFilterWidth(300.4)).toBe(300);
+    expect(clampFilterWidth(Number.NaN)).toBe(FILTER_DEFAULT_WIDTH);
+  });
+
+  test("falls back to default without a DOM", () => {
+    expect(loadFilterWidth()).toBe(FILTER_DEFAULT_WIDTH);
+    expect(() => saveFilterWidth(300)).not.toThrow();
   });
 });
 

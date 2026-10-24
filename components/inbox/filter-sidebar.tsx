@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { RepoSnoozeMenu, useRowVisibility } from "@/components/inbox/repo-snooze-menu";
 import { cn } from "@/lib/utils";
 
 export interface TypeFacet {
@@ -24,11 +25,13 @@ function SidebarButton({
   onClick,
   label,
   children,
+  className,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <button
@@ -38,11 +41,79 @@ function SidebarButton({
       onClick={onClick}
       className={cn(
         "flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground"
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+        className
       )}
     >
       {children}
     </button>
+  );
+}
+
+function RepoFilterRow({
+  repo: r,
+  active,
+  onRepo,
+  onSnooze,
+  snoozeDisabled,
+  snoozedSection,
+}: {
+  repo: RepoFacet;
+  active: boolean;
+  onRepo: (repo: string) => void;
+  onSnooze?: (id: string, snoozedUntil: number | null) => void;
+  snoozeDisabled?: boolean;
+  snoozedSection?: boolean;
+}) {
+  const { visible, rowHandlers } = useRowVisibility();
+  const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  return (
+    <div
+      className="relative"
+      {...rowHandlers}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextAnchor({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      <SidebarButton
+        active={active}
+        label={`Filter by ${r.fullName}`}
+        onClick={() => onRepo(active ? "all" : r.id)}
+        className="min-w-0 flex-1"
+      >
+        <span className="min-w-0 flex-1 truncate" title={r.fullName}>
+          {r.fullName}
+          {r.isSnoozed && !snoozedSection ? " · snoozed" : ""}
+        </span>
+        <span className="flex items-center gap-1">
+          {r.quiet > 0 ? (
+            <span className="text-xs text-muted-foreground">+{r.quiet}</span>
+          ) : null}
+          <Badge variant="muted">{r.main}</Badge>
+        </span>
+      </SidebarButton>
+      {onSnooze ? (
+        <RepoSnoozeMenu
+          repoId={r.id}
+          fullName={r.fullName}
+          isSnoozed={r.isSnoozed}
+          disabled={snoozeDisabled}
+          onSnooze={onSnooze}
+          visible={visible}
+          contextAnchor={contextAnchor}
+          onContextClose={() => setContextAnchor(null)}
+          triggerClassName="bg-background"
+          triggerStyle={{
+            position: "absolute",
+            top: "50%",
+            right: 4,
+            transform: "translateY(-50%)",
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -53,6 +124,8 @@ export function FilterSidebar({
   activeRepo,
   onType,
   onRepo,
+  onSnooze,
+  snoozeDisabled,
 }: {
   types: TypeFacet[];
   activeType: string;
@@ -60,21 +133,23 @@ export function FilterSidebar({
   activeRepo: string;
   onType: (type: string) => void;
   onRepo: (repo: string) => void;
+  onSnooze?: (id: string, snoozedUntil: number | null) => void;
+  snoozeDisabled?: boolean;
 }) {
   // Render open on the server and first client paint; saved prefs apply after
   // mount so hydration stays consistent.
-  const [collapsed, setCollapsed] = React.useState({ types: false, repos: false });
+  const [collapsed, setCollapsed] = React.useState({ types: false, repos: false, snoozed: false });
 
   React.useEffect(() => {
     try {
       const saved = localStorage.getItem("ghn:filter-sections");
-      if (saved) setCollapsed({ types: false, repos: false, ...JSON.parse(saved) });
+      if (saved) setCollapsed({ types: false, repos: false, snoozed: false, ...JSON.parse(saved) });
     } catch {
       // ignore corrupt prefs and keep both sections open
     }
   }, []);
 
-  function toggle(key: "types" | "repos") {
+  function toggle(key: "types" | "repos" | "snoozed") {
     setCollapsed((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       try {
@@ -91,6 +166,9 @@ export function FilterSidebar({
   const visibleRepos = repos.filter(
     (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
   );
+  const regularRepos = visibleRepos.filter((r) => !r.isSnoozed);
+  const snoozedRepos = visibleRepos.filter((r) => r.isSnoozed);
+  const activeSnoozedName = snoozedRepos.find((r) => r.id === activeRepo)?.fullName;
 
   return (
     <div className="flex flex-col gap-6">
@@ -186,31 +264,57 @@ export function FilterSidebar({
               {repos.reduce((n, r) => n + r.main, 0)}
             </Badge>
           </SidebarButton>
-          {visibleRepos.map((r) => {
-            const active = activeRepo === r.id;
-            return (
-              <SidebarButton
-                key={r.id}
-                active={active}
-                label={`Filter by ${r.fullName}`}
-                onClick={() => onRepo(active ? "all" : r.id)}
-              >
-                <span className="min-w-0 flex-1 truncate" title={r.fullName}>
-                  {r.fullName}
-                  {r.isSnoozed ? " · snoozed" : ""}
-                </span>
-                <span className="flex items-center gap-1">
-                  {r.quiet > 0 ? (
-                    <span className="text-xs text-muted-foreground">+{r.quiet}</span>
-                  ) : null}
-                  <Badge variant="muted">{r.main}</Badge>
-                </span>
-              </SidebarButton>
-            );
-          })}
+          {regularRepos.map((r) => (
+            <RepoFilterRow
+              key={r.id}
+              repo={r}
+              active={activeRepo === r.id}
+              onRepo={onRepo}
+              onSnooze={onSnooze}
+              snoozeDisabled={snoozeDisabled}
+            />
+          ))}
         </div>
         )}
       </section>
+      {snoozedRepos.length > 0 ? (
+      <section aria-label="Snoozed repositories">
+        <button
+          type="button"
+          aria-expanded={!collapsed.snoozed}
+          aria-label={collapsed.snoozed ? "Expand snoozed repositories" : "Collapse snoozed repositories"}
+          onClick={() => toggle("snoozed")}
+          className="mb-1 flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-1 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="min-w-0 truncate text-left">
+            Snoozed ({snoozedRepos.length})
+            {collapsed.snoozed && activeSnoozedName ? ` · ${activeSnoozedName}` : ""}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+              collapsed.snoozed && "-rotate-90"
+            )}
+            aria-hidden
+          />
+        </button>
+        {collapsed.snoozed ? null : (
+        <div className="flex flex-col gap-0.5">
+          {snoozedRepos.map((r) => (
+            <RepoFilterRow
+              key={r.id}
+              repo={r}
+              active={activeRepo === r.id}
+              onRepo={onRepo}
+              onSnooze={onSnooze}
+              snoozeDisabled={snoozeDisabled}
+              snoozedSection
+            />
+          ))}
+        </div>
+        )}
+      </section>
+      ) : null}
     </div>
   );
 }
