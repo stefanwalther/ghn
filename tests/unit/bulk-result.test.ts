@@ -46,4 +46,16 @@ describe("describeBulkResult", () => {
       })
     ).toContain("rate limit");
   });
+
+  test("labels unread, unsubscribe partials, and unknown actions", () => {
+    expect(
+      describeBulkResult("unread", { updated: 1, queued: 1, error: null })
+    ).toContain("marked unread");
+    expect(
+      describeBulkResult("unsubscribe", { updated: 2, queued: 1, error: null })
+    ).toContain("unsubscribed");
+    expect(
+      describeBulkResult("mystery", { updated: 1, queued: 1, error: null })
+    ).toContain("mystery");
+  });
 });

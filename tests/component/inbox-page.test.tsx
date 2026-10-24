@@ -696,3 +696,116 @@ describe("inbox screen", () => {
     }
   });
 });
+
+describe("repo-wide inbox actions", () => {
+  beforeEach(() => {
+    nav.params = new URLSearchParams("");
+    localStorage.clear();
+    sessionStorage.clear();
+    resetUIStore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  function openRepoMenu() {
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+  }
+
+  test("marks every item of the repo done from the sidebar menu", async () => {
+    const fetchMock = installFetch();
+    const orig = fetchMock.getMockImplementation()!;
+    let bulkCalled = false;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        bulkCalled = true;
+        return orig(input, init);
+      }
+      if (url === "/api/notifications" && bulkCalled) {
+        return Response.json({ ...notificationsPayload, mainFlow: [secondItem] });
+      }
+      return orig(input, init);
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (1)" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/notifications/bulk")[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      repositoryId: "acme--web",
+      action: "done",
+    });
+    expect(await screen.findByText("Bump the linter")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+  });
+
+  test("marks every item of the repo read from the sidebar menu", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as read (1)" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/notifications/bulk")[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      repositoryId: "acme--web",
+      action: "read",
+    });
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+  });
+
+  test("restores the repo rows when marking all done fails", async () => {
+    const fetchMock = installFetch();
+    const orig = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/notifications/bulk")) {
+        throw new Error("network unavailable");
+      }
+      return orig(input, init);
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (1)" }));
+
+    expect(
+      await screen.findByText("Mark all as done failed. Restored previous state.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+  });
+
+  test("restores the read state when marking all read fails", async () => {
+    const fetchMock = installFetch();
+    const orig = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/notifications/bulk")) {
+        throw new Error("network unavailable");
+      }
+      return orig(input, init);
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as read (1)" }));
+
+    expect(
+      await screen.findByText("Mark all as read failed. Restored previous state.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+  });
+});
