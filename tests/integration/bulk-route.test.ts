@@ -425,6 +425,18 @@ describe("the remote failure path", () => {
     const queued = await queueRows();
     expect(queued[0]?.lastError).toBe("auth");
   });
+
+  test("mixed remote failures report the first error reason", async () => {
+    standIn.setScenario("/notifications/threads/n_001", { status: 500 });
+    standIn.setScenario("/notifications/threads/n_002", { status: 401 });
+    const { body } = await bulk({ ids: ["n_001", "n_002"], action: "done" });
+    expect(body).toMatchObject({
+      updated: 2,
+      remote: "partial",
+      queued: 2,
+      error: "unknown",
+    });
+  });
 });
 
 describe("the write-back queue fallback", () => {

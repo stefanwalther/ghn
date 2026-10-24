@@ -43,7 +43,7 @@ async function applyDone(
   for (const [idx, remote] of remotes.entries()) {
     const id = cleanIds[idx] as string;
     if (!remote.ok) {
-      firstError = remote;
+      firstError ??= remote;
       await enqueueWriteback(db, id, "done", remote.reason ?? "unknown", now);
       queued += 1;
     }
@@ -85,7 +85,7 @@ async function applyRead(
   for (const [idx, remote] of remotes.entries()) {
     const id = cleanIds[idx] as string;
     if (!remote.ok) {
-      firstError = remote;
+      firstError ??= remote;
       await enqueueWriteback(db, id, "read", remote.reason ?? "unknown", now);
       queued += 1;
     }
