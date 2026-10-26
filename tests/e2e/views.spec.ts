@@ -6,6 +6,27 @@ import { expect, test } from "./fixtures";
  * numbers are exact.
  */
 
+test.describe("help view", () => {
+  test("opens from the main menu and switches guides by topic", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("link", { name: "Help" }).click();
+
+    await expect(page).toHaveURL(/\/help$/);
+    await expect(page.getByRole("heading", { name: "Help", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Universal search" })).toBeVisible();
+
+    // The topics sidebar is a fixed column next to the guide, never a
+    // full-width overlay that squeezes the content to zero width.
+    await expect(page.getByRole("navigation", { name: "Help topics" })).toHaveCSS("width", "256px");
+
+    await page.getByRole("button", { name: "Help topic: Keyboard shortcuts" }).click();
+
+    await expect(page).toHaveURL(/\/help\?topic=shortcuts$/);
+    await expect(page.getByRole("heading", { name: "Universal search" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "App", level: 3 })).toBeVisible();
+  });
+});
+
 test.describe("repository view", () => {
   test("lists every seeded repository with its rhythm and pending count", async ({ page }) => {
     await page.goto("/repos");

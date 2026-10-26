@@ -63,6 +63,13 @@ describe("shortcuts", () => {
     expect(keys).toContain("Cmd+F12");
   });
 
+  test("help documents the palette repo tricks", () => {
+    const keys = SHORTCUTS.map((s) => s.key);
+    expect(keys).toContain("repo:");
+    expect(keys).toContain("type: / state: / age:");
+    expect(keys).toContain("Shift+Enter");
+  });
+
   test("theme cycle fires on Cmd+F12 and Ctrl+F12 only", () => {
     expect(isCycleThemeEvent(keyEvent({ key: "F12", metaKey: true }))).toBe(true);
     expect(isCycleThemeEvent(keyEvent({ key: "F12", ctrlKey: true }))).toBe(true);

@@ -491,6 +491,9 @@ function InboxView() {
   const openThreadReq = useUIStore((s) => s.openThread);
   const refreshReq = useUIStore((s) => s.refreshRequest);
   const scrollTopReq = useUIStore((s) => s.scrollTopRequest);
+  // Palette-to-sidebar handoff: Cmd+K "Filter repository list to X" lands here.
+  const repoListFilter = useUIStore((s) => s.repoListFilter);
+  const setRepoListFilter = useUIStore((s) => s.setRepoListFilter);
   const seenRefresh = React.useRef(refreshReq);
   const seenScrollTop = React.useRef(scrollTopReq);
 
@@ -498,13 +501,14 @@ function InboxView() {
     if (!openThreadReq) return;
     useUIStore.getState().consumeOpenThread();
     const found = itemsRef.current.find((i) => i.id === openThreadReq.id);
-    if (!found) return;
-    // When absent (different filter or page), the palette already saved
-    // last-opened and navigated to the repo filter, so the existing
-    // scroll-restoration effect brings it into view after load.
+    // Absent from the current filter view (different state, type, age, or
+    // digest bucket): fall back to the palette's own snapshot so Enter
+    // always opens what it promised instead of silently doing nothing.
+    const item = found ?? (openThreadReq.item?.id === openThreadReq.id ? openThreadReq.item : undefined);
+    if (!item) return;
     const idx = itemsRef.current.findIndex((i) => i.id === openThreadReq.id);
     if (idx >= 0) setFocusIdx(idx);
-    setDrawerItem(found);
+    setDrawerItem(item);
   }, [openThreadReq]);
 
   React.useEffect(() => {
@@ -746,6 +750,8 @@ function InboxView() {
             activeRepo={filters.repo}
             onType={selectType}
             onRepo={selectRepo}
+            repoFilter={repoListFilter}
+            onRepoFilterChange={setRepoListFilter}
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}

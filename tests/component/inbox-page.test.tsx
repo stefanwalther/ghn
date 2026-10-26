@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithQuery } from "./support/render-with-query";
-import { resetUIStore } from "@/lib/ui-store";
+import { resetUIStore, useUIStore } from "@/lib/ui-store";
 import InboxPage from "@/app/page";
 import { AppShell } from "@/components/app-shell";
 import type { InboxItem } from "@/components/inbox/notification-list";
@@ -281,6 +281,18 @@ describe("inbox screen", () => {
     expect(nav.replace).toHaveBeenCalledWith("/?repo=acme--api", { scroll: false });
   });
 
+  test("the sidebar repository search box narrows the repo list on the live page", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const input = screen.getByRole("searchbox", { name: "Filter repositories" });
+    fireEvent.change(input, { target: { value: "web" } });
+
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Filter by acme/api" })).not.toBeInTheDocument();
+  });
+
   test("snoozing a repo from the sidebar patches the repository", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);
@@ -314,6 +326,35 @@ describe("inbox screen", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Preview drawer" })).not.toBeInTheDocument();
     });
+  });
+
+  test("a palette request for an item outside the current filter still opens the drawer", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const ghost: InboxItem = {
+      id: "n_999",
+      repositoryId: "acme--web",
+      repositoryName: "acme/web",
+      subject: "Collapsed digest item the filter hides",
+      subjectType: "PullRequest",
+      subjectState: "open",
+      reason: "subscribed",
+      prMerged: false,
+      createdAt: Date.now(),
+      isRead: 0,
+      isDone: 0,
+      sourceUrl: "https://github.com/acme/web/pull/999",
+      due: true,
+      dueLabel: null,
+    };
+    act(() => {
+      useUIStore.getState().requestOpenThread(ghost.id, ghost.repositoryId, ghost);
+    });
+
+    const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+    expect(drawer).toHaveTextContent("Collapsed digest item the filter hides");
   });
 
   test("a bulk action posts the selected ids and the action to the bulk endpoint", async () => {
