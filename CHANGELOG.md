@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/stefanwalther/ghn/compare/ghn-v0.5.0...ghn-v0.5.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **deps:** bump drizzle-orm to ^0.45.2 ([#101](https://github.com/stefanwalther/ghn/issues/101)) ([3b1db3b](https://github.com/stefanwalther/ghn/commit/3b1db3bb3f7f98c7513e9b35f4bb24bdc03a4e1c))
+* **heatmap:** stop clipping the last week column ([#110](https://github.com/stefanwalther/ghn/issues/110)) ([886b240](https://github.com/stefanwalther/ghn/commit/886b240769787b06e8ffa992a7a461e89e5e477b))
+
 ## [0.5.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.4.0...ghn-v0.5.0) (2026-10-24)
 
 
