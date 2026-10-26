@@ -212,7 +212,7 @@ export function ContributionsChip() {
       ref={overlayRef}
       role="region"
       aria-label="Contributions in the last 180 days"
-      className="absolute top-full right-0 z-50 mt-2 w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 text-card-foreground shadow-md sm:w-[430px]"
+      className="absolute top-full right-0 z-50 mt-2 w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 text-card-foreground shadow-md sm:w-[444px]"
     >
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-xs font-semibold">Last 180 days</span>
@@ -235,9 +235,9 @@ export function ContributionsChip() {
                 </span>
               ))}
             </div>
-            <div className="min-w-0 overflow-x-auto">
+            <div className="min-w-0 flex-1 overflow-x-auto pr-1 pb-1">
               <div
-                className="grid grid-flow-col gap-[3px] text-[9px] text-muted-foreground [grid-auto-columns:11px]"
+                className="grid w-max grid-flow-col gap-[3px] text-[9px] text-muted-foreground [grid-auto-columns:11px]"
                 aria-hidden="true"
               >
                 {monthLabels.map((m, i) => (
@@ -249,7 +249,7 @@ export function ContributionsChip() {
                   </span>
                 ))}
               </div>
-              <div className="grid grid-flow-col grid-rows-7 gap-[3px] [grid-auto-columns:11px]" aria-hidden="true">
+              <div className="grid w-max grid-flow-col grid-rows-7 gap-[3px] [grid-auto-columns:11px]" aria-hidden="true">
                 {Array.from({ length: padStart }).map((_, i) => (
                   <span key={`pad-${i}`} className="h-[11px] w-[11px]" />
                 ))}
