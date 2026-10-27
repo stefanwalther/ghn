@@ -99,14 +99,14 @@
 
 ### Tests for User Story 4 (TDD)
 
-- [ ] T018 [P] [US4] Component test: queued indication present on unpushed hidden rows in tests/component/
-- [ ] T019 [P] [US4] Component test: busy wording distinct from queued wording in tests/component/
+- [X] T018 [P] [US4] Component test: queued indication present on unpushed hidden rows in tests/component/
+- [X] T019 [P] [US4] Component test: busy wording distinct from queued wording in tests/component/
 
 ### Implementation for User Story 4
 
-- [ ] T020 [US4] Implement queued indication plus copy in components/inbox/ (depends on T018, T019)
-- [ ] T021 [US4] Wire bulk response queued and remote fields into row syncing UI in lib/queries.ts plus components/inbox/ (depends on T018, T019)
-- [ ] T022 [US4] Run gates green
+- [X] T020 [US4] Implement queued indication plus copy in components/inbox/ (depends on T018, T019)
+- [X] T021 [US4] Wire bulk response queued and remote fields into row syncing UI in lib/queries.ts plus components/inbox/ (depends on T018, T019)
+- [X] T022 [US4] Run gates green
 
 **Checkpoint**: US1 through US4 all work independently
 

@@ -59,3 +59,21 @@ describe("describeBulkResult", () => {
     ).toContain("mystery");
   });
 });
+
+describe("queuedBannerText", () => {
+  test("returns null when the queue is empty", async () => {
+    const { queuedBannerText } = await import("@/lib/bulk");
+    expect(queuedBannerText(0)).toBeNull();
+    expect(queuedBannerText(-1)).toBeNull();
+  });
+
+  test("names the waiting pushes without busy wording", async () => {
+    const { queuedBannerText } = await import("@/lib/bulk");
+    expect(queuedBannerText(1)).toBe(
+      "1 change waiting for GitHub. Hidden rows stay hidden until the push succeeds."
+    );
+    expect(queuedBannerText(3)).toBe(
+      "3 changes waiting for GitHub. Hidden rows stay hidden until the push succeeds."
+    );
+  });
+});

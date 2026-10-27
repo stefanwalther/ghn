@@ -15,7 +15,7 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { useDialogFocus } from "@/lib/dialog-focus";
 import { copyText } from "@/lib/clipboard";
-import { describeBulkResult } from "@/lib/bulk";
+import { describeBulkResult, queuedBannerText } from "@/lib/bulk";
 import {
   useBulkAction,
   useMarkRepoDone,
@@ -154,6 +154,7 @@ function InboxView() {
   const typeFacets = notifQuery.data?.facets?.types ?? [];
   const repoFacets = notifQuery.data?.facets?.repos ?? [];
   const refreshing = notifQuery.isFetching && !notifQuery.isPending;
+  const queuedBanner = queuedBannerText(notifQuery.data?.queueDepth ?? 0);
   const status =
     notifQuery.isPending
       ? "loading"
@@ -862,6 +863,22 @@ function InboxView() {
             <p role="alert" className="text-xs text-destructive">
               {notice}
             </p>
+          ) : null}
+          {queuedBanner ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-input bg-card px-4 py-3 shadow-sm"
+            >
+              <p className="flex-1 text-sm text-muted-foreground">{queuedBanner}</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refresh()}
+                disabled={syncing}
+              >
+                Retry now
+              </Button>
+            </div>
           ) : null}
           {conn && !conn.connected ? (
             <div

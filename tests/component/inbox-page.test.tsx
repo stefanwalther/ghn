@@ -599,6 +599,19 @@ describe("inbox screen", () => {
     expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
   });
 
+  test("a queued depth shows the waiting banner", async () => {
+    installFetch({ notifications: { ...notificationsPayload, queueDepth: 2 } });
+    renderWithQuery(<InboxPage />);
+    expect(await screen.findByText(/2 changes waiting for GitHub/)).toBeInTheDocument();
+  });
+
+  test("no queued depth hides the waiting banner", async () => {
+    installFetch({ notifications: { ...notificationsPayload, queueDepth: 0 } });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+    expect(screen.queryByText(/waiting for GitHub/)).not.toBeInTheDocument();
+  });
+
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);

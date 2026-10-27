@@ -90,6 +90,7 @@ export interface NotificationsResponse {
   facets: { types: TypeFacet[]; repos: RepoFacet[] };
   lastSyncAt: number | null;
   stale: boolean;
+  queueDepth: number;
 }
 
 export interface RepositoriesResponse {

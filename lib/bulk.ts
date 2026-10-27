@@ -69,3 +69,17 @@ export function describeBulkResult(action: string, outcome: BulkOutcome): string
     `items restored until GitHub confirms.`
   );
 }
+
+/**
+ * Persistent banner copy for unpushed write-backs. Returns null when the
+ * queue is empty. Worded to never read as a busy or syncing state: queued
+ * means waiting on the remote push, busy means work is in flight.
+ */
+export function queuedBannerText(depth: number): string | null {
+  if (depth <= 0) return null;
+  const changes = depth === 1 ? "1 change" : `${depth} changes`;
+  return (
+    `${changes} waiting for GitHub. ` +
+    `Hidden rows stay hidden until the push succeeds.`
+  );
+}
