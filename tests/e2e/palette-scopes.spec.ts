@@ -18,8 +18,19 @@ const DAY_IDS = ["n_001", "n_002", "n_003", "n_004", "n_005", "n_006", "n_007"];
 
 /** Opens the palette the power-user way and returns the search box. */
 async function openPalette(page: Page) {
-  await page.keyboard.press("ControlOrMeta+k");
   const box = page.getByRole("combobox", { name: /Search threads/ });
+  // A keypress that lands before React hydrates and attaches the
+  // shortcut listener is silently dropped, which reads as a hang on
+  // loaded CI runners. Retry the chord until the dialog answers.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.keyboard.press("ControlOrMeta+k");
+    try {
+      await expect(box).toBeVisible({ timeout: 2000 });
+      return box;
+    } catch {
+      // Not open yet; press again once listeners are attached.
+    }
+  }
   await expect(box).toBeVisible();
   return box;
 }
