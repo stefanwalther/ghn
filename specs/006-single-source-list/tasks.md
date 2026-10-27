@@ -158,9 +158,9 @@
 
 **Purpose**: Lock the backbone and leave the tree releasable
 
-- [ ] T033 Run quickstart.md validation end to end per specs/006-single-source-list/quickstart.md
-- [ ] T034 [P] Drift check docs/item-lifecycle.md against implementation, update guarantees on any deviation
-- [ ] T035 Full gates plus coverage ratchet check, update red-eye ledger with verdicts
+- [X] T033 Run quickstart.md validation end to end per specs/006-single-source-list/quickstart.md
+- [X] T034 [P] Drift check docs/item-lifecycle.md against implementation, update guarantees on any deviation
+- [X] T035 Full gates plus coverage ratchet check, update red-eye ledger with verdicts
 
 ---
 

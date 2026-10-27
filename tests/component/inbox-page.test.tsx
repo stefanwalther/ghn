@@ -671,6 +671,9 @@ describe("inbox screen", () => {
     expect(
       await screen.findByText("acme/api marked done, including 2 hidden pending items.")
     ).toBeInTheDocument();
+    await waitFor(() => expect(quietFetch.mock.calls.length).toBeGreaterThan(2));
+    expect(screen.queryByText("acme/api")).not.toBeInTheDocument();
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
   });
 
   test("a triage action from the drawer closes the drawer and posts the item", async () => {

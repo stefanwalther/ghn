@@ -42,3 +42,10 @@
 - Tasks: 35 tasks T001-T035, phases 1-9, MVP backbone US1 plus US2.
 - US1+US2 committed as 28d3d64 (single-source list, intent fold, repo-done view fixes, regression tests). Gates at commit: typecheck, lint, unit 554, component 199, integration 197. T001-T013 ticked.
 - US5 committed (mute precedence lock, repo-done hidden notice). Gates: typecheck, lint, unit 559, component 202, integration 202. T023-T026 ticked (26/35).
+
+## Wrap-up prep
+
+- US6 committed as aed2643 (pin end to end). Gates then: typecheck, lint, unit 559, component 207, integration 205.
+- T033 quickstart mapping: throttled triage plus mid-triage refresh (component pre-commit tests), failure restore (existing bulk failure tests), all-view mark-in-place (component), offline plus revive plus full sync (integration P2 tests), placement (integration mute-beats-rhythm), pin (component grouping plus integration contract). All green.
+- T034 drift check: item-lifecycle P1-P3 plus G1-G7 all match implementation. queuedBannerText wording distinct from busy copy. Pin touches pinned only. No doc changes needed.
+- T035 gates final: typecheck, lint, unit 559, component 207, integration 205. Coverage 86.15% vs baseline 86.09%, ratchet pass.
