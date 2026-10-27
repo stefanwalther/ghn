@@ -1,6 +1,6 @@
 {
   "name": "ghn",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "Bulk-triage GitHub notifications in minutes. Local-first, uses your gh login.",
   "author": "Stefan Walther",
