@@ -612,6 +612,67 @@ describe("inbox screen", () => {
     expect(screen.queryByText(/waiting for GitHub/)).not.toBeInTheDocument();
   });
 
+  test("repo-wide done on a quiet repo states the hidden pending items", async () => {
+    const quietGroup = {
+      repositoryId: "acme--api",
+      repositoryName: "acme/api",
+      rhythm: "weekly",
+      nextDueAt: Date.parse("2026-01-22T09:00:00Z"),
+      nextDueLabel: "in 7 days",
+      pendingCount: 2,
+      isSnoozed: false,
+      snoozeLabel: "Not snoozed",
+    };
+    const quietPayload = {
+      lastSyncAt: null,
+      stale: false,
+      mainFlow: [firstItem],
+      collapsedSection: [quietGroup],
+      facets: {
+        types: [{ value: "pull_request", label: "Pull requests", count: 1 }],
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false },
+          { id: "acme--api", fullName: "acme/api", main: 0, quiet: 2, isSnoozed: false },
+        ],
+      },
+    };
+    const emptiedQuiet = {
+      ...quietPayload,
+      collapsedSection: [],
+      facets: {
+        ...quietPayload.facets,
+        repos: quietPayload.facets.repos.map((r) => ({ ...r, quiet: 0 })),
+      },
+    };
+    let notifCalls = 0;
+    const quietFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        return Response.json({ updated: 2, action: "done", repositoryId: "acme--api" });
+      }
+      if (url.includes("/api/notifications")) {
+        notifCalls += 1;
+        return Response.json(notifCalls === 1 ? quietPayload : emptiedQuiet);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", quietFetch);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.contextMenu(screen.getByText("acme/api"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (2)" }));
+    expect(
+      await screen.findByText("acme/api marked done, including 2 hidden pending items.")
+    ).toBeInTheDocument();
+  });
+
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);

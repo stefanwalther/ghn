@@ -15,7 +15,7 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { useDialogFocus } from "@/lib/dialog-focus";
 import { copyText } from "@/lib/clipboard";
-import { describeBulkResult, queuedBannerText } from "@/lib/bulk";
+import { describeBulkResult, describeRepoDoneResult, queuedBannerText } from "@/lib/bulk";
 import {
   useBulkAction,
   useMarkRepoDone,
@@ -372,6 +372,8 @@ function InboxView() {
       repositoryId,
     };
     pendingRef.current = [...pendingRef.current, intent];
+    const hiddenPending =
+      collapsed.find((g) => g.repositoryId === repositoryId)?.pendingCount ?? 0;
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const next = new Set(prev);
@@ -385,12 +387,22 @@ function InboxView() {
       if (updated === 0 && queued === 0) {
         setNotice(`No pending items for ${repoName}.`);
       } else {
+        const hiddenNotice =
+          hiddenPending > 0
+            ? describeRepoDoneResult(repoName, {
+                updated,
+                queued,
+                error: typeof body?.error === "string" ? body.error : null,
+                hiddenPending,
+              })
+            : null;
         const queuedNotice = describeBulkResult("done", {
           updated,
           queued,
           error: typeof body?.error === "string" ? body.error : null,
         });
-        if (queuedNotice) setNotice(queuedNotice);
+        if (hiddenNotice) setNotice(hiddenNotice);
+        else if (queuedNotice) setNotice(queuedNotice);
         // The sidebar hides zero-item repos unless they are the active
         // filter. When the active repo was just emptied, move the filter to
         // the next visible repo (previous when last, "all" when none

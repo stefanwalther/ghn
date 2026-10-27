@@ -438,3 +438,27 @@ describe("the queued push depth", () => {
     expect(body.queueDepth).toBe(1);
   });
 });
+
+describe("mute beats rhythm without flipping done", () => {
+  test("a snoozed immediate repo stays quiet, then returns loud with no done flips", async () => {
+    await db
+      .update(repositories)
+      .set({ rhythm: "immediate", nextDueAt: null, snoozedUntil: NOW + 60 * 60 * 1000 })
+      .where(eq(repositories.id, "acme--web"));
+    const quiet = await load();
+    expect(quiet.mainFlow.some((item) => item.repositoryId === "acme--web")).toBe(false);
+    expect(
+      quiet.collapsedSection.find((g) => g.repositoryId === "acme--web")?.isSnoozed
+    ).toBe(true);
+
+    await db
+      .update(repositories)
+      .set({ snoozedUntil: null })
+      .where(eq(repositories.id, "acme--web"));
+    const loud = await load();
+    expect(loud.mainFlow.some((item) => item.repositoryId === "acme--web")).toBe(true);
+
+    const rows = await db.select().from(notifications);
+    expect(rows.every((row) => row.isDone === 0)).toBe(true);
+  });
+});

@@ -120,13 +120,13 @@
 
 ### Tests for User Story 5 (TDD)
 
-- [ ] T023 [P] [US5] Integration test: mute beats rhythm, rhythm and snooze never flip done state
-- [ ] T024 [P] [US5] Component test: repo-wide done on quiet repo states hidden-pending clearing
+- [X] T023 [P] [US5] Integration test: mute beats rhythm, rhythm and snooze never flip done state
+- [X] T024 [P] [US5] Component test: repo-wide done on quiet repo states hidden-pending clearing
 
 ### Implementation for User Story 5
 
-- [ ] T025 [US5] Implement placement precedence plus repo-wide done copy in app/page.tsx, components/inbox/ and app/api/notifications/route.ts (depends on T023, T024)
-- [ ] T026 [US5] Run gates green
+- [X] T025 [US5] Implement placement precedence plus repo-wide done copy in app/page.tsx, components/inbox/ and app/api/notifications/route.ts (depends on T023, T024)
+- [X] T026 [US5] Run gates green
 
 **Checkpoint**: US1 through US5 all work independently
 

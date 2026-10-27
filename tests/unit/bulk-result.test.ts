@@ -77,3 +77,36 @@ describe("queuedBannerText", () => {
     );
   });
 });
+
+describe("describeRepoDoneResult", () => {
+  test("falls back to the bulk wording when nothing was hidden", async () => {
+    const { describeRepoDoneResult } = await import("@/lib/bulk");
+    expect(
+      describeRepoDoneResult("acme/api", { updated: 2, queued: 0, hiddenPending: 0 })
+    ).toBeNull();
+  });
+
+  test("states the hidden pending items that were cleared", async () => {
+    const { describeRepoDoneResult } = await import("@/lib/bulk");
+    expect(
+      describeRepoDoneResult("acme/api", { updated: 2, queued: 0, hiddenPending: 2 })
+    ).toBe("acme/api marked done, including 2 hidden pending items.");
+    expect(
+      describeRepoDoneResult("acme/api", { updated: 1, queued: 0, hiddenPending: 1 })
+    ).toBe("acme/api marked done, including 1 hidden pending item.");
+  });
+
+  test("appends the queued remainder when part of the push failed", async () => {
+    const { describeRepoDoneResult } = await import("@/lib/bulk");
+    expect(
+      describeRepoDoneResult("acme/api", {
+        updated: 1,
+        queued: 1,
+        error: "network",
+        hiddenPending: 2,
+      })
+    ).toBe(
+      "acme/api marked done, including 2 hidden pending items. 1 queued for retry (GitHub unreachable)."
+    );
+  });
+});
