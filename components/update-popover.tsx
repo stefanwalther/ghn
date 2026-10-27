@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/clipboard";
@@ -51,7 +52,12 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
     }, 1500);
   }
 
-  return (
+  // Portaled to document.body: this popover renders inside the sticky app
+  // sidebar, whose stacking context traps the fixed backdrop below
+  // sibling main-column content (filter rows painted over the dialog).
+  // The row menus use the same escape hatch. Mounting only happens on
+  // client interaction, so document is always defined here.
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-background/80" data-testid="update-backdrop" onClick={onClose}>
       <div
         ref={dialogRef}
@@ -111,6 +117,7 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
