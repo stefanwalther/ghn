@@ -539,6 +539,7 @@ export function useSyncFlow(filters: InboxFilters) {
 export interface RepositoryPatch {
   rhythm?: string;
   snoozedUntil?: number | null;
+  pinned?: boolean;
 }
 
 /**

@@ -36,6 +36,7 @@ interface RepoView {
   snoozedUntil: number | null;
   isSnoozed: boolean;
   snoozeLabel: string;
+  pinned: boolean;
 }
 
 async function list(): Promise<RepoView[]> {
@@ -275,5 +276,32 @@ describe("PATCH /api/repositories/[id]", () => {
     const { status, body } = await patch("nope--nope", { rhythm: "weekly" });
     expect(status).toBe(404);
     expect(body.error).toBe("unknown repository");
+  });
+});
+
+describe("PATCH /api/repositories/[id] pin", () => {
+  test("repositories start unpinned in the list shape", async () => {
+    const views = await list();
+    for (const repo of views) {
+      expect(repo.pinned).toBe(false);
+    }
+  });
+
+  test("pinning flips the flag in the response and the database", async () => {
+    const { status, body } = await patch("acme--web", { pinned: true });
+    expect(status).toBe(200);
+    expect(body.pinned).toBe(true);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.pinned).toBe(1);
+    const views = await list();
+    expect(repoView(views, "acme--web").pinned).toBe(true);
+  });
+
+  test("a non-boolean pin is refused", async () => {
+    const { status } = await patch("acme--web", { pinned: "yes" });
+    expect(status).toBe(400);
   });
 });

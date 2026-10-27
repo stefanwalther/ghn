@@ -29,6 +29,15 @@ export default function ReposPage() {
     return repos.filter((r) => r.fullName.toLowerCase().includes(q));
   }, [repos, query]);
 
+  const pinnedVisible = React.useMemo(
+    () => visible.filter((r) => r.pinned),
+    [visible]
+  );
+  const unpinnedVisible = React.useMemo(
+    () => visible.filter((r) => !r.pinned),
+    [visible]
+  );
+
   async function setRhythm(id: string, rhythm: string) {
     setNotice(null);
     try {
@@ -44,6 +53,15 @@ export default function ReposPage() {
       await updateRepo.mutateAsync({ id, patch: { snoozedUntil } });
     } catch {
       setNotice("Snooze update failed. Previous setting restored.");
+    }
+  }
+
+  async function setPinned(id: string, pinned: boolean) {
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { pinned } });
+    } catch {
+      setNotice("Pin change failed. Previous setting restored.");
     }
   }
 
@@ -100,9 +118,34 @@ export default function ReposPage() {
           </Button>
         </div>
       ) : null}
+      {status === "ready" && pinnedVisible.length > 0 ? (
+        <section aria-label="Pinned repositories" className="flex flex-col gap-4">
+          <h2 className="text-sm font-semibold">Pinned Repositories</h2>
+          {pinnedVisible.map((repo) => (
+            <RepoRow
+              key={repo.id}
+              repo={repo}
+              onRhythm={setRhythm}
+              onSnooze={setSnooze}
+              onPin={setPinned}
+              busy={busy}
+            />
+          ))}
+        </section>
+      ) : null}
+      {status === "ready" && pinnedVisible.length > 0 ? (
+        <h2 className="text-sm font-semibold">Repositories</h2>
+      ) : null}
       {status === "ready"
-        ? visible.map((repo) => (
-      <RepoRow key={repo.id} repo={repo} onRhythm={setRhythm} onSnooze={setSnooze} busy={busy} />
+        ? unpinnedVisible.map((repo) => (
+      <RepoRow
+        key={repo.id}
+        repo={repo}
+        onRhythm={setRhythm}
+        onSnooze={setSnooze}
+        onPin={setPinned}
+        busy={busy}
+      />
           ))
         : null}
     </div>

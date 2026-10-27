@@ -18,10 +18,17 @@ export async function PATCH(
   const body = await request.json().catch(() => null);
   const rhythm: unknown = body?.rhythm;
   const snoozedUntil: unknown = body?.snoozedUntil;
+  const pinned: unknown = body?.pinned;
   const now = nowMs();
   if (rhythm !== undefined && (typeof rhythm !== "string" || !(RHYTHMS as string[]).includes(rhythm))) {
     return NextResponse.json(
       { error: "`rhythm` must be `immediate`, `weekly`, `biweekly`, or `monthly`" },
+      { status: 400 }
+    );
+  }
+  if (typeof pinned !== "undefined" && typeof pinned !== "boolean") {
+    return NextResponse.json(
+      { error: "`pinned` must be a boolean" },
       { status: 400 }
     );
   }
@@ -35,7 +42,7 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  if (rhythm === undefined && snoozedUntil === undefined) {
+  if (rhythm === undefined && snoozedUntil === undefined && pinned === undefined) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
   const rows = await db.select().from(repositories).where(eq(repositories.id, id));
@@ -53,6 +60,7 @@ export async function PATCH(
     rhythmChanged && nextRhythm === "immediate" ? now : repo.lastPromotedAt;
   const nextSnoozedUntil =
     snoozedUntil === undefined ? repo.snoozedUntil : (snoozedUntil as number | null);
+  const nextPinned = pinned === undefined ? repo.pinned : (pinned ? 1 : 0);
 
   await db
     .update(repositories)
@@ -61,6 +69,7 @@ export async function PATCH(
       nextDueAt,
       lastPromotedAt,
       snoozedUntil: nextSnoozedUntil,
+      pinned: nextPinned,
     })
     .where(eq(repositories.id, id));
 
@@ -75,5 +84,6 @@ export async function PATCH(
     snoozedUntil: nextSnoozedUntil,
     isSnoozed: isSnoozed(nextSnoozedUntil, now),
     snoozeLabel: formatSnoozeUntil(nextSnoozedUntil, now),
+    pinned: nextPinned === 1,
   });
 }

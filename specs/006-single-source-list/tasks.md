@@ -140,15 +140,15 @@
 
 ### Tests for User Story 6 (TDD)
 
-- [ ] T027 [P] [US6] Integration test: pin column migration, PATCH pin validation, GET shape in tests/integration/
-- [ ] T028 [P] [US6] Component test: pinned section above, search filters both, empty hidden, counts unchanged
+- [X] T027 [P] [US6] Integration test: pin column migration, PATCH pin validation, GET shape in tests/integration/
+- [X] T028 [P] [US6] Component test: pinned section above, search filters both, empty hidden, counts unchanged
 
 ### Implementation for User Story 6
 
-- [ ] T029 [US6] Implement pin column in db/schema.ts plus db/ensure-schema.ts migration (depends on T027)
-- [ ] T030 [US6] Implement GET shape plus PATCH pin in app/api/repositories/route.ts plus app/api/repositories/[id]/route.ts (depends on T027)
-- [ ] T031 [US6] Implement toggle in components/repos/repo-row.tsx, grouping in app/repos/page.tsx, patch shape in lib/queries.ts (depends on T028)
-- [ ] T032 [US6] Run gates green
+- [X] T029 [US6] Implement pin column in db/schema.ts plus db/ensure-schema.ts migration (depends on T027)
+- [X] T030 [US6] Implement GET shape plus PATCH pin in app/api/repositories/route.ts plus app/api/repositories/[id]/route.ts (depends on T027)
+- [X] T031 [US6] Implement toggle in components/repos/repo-row.tsx, grouping in app/repos/page.tsx, patch shape in lib/queries.ts (depends on T028)
+- [X] T032 [US6] Run gates green
 
 **Checkpoint**: All user stories independently functional
 
