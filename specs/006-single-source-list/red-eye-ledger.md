@@ -49,3 +49,9 @@
 - T033 quickstart mapping: throttled triage plus mid-triage refresh (component pre-commit tests), failure restore (existing bulk failure tests), all-view mark-in-place (component), offline plus revive plus full sync (integration P2 tests), placement (integration mute-beats-rhythm), pin (component grouping plus integration contract). All green.
 - T034 drift check: item-lifecycle P1-P3 plus G1-G7 all match implementation. queuedBannerText wording distinct from busy copy. Pin touches pinned only. No doc changes needed.
 - T035 gates final: typecheck, lint, unit 559, component 207, integration 205. Coverage 86.15% vs baseline 86.09%, ratchet pass.
+
+## Finalize
+
+- No transient files in spec dir (only core artifacts plus ledger, all preserved).
+- Workspace docs untouched deliberately: CHANGELOG is release-please owned, README has no milestone section and onboarding must stay untouched. No backups needed, nothing edited.
+- Validate verdict: READY TO MERGE (35/35 tasks, gates green, coverage ratchet pass, no debug code, no TODOs).
