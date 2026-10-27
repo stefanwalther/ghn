@@ -287,12 +287,21 @@ export function useMarkRepoDone(filters: InboxFilters) {
       await client.cancelQueries({ queryKey: key });
       const previous = client.getQueryData<NotificationsResponse>(key);
       if (!previous) return { previous };
-      const removed = previous.mainFlow.filter(
-        (item) => item.repositoryId === vars.repositoryId
-      );
-      const nextMainFlow = previous.mainFlow.filter(
-        (item) => item.repositoryId !== vars.repositoryId
-      );
+      // Done rows stay put in the done view and are marked in place in the
+      // all view, matching the confirmed server state. Only the unread view
+      // removes rows.
+      const leavesView = filters.state !== "done" && filters.state !== "all";
+      const removed = leavesView
+        ? previous.mainFlow.filter((item) => item.repositoryId === vars.repositoryId)
+        : [];
+      const nextMainFlow =
+        filters.state === "done"
+          ? previous.mainFlow
+          : filters.state === "all"
+            ? previous.mainFlow.map((item) =>
+                item.repositoryId === vars.repositoryId ? { ...item, isDone: 1 } : item
+              )
+            : previous.mainFlow.filter((item) => item.repositoryId !== vars.repositoryId);
       const nextTypes = previous.facets.types.map((facet) => {
         if (facet.value === "all") {
           return { ...facet, count: Math.max(0, facet.count - removed.length) };
@@ -306,11 +315,13 @@ export function useMarkRepoDone(filters: InboxFilters) {
         return { ...facet, count: Math.max(0, facet.count - dec) };
       });
       const nextRepos = previous.facets.repos.map((repo) =>
-        repo.id === vars.repositoryId ? { ...repo, main: 0, quiet: 0 } : repo
+        repo.id === vars.repositoryId && leavesView ? { ...repo, main: 0, quiet: 0 } : repo
       );
-      const nextCollapsed = (previous.collapsedSection ?? []).filter(
-        (group) => group.repositoryId !== vars.repositoryId
-      );
+      const nextCollapsed = leavesView
+        ? (previous.collapsedSection ?? []).filter(
+            (group) => group.repositoryId !== vars.repositoryId
+          )
+        : (previous.collapsedSection ?? []);
       const next: NotificationsResponse = {
         ...previous,
         mainFlow: nextMainFlow,

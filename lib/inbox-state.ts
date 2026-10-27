@@ -113,6 +113,51 @@ export function applyOptimisticList<T extends ActionableItem>(
 }
 
 /**
+ * A triage intent that has been sent but not yet confirmed.
+ *
+ * Repo-wide actions name the repository because the server resolves the
+ * ids, including quiet rows the client never sees.
+ */
+export interface PendingIntent {
+  action: BulkAction;
+  ids: string[];
+  state: string;
+  repositoryId?: string;
+}
+
+export interface RepoItem extends ActionableItem {
+  repositoryId: string;
+}
+
+/**
+ * The displayed list: pending intents folded over the last trusted server
+ * snapshot. Server data that arrives while intents are pending never
+ * touches the snapshot, so a pre-commit refetch cannot restore rows that
+ * optimistic triage just removed.
+ */
+export function applyPendingIntents<T extends RepoItem>(
+  base: T[],
+  intents: PendingIntent[]
+): T[] {
+  return intents.reduce((list, intent) => {
+    const next = applyOptimisticList(list, intent.ids, intent.action, intent.state);
+    if (intent.repositoryId === undefined) return next;
+    if (intent.action === "done" || intent.action === "unsubscribe") {
+      if (intent.state === "done") return next;
+      if (intent.state === "all") {
+        return next.map((item) =>
+          item.repositoryId === intent.repositoryId ? { ...item, isDone: 1 } : item
+        );
+      }
+      return next.filter((item) => item.repositoryId !== intent.repositoryId);
+    }
+    return next.map((item) =>
+      item.repositoryId === intent.repositoryId ? { ...item, isRead: 1 } : item
+    );
+  }, base);
+}
+
+/**
  * The index the keyboard focus moves to.
  *
  * With nothing focused, moving down lands on the first row and moving up

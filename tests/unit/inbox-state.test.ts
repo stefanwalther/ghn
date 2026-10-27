@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   applyLocalAction,
   applyOptimisticList,
+  applyPendingIntents,
   nextFocusIndex,
   nextRepoAfterMarkDone,
   nextSelection,
@@ -247,5 +248,55 @@ describe("next repo after mark done", () => {
       { id: "c", main: 0, quiet: 0 },
     ];
     expect(nextRepoAfterMarkDone(mixed, "b", "b")).toBe("all");
+  });
+});
+
+describe("pending display intents", () => {
+  interface RepoRow {
+    id: string;
+    repositoryId: string;
+    isRead: number;
+    isDone: number;
+  }
+
+  const base: RepoRow[] = [
+    { id: "a", repositoryId: "web", isRead: 0, isDone: 0 },
+    { id: "b", repositoryId: "api", isRead: 0, isDone: 0 },
+  ];
+
+  test("no intents returns the base untouched", () => {
+    expect(applyPendingIntents(base, [])).toEqual(base);
+  });
+
+  test("id intents fold in order", () => {
+    const next = applyPendingIntents(base, [
+      { action: "done", ids: ["a"], state: "unread" },
+      { action: "read", ids: ["b"], state: "unread" },
+    ]);
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+    expect(next[0]?.isRead).toBe(1);
+  });
+
+  test("repo done drops the whole repo in the unread view", () => {
+    const next = applyPendingIntents(base, [
+      { action: "done", ids: ["a"], state: "unread", repositoryId: "web" },
+    ]);
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  test("repo done marks in place in the all view", () => {
+    const next = applyPendingIntents(base, [
+      { action: "done", ids: [], state: "all", repositoryId: "web" },
+    ]);
+    expect(next.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(next[0]?.isDone).toBe(1);
+  });
+
+  test("repo read marks the whole repo without removing", () => {
+    const next = applyPendingIntents(base, [
+      { action: "read", ids: [], state: "unread", repositoryId: "api" },
+    ]);
+    expect(next.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(next[1]?.isRead).toBe(1);
   });
 });

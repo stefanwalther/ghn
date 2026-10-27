@@ -12,8 +12,8 @@
 
 **Purpose**: Baseline confirmed before any story work
 
-- [ ] T001 Confirm baseline gates green: typecheck, lint, unit, integration, component
-- [ ] T002 [P] Confirm spec artifacts present in specs/006-single-source-list (spec, plan, research, data-model, contracts, quickstart)
+- [X] T001 Confirm baseline gates green: typecheck, lint, unit, integration, component
+- [X] T002 [P] Confirm spec artifacts present in specs/006-single-source-list (spec, plan, research, data-model, contracts, quickstart)
 
 ---
 
@@ -23,8 +23,8 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Audit existing anchors against stories: revive unit test in tests/unit/sync.test.ts, all-view tests in tests/unit/inbox-state.test.ts plus tests/component/inbox-page.test.tsx, P2 guard in lib/sync.ts
-- [ ] T004 [P] Record parallel file map in specs/006-single-source-list/red-eye-ledger.md so parallel tasks never share files
+- [X] T003 Audit existing anchors against stories: revive unit test in tests/unit/sync.test.ts, all-view tests in tests/unit/inbox-state.test.ts plus tests/component/inbox-page.test.tsx, P2 guard in lib/sync.ts
+- [X] T004 [P] Record parallel file map in specs/006-single-source-list/red-eye-ledger.md so parallel tasks never share files
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -38,15 +38,15 @@
 
 ### Tests for User Story 1 (TDD: write FIRST, confirm FAIL, then implement)
 
-- [ ] T005 [P] [US1] Component test in tests/component/inbox-page.test.tsx: pre-commit refetch resolving while bulk is pending keeps removed rows absent
-- [ ] T006 [P] [US1] Component test in tests/component/inbox-page.test.tsx: mid-triage manual refresh with pre-commit response keeps removed rows absent
+- [X] T005 [P] [US1] Component test in tests/component/inbox-page.test.tsx: pre-commit refetch resolving while bulk is pending keeps removed rows absent
+- [X] T006 [P] [US1] Component test in tests/component/inbox-page.test.tsx: mid-triage manual refresh with pre-commit response keeps removed rows absent
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Remove local items working copy in app/page.tsx, derive list, selection, focus, drawer and rollback from the shared cache (depends on T005, T006)
-- [ ] T008 [US1] Hold previous cache data while a bulk mutation is pending in lib/queries.ts so pre-commit responses cannot overwrite optimistic rows (depends on T005, T006)
-- [ ] T009 [US1] Remove the extra refetch after repo-wide done in app/page.tsx, keep onSettled invalidate as the single confirm path
-- [ ] T010 [US1] Run gates green: typecheck, lint, unit, integration, component
+- [X] T007 [US1] Remove local items working copy in app/page.tsx, derive list, selection, focus, drawer and rollback from the shared cache (depends on T005, T006)
+- [X] T008 [US1] Hold previous cache data while a bulk mutation is pending in lib/queries.ts so pre-commit responses cannot overwrite optimistic rows (depends on T005, T006)
+- [X] T009 [US1] Remove the extra refetch after repo-wide done in app/page.tsx, keep onSettled invalidate as the single confirm path
+- [X] T010 [US1] Run gates green: typecheck, lint, unit, integration, component
 
 **Checkpoint**: US1 fully functional and independently testable
 
@@ -60,12 +60,12 @@
 
 ### Tests for User Story 2 (anchors exist, verify plus extend)
 
-- [ ] T011 [P] [US2] Verify all-view mark-in-place tests green in tests/unit/inbox-state.test.ts plus tests/component/inbox-page.test.tsx
-- [ ] T012 [P] [US2] Component test in tests/component/inbox-page.test.tsx: all-view done rows show done state while bulk is pending
+- [X] T011 [P] [US2] Verify all-view mark-in-place tests green in tests/unit/inbox-state.test.ts plus tests/component/inbox-page.test.tsx
+- [X] T012 [P] [US2] Component test in tests/component/inbox-page.test.tsx: all-view done rows show done state while bulk is pending
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Confirm optimistic helper covers unsubscribe in all view in lib/inbox-state.ts, run gates green
+- [X] T013 [US2] Confirm optimistic helper covers unsubscribe in all view in lib/inbox-state.ts, run gates green
 
 **Checkpoint**: US1 AND US2 both work independently
 

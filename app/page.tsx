@@ -24,15 +24,17 @@ import {
   useSyncFlow,
   useThreadSync,
   useUpdateRepository,
+  type NotificationsResponse,
 } from "@/lib/queries";
 import { useUIStore } from "@/lib/ui-store";
 import { selectByQuickFilter } from "@/lib/filters";
 import {
-  applyOptimisticList,
+  applyPendingIntents,
   nextFocusIndex,
   nextRepoAfterMarkDone,
   nextSelection,
   toggleAllSelection,
+  type PendingIntent,
 } from "@/lib/inbox-state";
 import {
   parseInboxFilters,
@@ -47,6 +49,8 @@ import {
   saveFilterWidth,
   type InboxFilters as Filters,
 } from "@/lib/view-state";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 // Runs before paint on the client (no-op on the server) so the stored
 // width is applied before anything is shown.
@@ -56,7 +60,13 @@ const useIsomorphicLayoutEffect =
 function InboxView() {
   const router = useRouter();  const searchParams = useSearchParams();
   const filters = parseInboxFilters(searchParams);
-  const [items, setItems] = React.useState<InboxItem[]>([]);
+  const client = useQueryClient();
+  const notifKey = queryKeys.notifications(filters);
+  // Sent triage intents not yet confirmed. The displayed list folds these
+  // over the last trusted server snapshot, so pre-commit refetches can
+  // never restore rows that optimistic triage just removed.
+  const pendingRef = React.useRef<PendingIntent[]>([]);
+  const baseRef = React.useRef<InboxItem[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
@@ -151,12 +161,13 @@ function InboxView() {
         ? "error"
         : "ready";
 
-  // The list is a local working copy of the cached server snapshot so the
-  // existing optimistic triage below keeps working. Background refetches
-  // replace it with the confirmed server state.
-  React.useEffect(() => {
-    if (serverList.length > 0 || notifQuery.data) setItems(serverList);
-  }, [serverList, notifQuery.data]);
+  // The displayed list folds sent-but-unconfirmed triage intents over the
+  // last trusted server snapshot. Server data only becomes the snapshot
+  // when no intent is pending, so a pre-commit refetch can never restore
+  // rows that optimistic triage just removed. Facets and sidebar counts
+  // come from the shared cache, which applies the same optimistic math.
+  if (pendingRef.current.length === 0) baseRef.current = serverList;
+  const items = applyPendingIntents(baseRef.current, pendingRef.current);
 
   React.useEffect(() => {
     if (notifQuery.isError && notifQuery.data) {
@@ -267,7 +278,13 @@ function InboxView() {
     try {
       const result = await syncThread(id);
       if (result.gone === true) {
-        setItems((prev) => prev.filter((i) => i.id !== id));
+        // Confirmed server truth, safe to drop from the snapshot and cache.
+        baseRef.current = baseRef.current.filter((i) => i.id !== id);
+        client.setQueryData<NotificationsResponse>(notifKey, (old) =>
+          old
+            ? { ...old, mainFlow: old.mainFlow.filter((row) => row.id !== id) }
+            : old
+        );
         setDrawerItem((prev) => (prev?.id === id ? null : prev));
         setNotice("Thread is gone on GitHub; marked done.");
       }
@@ -285,11 +302,13 @@ function InboxView() {
     }
     setNotice(null);
     const targetSet = new Set(targets);
-    const prevItems = items;
     if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
       setDrawerItem(null);
     }
-    setItems((prev) => applyOptimisticList(prev, targets, action, filters.state));
+    // The displayed list folds this intent over the trusted snapshot until
+    // the mutation confirms or fails. Rollback lives in the mutation cache.
+    const intent: PendingIntent = { action, ids: targets, state: filters.state };
+    pendingRef.current = [...pendingRef.current, intent];
     setSelected(new Set());
     try {
       const body = await bulkMutation.mutateAsync({ action, ids: targets });
@@ -305,8 +324,9 @@ function InboxView() {
       });
       if (queuedNotice) setNotice(queuedNotice);
     } catch {
-      setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
+    } finally {
+      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
     }
   }
 
@@ -339,13 +359,18 @@ function InboxView() {
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
       collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
       repositoryId;
-    const prevItems = items;
     const prevDrawer = drawerItem;
     const targets = items.filter((i) => i.repositoryId === repositoryId);
     if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
       setDrawerItem(null);
     }
-    setItems((prev) => prev.filter((i) => i.repositoryId !== repositoryId));
+    const intent: PendingIntent = {
+      action: "done",
+      ids: targets.map((t) => t.id),
+      state: filters.state,
+      repositoryId,
+    };
+    pendingRef.current = [...pendingRef.current, intent];
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const next = new Set(prev);
@@ -384,13 +409,13 @@ function InboxView() {
           }
         }
       }
-      await notifQuery.refetch();
     } catch {
-      setItems(prevItems);
       if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
         setDrawerItem(prevDrawer);
       }
       setNotice("Mark all as done failed. Restored previous state.");
+    } finally {
+      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
     }
   }
 
@@ -404,14 +429,14 @@ function InboxView() {
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
       collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
       repositoryId;
-    const prevItems = items;
-    setItems((prev) =>
-      prev.map((i) =>
-        i.repositoryId === repositoryId
-          ? { ...i, isRead: 1, localUnread: false as const }
-          : i
-      )
-    );
+    const targets = items.filter((i) => i.repositoryId === repositoryId);
+    const intent: PendingIntent = {
+      action: "read",
+      ids: targets.map((t) => t.id),
+      state: filters.state,
+      repositoryId,
+    };
+    pendingRef.current = [...pendingRef.current, intent];
     try {
       const body = await markRepoReadMutation.mutateAsync({ repositoryId });
       const updated = typeof body?.updated === "number" ? body.updated : 0;
@@ -426,10 +451,10 @@ function InboxView() {
         });
         if (queuedNotice) setNotice(queuedNotice);
       }
-      await notifQuery.refetch();
     } catch {
-      setItems(prevItems);
       setNotice("Mark all as read failed. Restored previous state.");
+    } finally {
+      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
     }
   }
 
