@@ -55,3 +55,9 @@
 - No transient files in spec dir (only core artifacts plus ledger, all preserved).
 - Workspace docs untouched deliberately: CHANGELOG is release-please owned, README has no milestone section and onboarding must stay untouched. No backups needed, nothing edited.
 - Validate verdict: READY TO MERGE (35/35 tasks, gates green, coverage ratchet pass, no debug code, no TODOs).
+
+## Close-out
+
+- PR #115 opened: t3/red-eye-006-single-source-list into t3/clarify-item-state-worktrees.
+- Deviation logged: day branch had never been pushed, so the base ref did not exist on the remote. Pushed t3/clarify-item-state-worktrees first, then opened the PR. One extra push beyond the single-push contract, unavoidable for a stacked PR.
+- Morning report written beside the artifact (Dropbox html-artifacts), original untouched. Caffeinate stopped. Run end ~03:00 CET, inside the 6h cap with the full reserve intact.
