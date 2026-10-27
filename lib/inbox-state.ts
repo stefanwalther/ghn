@@ -78,8 +78,10 @@ export function applyLocalAction<T extends ActionableItem>(
  * and the query cache so both stay in sync.
  *
  * Mirrors applyLocalAction for the default unread view. Diverges only where
- * the filter demands it: marking done while viewing done is a no-op, and
- * marking unread while viewing done removes the restored rows.
+ * the filter demands it: marking done while viewing done is a no-op,
+ * marking unread while viewing done removes the restored rows, and marking
+ * done while viewing all marks the rows in place because the confirmed
+ * server state keeps done rows in that view.
  */
 export function applyOptimisticList<T extends ActionableItem>(
   items: T[],
@@ -90,6 +92,11 @@ export function applyOptimisticList<T extends ActionableItem>(
   const targetSet = new Set(ids);
   if (action === "done" || action === "unsubscribe") {
     if (state === "done") return items;
+    if (state === "all") {
+      return items.map((item) =>
+        targetSet.has(item.id) ? { ...item, isDone: 1 } : item
+      );
+    }
     return items.filter((item) => !targetSet.has(item.id));
   }
   if (action === "read") {

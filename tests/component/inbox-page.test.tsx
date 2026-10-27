@@ -447,6 +447,44 @@ describe("inbox screen", () => {
     ).toBeInTheDocument();
   });
 
+  test("in the all view, bulk done marks rows in place instead of removing them", async () => {
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    const gatedFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", gatedFetch);
+    nav.params = new URLSearchParams("state=all");
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // The bulk request is still gated and the all view keeps done rows, so
+    // both subjects must stay visible instead of flashing out and back.
+    expect(await screen.findByText("Fix flaky login redirect")).toBeInTheDocument();
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+
+    resolveBulk(Response.json({ updated: 2, action: "done" }));
+    await waitFor(() => {
+      expect(gatedFetch.mock.calls.filter(([input]) => String(input) === "/api/notifications/bulk")).toHaveLength(1);
+    });
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+  });
+
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);

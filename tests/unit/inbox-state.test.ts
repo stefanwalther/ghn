@@ -114,11 +114,16 @@ describe("state-aware optimistic list", () => {
     expect(applyOptimisticList(rows, ["a"], "done", "done")).toEqual(rows);
   });
 
-  test("done in the all view removes the rows", () => {
-    expect(applyOptimisticList(rows, ["b"], "done", "all").map((r) => r.id)).toEqual([
-      "a",
-      "c",
-    ]);
+  test("done in the all view marks the rows in place", () => {
+    const next = applyOptimisticList(rows, ["b"], "done", "all");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[1]?.isDone).toBe(1);
+  });
+
+  test("unsubscribe in the all view marks the rows in place", () => {
+    const next = applyOptimisticList(rows, ["a"], "unsubscribe", "all");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[0]?.isDone).toBe(1);
   });
 
   test("read marks the rows as read and keeps them", () => {
