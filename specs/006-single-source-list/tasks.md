@@ -79,13 +79,13 @@
 
 ### Tests for User Story 3
 
-- [ ] T014 [P] [US3] Verify revive-survives-full-sync unit test green in tests/unit/sync.test.ts
-- [ ] T015 [P] [US3] Integration test in tests/integration/: offline done with queued drain keeps rows hidden across sync
-- [ ] T016 [P] [US3] Integration test in tests/integration/: missing thread on full sync becomes done, clean read follows remote
+- [X] T014 [P] [US3] Verify revive-survives-full-sync unit test green in tests/unit/sync.test.ts
+- [X] T015 [P] [US3] Integration test in tests/integration/: offline done with queued drain keeps rows hidden across sync
+- [X] T016 [P] [US3] Integration test in tests/integration/: missing thread on full sync becomes done, clean read follows remote
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Confirm precedence paths in lib/sync.ts plus app/api/sync/route.ts honor queued ids and localUnread, run gates green (depends on T015, T016)
+- [X] T017 [US3] Confirm precedence paths in lib/sync.ts plus app/api/sync/route.ts honor queued ids and localUnread, run gates green (depends on T015, T016)
 
 **Checkpoint**: US1, US2 AND US3 all work independently
 
