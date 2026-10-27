@@ -41,3 +41,4 @@
 - Plan: setup-plan.sh needed bash (sh fails on process substitution), plan.md plus research.md, data-model.md, contracts/behavior.md, quickstart.md written.
 - Tasks: 35 tasks T001-T035, phases 1-9, MVP backbone US1 plus US2.
 - US1+US2 committed as 28d3d64 (single-source list, intent fold, repo-done view fixes, regression tests). Gates at commit: typecheck, lint, unit 554, component 199, integration 197. T001-T013 ticked.
+- US5 committed (mute precedence lock, repo-done hidden notice). Gates: typecheck, lint, unit 559, component 202, integration 202. T023-T026 ticked (26/35).
