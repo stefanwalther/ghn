@@ -62,15 +62,28 @@ export async function PATCH(
     snoozedUntil === undefined ? repo.snoozedUntil : (snoozedUntil as number | null);
   const nextPinned = pinned === undefined ? repo.pinned : (pinned ? 1 : 0);
 
+  // Write only the supplied fields (plus rhythm's dependent due-date
+  // fields) so concurrent PATCHes cannot undo each other.
+  const update: {
+    rhythm?: Rhythm;
+    nextDueAt?: number | null;
+    lastPromotedAt?: number | null;
+    snoozedUntil?: number | null;
+    pinned?: number;
+  } = {};
+  if (rhythm !== undefined) update.rhythm = rhythm as Rhythm;
+  if (rhythmChanged) {
+    update.nextDueAt = nextDueAt;
+    if (nextRhythm === "immediate") update.lastPromotedAt = now;
+  }
+  if (snoozedUntil !== undefined) {
+    update.snoozedUntil = snoozedUntil as number | null;
+  }
+  if (pinned !== undefined) update.pinned = pinned ? 1 : 0;
+
   await db
     .update(repositories)
-    .set({
-      rhythm: nextRhythm,
-      nextDueAt,
-      lastPromotedAt,
-      snoozedUntil: nextSnoozedUntil,
-      pinned: nextPinned,
-    })
+    .set(update)
     .where(eq(repositories.id, id));
 
   return NextResponse.json({

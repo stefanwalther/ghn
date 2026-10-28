@@ -300,8 +300,21 @@ describe("PATCH /api/repositories/[id] pin", () => {
     expect(repoView(views, "acme--web").pinned).toBe(true);
   });
 
-  test("a non-boolean pin is refused", async () => {
-    const { status } = await patch("acme--web", { pinned: "yes" });
-    expect(status).toBe(400);
+  test("a pin-only patch leaves rhythm and due dates untouched", async () => {
+    await patch("acme--web", { rhythm: "weekly" });
+    const before = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    const { status } = await patch("acme--web", { pinned: true });
+    expect(status).toBe(200);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.rhythm).toBe("weekly");
+    expect(rows[0]?.nextDueAt).toBe(before[0]?.nextDueAt);
+    expect(rows[0]?.snoozedUntil).toBe(before[0]?.snoozedUntil);
+    expect(rows[0]?.pinned).toBe(1);
   });
 });
