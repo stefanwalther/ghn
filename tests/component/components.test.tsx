@@ -1566,6 +1566,33 @@ describe("repositories screen", () => {
       expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ pinned: true });
     });
   });
+
+  test("pinning moves focus to the unpin button", async () => {
+    let pinned = false;
+    const statefulFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url.includes("/api/repositories/")) {
+        pinned = (JSON.parse(String(init.body)) as { pinned?: boolean }).pinned === true;
+        return Response.json({ ok: true });
+      }
+      return Response.json({
+        repositories: payload.repositories.map((r) =>
+          r.id === "acme--web" ? { ...r, pinned } : r
+        ),
+      });
+    });
+    vi.stubGlobal("fetch", statefulFetch);
+    renderWithQuery(<ReposPage />);
+    await screen.findByText("acme/web");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin acme/web" }));
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Unpin acme/web" })
+      );
+    });
+  });
 });
 
 describe("rate limits screen", () => {
@@ -1638,3 +1665,4 @@ describe("rate limits screen", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 });
+

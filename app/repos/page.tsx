@@ -22,6 +22,32 @@ export default function ReposPage() {
       ? "error"
       : "ready";
   const busy = updateRepo.isPending;
+  // Remembers the repo a keyboard user just pinned or unpinned so focus
+  // can follow its button to the other list. Only fires while focus is
+  // lost (the old button unmounted); if the user moved on, it stands down.
+  const pendingFocusRef = React.useRef<{ fullName: string } | null>(null);
+
+  React.useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (!target) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) {
+      pendingFocusRef.current = null;
+      return;
+    }
+    const match = Array.from(
+      document.querySelectorAll('button[aria-label^="Pin "], button[aria-label^="Unpin "]')
+    ).find(
+      (el) =>
+        el.getAttribute("aria-label") === `Pin ${target.fullName}` ||
+        el.getAttribute("aria-label") === `Unpin ${target.fullName}`
+    );
+    const button = match instanceof HTMLButtonElement ? match : null;
+    if (button && !button.disabled) {
+      pendingFocusRef.current = null;
+      button.focus({ preventScroll: true });
+    }
+  });
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,6 +83,8 @@ export default function ReposPage() {
   }
 
   async function setPinned(id: string, pinned: boolean) {
+    const repoName = repos.find((r) => r.id === id)?.fullName ?? id;
+    pendingFocusRef.current = { fullName: repoName };
     setNotice(null);
     try {
       await updateRepo.mutateAsync({ id, patch: { pinned } });
