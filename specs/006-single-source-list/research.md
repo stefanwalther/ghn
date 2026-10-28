@@ -2,16 +2,16 @@
 
 **Date**: 2026-10-27. All unknowns below were resolved by same-day spikes against the codebase, the test suite and the live GitHub API. No open NEEDS CLARIFICATION remains.
 
-## R1. List source: cache-direct plus pending gate
+## R1. List source: intent fold over a trusted per-view snapshot
 
-- Decision: render the inbox list directly from the shared query cache, delete the local `items` working copy and the blind copy effect, and hold previous cache data while a bulk mutation is pending so a pre-commit refetch cannot overwrite optimistic rows.
-- Rationale: two copies plus a blind overwrite is the divergence class. The cache already holds optimistic updates with snapshot restore and post-settle invalidation, so it is the correct single owner.
-- Alternatives considered: generation-id guard on the working copy (rejected, keeps two sources and its own bookkeeping); keep as-is (rejected, reproduces the reported bug).
+- Decision: delete the local `items` working copy and the blind copy effect. The displayed list folds sent-but-unconfirmed triage intents (`PendingIntent`, each tagged with its view key) over the last trusted server snapshot for the active view. The snapshot refreshes only from settled server data for that view, so a pre-commit refetch can never restore triaged rows, and switching filters never shows another view's rows. Rollback state lives in the mutation cache, never in the displayed list.
+- Rationale: two copies plus a blind overwrite is the divergence class, and a bare shared cache still accepts stale server data while an intent is pending. Intents carry their view so overlapping filters cannot leak rows across views.
+- Alternatives considered: render directly from the cache with a pending-mutation hold (rejected, cache still accepts stale server payloads while pending); generation-id guard on the working copy (rejected, keeps two sources and its own bookkeeping); keep as-is (rejected, reproduces the reported bug).
 
 ## R2. Out-of-order responses
 
-- Decision: rely on the query layer discarding superseded fetches, verified by gated component test with cache inspection.
-- Rationale: a held pre-commit response resolving after a newer fetch started does not touch the cache. The remaining hole was the component copy, removed by R1.
+- Decision: rely on the query layer discarding superseded fetches, plus the view-keyed snapshot gate for the window where the stale fetch is still the latest. Verified by gated component tests that hold the pre-commit response while the mutation is pending.
+- Rationale: a held pre-commit response resolving after a newer fetch started does not touch the cache, but it can still be the newest fetch when no refetch follows it yet. The snapshot only adopts settled data for the active view, so that window stays covered.
 - Alternatives considered: client-side sequence numbers on responses (rejected, duplicates a guarantee the layer already provides).
 
 ## R3. Unread parity impossible

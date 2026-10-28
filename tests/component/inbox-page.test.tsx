@@ -538,6 +538,10 @@ describe("inbox screen", () => {
 
     resolveBulk(Response.json({ updated: 2, action: "done" }));
     await waitFor(() => expect(notifCalls).toBeGreaterThanOrEqual(3));
+    // The confirm refetch is still in flight: intents are held until it
+    // lands, so the stale snapshot cannot flash back in between.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
     resolveFinal(Response.json(emptiedPayload));
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
@@ -594,6 +598,10 @@ describe("inbox screen", () => {
 
     resolveBulk(Response.json({ updated: 2, action: "done" }));
     await waitFor(() => expect(notifCalls).toBeGreaterThanOrEqual(3));
+    // The confirm refetch is still in flight: intents are held until it
+    // lands, so the stale snapshot cannot flash back in between.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
     resolveFinal(Response.json(emptiedPayload));
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();

@@ -410,6 +410,10 @@ describe("dirty local beats sync", () => {
     standIn.setThreads(buildThreads(standIn.url));
     const recovered = await sync({ full: true });
     expect(recovered.queueDepth).toBe(0);
+    const retries = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(retries.map((r) => r.path)).toEqual([
+      "/notifications/threads/live_001",
+    ]);
     const still = await db
       .select()
       .from(notifications)

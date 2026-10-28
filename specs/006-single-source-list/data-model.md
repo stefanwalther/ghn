@@ -6,12 +6,12 @@ No new tables. One additive repositories field. Everything else reuses existing 
 
 - What it is: the one cached copy of the filtered list every inbox view reads from.
 - Fields: rows with id, repository, subject, reason, age, read flag, done flag, local unread flag, source link; placement derived per row (main versus quiet); freshness plus background-refreshing flag; error state with retry.
-- Rules: exactly one owner. Optimistic changes apply first with the previous list held for rollback. Only the latest filter response determines visible rows.
+- Rules: exactly one owner. Sent-but-unconfirmed triage folds over the last trusted server snapshot per view as pending intents; only settled server data becomes the snapshot. Rollback state lives in the mutation cache, never in the displayed list.
 
 ## Optimistic change
 
 - What it is: an immediately applied list change with rollback.
-- Fields: action (done, unsubscribe, read, unread), target ids, previous list snapshot, busy flag until settled, per-row syncing flags.
+- Fields: action (done, unsubscribe, read, unread), target ids, owning view key, busy flag until settled, per-row syncing flags.
 - Rules: done and unsubscribe remove rows in the unread view, keep rows unchanged in the done view, and mark in place in the all view. Unread in the done view removes restored rows. Failure restores the snapshot with a message and re-enables controls.
 
 ## Queued write

@@ -43,8 +43,8 @@
 
 ### Implementation for User Story 1
 
-- [X] T007 [US1] Remove local items working copy in app/page.tsx, derive list, selection, focus, drawer and rollback from the shared cache (depends on T005, T006)
-- [X] T008 [US1] Hold previous cache data while a bulk mutation is pending in lib/queries.ts so pre-commit responses cannot overwrite optimistic rows (depends on T005, T006)
+- [X] T007 [US1] Remove local items working copy in app/page.tsx, derive the displayed list by folding pending view-keyed intents over the trusted per-view snapshot (depends on T005, T006)
+- [X] T008 [US1] Refresh the snapshot only from settled server data for the active view in app/page.tsx so pre-commit responses and filter switches cannot restore rows (depends on T005, T006)
 - [X] T009 [US1] Remove the extra refetch after repo-wide done in app/page.tsx, keep onSettled invalidate as the single confirm path
 - [X] T010 [US1] Run gates green: typecheck, lint, unit, integration, component
 
