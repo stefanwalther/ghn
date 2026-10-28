@@ -265,38 +265,82 @@ describe("pending display intents", () => {
   ];
 
   test("no intents returns the base untouched", () => {
-    expect(applyPendingIntents(base, [])).toEqual(base);
+    expect(applyPendingIntents(base, [], "v1")).toEqual(base);
   });
 
   test("id intents fold in order", () => {
     const next = applyPendingIntents(base, [
-      { action: "done", ids: ["a"], state: "unread" },
-      { action: "read", ids: ["b"], state: "unread" },
-    ]);
+      { action: "done", ids: ["a"], state: "unread", viewKey: "v1" },
+      { action: "read", ids: ["b"], state: "unread", viewKey: "v1" },
+    ], "v1");
     expect(next.map((r) => r.id)).toEqual(["b"]);
     expect(next[0]?.isRead).toBe(1);
   });
 
+  test("intents from another view do not apply", () => {
+    const next = applyPendingIntents(
+      base,
+      [{ action: "done", ids: ["a"], state: "unread", viewKey: "other" }],
+      "v1"
+    );
+    expect(next.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+
   test("repo done drops the whole repo in the unread view", () => {
     const next = applyPendingIntents(base, [
-      { action: "done", ids: ["a"], state: "unread", repositoryId: "web" },
-    ]);
+      { action: "done", ids: ["a"], state: "unread", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
     expect(next.map((r) => r.id)).toEqual(["b"]);
   });
 
   test("repo done marks in place in the all view", () => {
     const next = applyPendingIntents(base, [
-      { action: "done", ids: [], state: "all", repositoryId: "web" },
-    ]);
+      { action: "done", ids: [], state: "all", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
     expect(next.map((r) => r.id)).toEqual(["a", "b"]);
     expect(next[0]?.isDone).toBe(1);
   });
 
   test("repo read marks the whole repo without removing", () => {
     const next = applyPendingIntents(base, [
-      { action: "read", ids: [], state: "unread", repositoryId: "api" },
-    ]);
+      { action: "read", ids: [], state: "unread", repositoryId: "api", viewKey: "v1" },
+    ], "v1");
     expect(next.map((r) => r.id)).toEqual(["a", "b"]);
     expect(next[1]?.isRead).toBe(1);
+  });
+});
+
+describe("localUnread clearing on in-place marks", () => {
+  type RevivedRow = {
+    id: string;
+    repositoryId: string;
+    isRead: number;
+    isDone: number;
+    localUnread: boolean;
+  };
+
+  const revived: RevivedRow[] = [
+    { id: "a", repositoryId: "web", isRead: 0, isDone: 0, localUnread: true },
+    { id: "b", repositoryId: "api", isRead: 0, isDone: 0, localUnread: false },
+  ];
+
+  test("all-view done clears the local-only flag", () => {
+    const next = applyOptimisticList(revived, ["a"], "done", "all");
+    expect(next[0]).toMatchObject({ isDone: 1, localUnread: false });
+  });
+
+  test("pending repo done clears the local-only flag in the all view", () => {
+    const next = applyPendingIntents(revived, [
+      { action: "done", ids: [], state: "all", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
+    expect(next[0]).toMatchObject({ isDone: 1, localUnread: false });
+    expect(next[1]).toMatchObject({ isDone: 0, localUnread: false });
+  });
+
+  test("pending repo read clears the local-only flag", () => {
+    const next = applyPendingIntents(revived, [
+      { action: "read", ids: [], state: "unread", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
+    expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
   });
 });

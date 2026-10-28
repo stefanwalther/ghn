@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { renderWithQuery } from "./support/render-with-query";
 import { resetUIStore } from "@/lib/ui-store";
 import InboxPage from "@/app/page";
@@ -674,6 +675,72 @@ describe("inbox screen", () => {
     await waitFor(() => expect(quietFetch.mock.calls.length).toBeGreaterThan(2));
     expect(screen.queryByText("acme/api")).not.toBeInTheDocument();
     expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+  });
+
+  test("a mid-triage filter switch shows the new view, not the old rows", async () => {
+    let bulkResolve: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      bulkResolve = resolve;
+    });
+    let doneCalls = 0;
+    const doneItem = { ...firstItem, isDone: 1 };
+    const doneEmpty = {
+      ...notificationsPayload,
+      mainFlow: [],
+      collapsedSection: [],
+    };
+    const doneFull = {
+      ...notificationsPayload,
+      mainFlow: [doneItem],
+      collapsedSection: [],
+    };
+    const switchingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) {
+        if (url.includes("state=done")) {
+          doneCalls += 1;
+          return Response.json(doneCalls === 1 ? doneEmpty : doneFull);
+        }
+        return Response.json(notificationsPayload);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", switchingFetch);
+
+    const { client, rerender } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+
+    // Switch to the done view while the bulk action is still pending.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(doneCalls).toBeGreaterThanOrEqual(1));
+    expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+    expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+
+    // The confirm refetch lands the finished row in the done view.
+    bulkResolve(Response.json({ updated: 1, action: "done" }));
+    expect(await screen.findByText("Fix flaky login redirect")).toBeInTheDocument();
   });
 
   test("a triage action from the drawer closes the drawer and posts the item", async () => {

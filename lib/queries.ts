@@ -254,8 +254,11 @@ export function useBulkAction(filters: InboxFilters) {
       if (context?.previous) client.setQueryData(key, context.previous);
     },
     onSettled: () => {
-      client.invalidateQueries({ queryKey: key });
+      const notificationsRefresh = client.invalidateQueries({
+        queryKey: ["notifications"],
+      });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
+      return notificationsRefresh;
     },
   });
 }
@@ -300,7 +303,9 @@ export function useMarkRepoDone(filters: InboxFilters) {
           ? previous.mainFlow
           : filters.state === "all"
             ? previous.mainFlow.map((item) =>
-                item.repositoryId === vars.repositoryId ? { ...item, isDone: 1 } : item
+                item.repositoryId === vars.repositoryId
+                  ? { ...item, isDone: 1, localUnread: false }
+                  : item
               )
             : previous.mainFlow.filter((item) => item.repositoryId !== vars.repositoryId);
       const nextTypes = previous.facets.types.map((facet) => {
@@ -336,8 +341,11 @@ export function useMarkRepoDone(filters: InboxFilters) {
       if (context?.previous) client.setQueryData(key, context.previous);
     },
     onSettled: () => {
-      client.invalidateQueries({ queryKey: key });
+      const notificationsRefresh = client.invalidateQueries({
+        queryKey: ["notifications"],
+      });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
+      return notificationsRefresh;
     },
   });
 }
@@ -381,8 +389,11 @@ export function useMarkRepoRead(filters: InboxFilters) {
       if (context?.previous) client.setQueryData(key, context.previous);
     },
     onSettled: () => {
-      client.invalidateQueries({ queryKey: key });
+      const notificationsRefresh = client.invalidateQueries({
+        queryKey: ["notifications"],
+      });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
+      return notificationsRefresh;
     },
   });
 }

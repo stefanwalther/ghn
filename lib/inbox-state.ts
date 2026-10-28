@@ -94,7 +94,7 @@ export function applyOptimisticList<T extends ActionableItem>(
     if (state === "done") return items;
     if (state === "all") {
       return items.map((item) =>
-        targetSet.has(item.id) ? { ...item, isDone: 1 } : item
+        targetSet.has(item.id) ? { ...item, isDone: 1, localUnread: false } : item
       );
     }
     return items.filter((item) => !targetSet.has(item.id));
@@ -123,6 +123,8 @@ export interface PendingIntent {
   ids: string[];
   state: string;
   repositoryId?: string;
+  /** Serialized notifications query key of the view that sent the intent. */
+  viewKey: string;
 }
 
 export interface RepoItem extends ActionableItem {
@@ -137,24 +139,29 @@ export interface RepoItem extends ActionableItem {
  */
 export function applyPendingIntents<T extends RepoItem>(
   base: T[],
-  intents: PendingIntent[]
+  intents: PendingIntent[],
+  viewKey: string
 ): T[] {
-  return intents.reduce((list, intent) => {
-    const next = applyOptimisticList(list, intent.ids, intent.action, intent.state);
-    if (intent.repositoryId === undefined) return next;
-    if (intent.action === "done" || intent.action === "unsubscribe") {
-      if (intent.state === "done") return next;
-      if (intent.state === "all") {
-        return next.map((item) =>
-          item.repositoryId === intent.repositoryId ? { ...item, isDone: 1 } : item
-        );
+  return intents
+    .filter((intent) => intent.viewKey === viewKey)
+    .reduce((list, intent) => {
+      const next = applyOptimisticList(list, intent.ids, intent.action, intent.state);
+      if (intent.repositoryId === undefined) return next;
+      if (intent.action === "done" || intent.action === "unsubscribe") {
+        if (intent.state === "done") return next;
+        if (intent.state === "all") {
+          return next.map((item) =>
+            item.repositoryId === intent.repositoryId
+              ? { ...item, isDone: 1, localUnread: false }
+              : item
+          );
+        }
+        return next.filter((item) => item.repositoryId !== intent.repositoryId);
       }
-      return next.filter((item) => item.repositoryId !== intent.repositoryId);
-    }
-    return next.map((item) =>
-      item.repositoryId === intent.repositoryId ? { ...item, isRead: 1 } : item
-    );
-  }, base);
+      return next.map((item) =>
+        item.repositoryId === intent.repositoryId ? { ...item, isRead: 1, localUnread: false } : item
+      );
+    }, base);
 }
 
 /**

@@ -66,7 +66,6 @@ function InboxView() {
   // over the last trusted server snapshot, so pre-commit refetches can
   // never restore rows that optimistic triage just removed.
   const pendingRef = React.useRef<PendingIntent[]>([]);
-  const baseRef = React.useRef<InboxItem[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
@@ -163,12 +162,39 @@ function InboxView() {
         : "ready";
 
   // The displayed list folds sent-but-unconfirmed triage intents over the
-  // last trusted server snapshot. Server data only becomes the snapshot
-  // when no intent is pending, so a pre-commit refetch can never restore
-  // rows that optimistic triage just removed. Facets and sidebar counts
-  // come from the shared cache, which applies the same optimistic math.
-  if (pendingRef.current.length === 0) baseRef.current = serverList;
-  const items = applyPendingIntents(baseRef.current, pendingRef.current);
+  // last trusted server snapshot for the active view. Intents only apply
+  // to the view that sent them, and the snapshot refreshes on every view
+  // change, so rows from another filter can never appear here. Facets and
+  // sidebar counts come from the shared cache, which applies the same
+  // optimistic math.
+  const viewKey = JSON.stringify(notifKey);
+  const [viewSnapshot, setViewSnapshot] = React.useState<{
+    key: string;
+    base: InboxItem[];
+  } | null>(null);
+  const viewIntents = pendingRef.current.filter((i) => i.viewKey === viewKey);
+  // The snapshot only adopts settled server data: the shared query keeps
+  // showing the previous view's rows while the new view loads, and those
+  // must never become the trusted base. While intents for this view are
+  // pending the base stays frozen so pre-commit refetches cannot restore
+  // triaged rows.
+  const settled = !notifQuery.isFetching;
+  if (
+    !viewSnapshot ||
+    (viewSnapshot.key !== viewKey && settled) ||
+    (viewSnapshot.key === viewKey &&
+      viewIntents.length === 0 &&
+      settled &&
+      viewSnapshot.base !== serverList)
+  ) {
+    // Adjusting state during render for a changed key or a fresh snapshot
+    // is the sanctioned pattern; it renders the corrected value immediately
+    // instead of flashing one frame of stale rows.
+    setViewSnapshot({ key: viewKey, base: serverList });
+  }
+  const snapshot =
+    viewSnapshot && viewSnapshot.key === viewKey ? viewSnapshot.base : serverList;
+  const items = applyPendingIntents(snapshot, viewIntents, viewKey);
 
   React.useEffect(() => {
     if (notifQuery.isError && notifQuery.data) {
@@ -279,8 +305,8 @@ function InboxView() {
     try {
       const result = await syncThread(id);
       if (result.gone === true) {
-        // Confirmed server truth, safe to drop from the snapshot and cache.
-        baseRef.current = baseRef.current.filter((i) => i.id !== id);
+        // Confirmed server truth, safe to drop from the shared cache. The
+        // snapshot follows it on the next render since no intent is pending.
         client.setQueryData<NotificationsResponse>(notifKey, (old) =>
           old
             ? { ...old, mainFlow: old.mainFlow.filter((row) => row.id !== id) }
@@ -308,7 +334,7 @@ function InboxView() {
     }
     // The displayed list folds this intent over the trusted snapshot until
     // the mutation confirms or fails. Rollback lives in the mutation cache.
-    const intent: PendingIntent = { action, ids: targets, state: filters.state };
+    const intent: PendingIntent = { action, ids: targets, state: filters.state, viewKey };
     pendingRef.current = [...pendingRef.current, intent];
     setSelected(new Set());
     try {
@@ -370,6 +396,7 @@ function InboxView() {
       ids: targets.map((t) => t.id),
       state: filters.state,
       repositoryId,
+      viewKey,
     };
     pendingRef.current = [...pendingRef.current, intent];
     const hiddenPending =
@@ -448,6 +475,7 @@ function InboxView() {
       ids: targets.map((t) => t.id),
       state: filters.state,
       repositoryId,
+      viewKey,
     };
     pendingRef.current = [...pendingRef.current, intent];
     try {
