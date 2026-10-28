@@ -5,7 +5,7 @@ Behavior contracts the implementation MUST honor. Internal route shapes change o
 ## Notifications view contract
 
 - Unread view hides done rows. All view keeps done rows with done state. Done view shows only done rows.
-- Optimistic done removes rows in unread and done views, marks in place in the all view.
+- Optimistic done removes rows in the unread view, keeps rows unchanged in the done view, and marks in place in the all view.
 - Failure restores the previous list with a message and usable controls.
 - A pre-commit refresh response never restores triaged rows.
 

@@ -12,7 +12,7 @@ No new tables. One additive repositories field. Everything else reuses existing 
 
 - What it is: an immediately applied list change with rollback.
 - Fields: action (done, unsubscribe, read, unread), target ids, previous list snapshot, busy flag until settled, per-row syncing flags.
-- Rules: done and unsubscribe remove rows in unread and done views, mark in place in the all view. Unread in the done view removes restored rows. Failure restores the snapshot with a message and re-enables controls.
+- Rules: done and unsubscribe remove rows in the unread view, keep rows unchanged in the done view, and mark in place in the all view. Unread in the done view removes restored rows. Failure restores the snapshot with a message and re-enables controls.
 
 ## Queued write
 
