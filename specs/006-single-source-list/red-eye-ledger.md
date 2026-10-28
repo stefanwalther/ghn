@@ -61,3 +61,9 @@
 - PR #115 opened: t3/red-eye-006-single-source-list into t3/clarify-item-state-worktrees.
 - Deviation logged: day branch had never been pushed, so the base ref did not exist on the remote. Pushed t3/clarify-item-state-worktrees first, then opened the PR. One extra push beyond the single-push contract, unavoidable for a stacked PR.
 - Morning report written beside the artifact (Dropbox html-artifacts), original untouched. Caffeinate stopped. Run end ~03:00 CET, inside the 6h cap with the full reserve intact.
+
+## CodeRabbit triage 2026-10-28
+
+- 5 actionable findings, all approved and fixed: 4e9a0f8 (PATCH supplied-fields), d55722a (view-keyed snapshot), finding 3 verified in place (onSettled returns invalidate), 9955edd (pin focus restore), a788e36 (contract wording).
+- 4 nitpicks fixed in 6cae6ff (recovery DELETE assertion, data-model/research/tasks wording, race middle-window assertions).
+- 5 fix replies posted (4403499601, 4403500014, 4403500328, 4403500657, 4403501006). Re-review requested via @coderabbitai review comment 6475133346.
