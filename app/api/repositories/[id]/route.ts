@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { nowMs } from "@/lib/clock";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { repositories } from "@/db/schema";
 import { computeNextDueAt, formatDueDate, type Rhythm } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
@@ -81,10 +81,24 @@ export async function PATCH(
   }
   if (pinned !== undefined) update.pinned = pinned ? 1 : 0;
 
-  await db
-    .update(repositories)
-    .set(update)
-    .where(eq(repositories.id, id));
+  // A rhythm change writes only when the row still carries the rhythm
+  // this request read. A concurrent rhythm PATCH wins once; the loser
+  // gets a 409 instead of silently undoing the winner.
+  if (rhythm === undefined) {
+    await db.update(repositories).set(update).where(eq(repositories.id, id));
+  } else {
+    const updated = await db
+      .update(repositories)
+      .set(update)
+      .where(and(eq(repositories.id, id), eq(repositories.rhythm, repo.rhythm)))
+      .returning({ id: repositories.id });
+    if (updated.length === 0) {
+      return NextResponse.json(
+        { error: "repository changed; retry" },
+        { status: 409 }
+      );
+    }
+  }
 
   return NextResponse.json({
     id,

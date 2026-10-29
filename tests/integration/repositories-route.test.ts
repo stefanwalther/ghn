@@ -317,4 +317,34 @@ describe("PATCH /api/repositories/[id] pin", () => {
     expect(rows[0]?.snoozedUntil).toBe(before[0]?.snoozedUntil);
     expect(rows[0]?.pinned).toBe(1);
   });
+
+  test("sequential rhythm patches both succeed with last write winning", async () => {
+    const first = await patch("acme--web", { rhythm: "monthly" });
+    expect(first.status).toBe(200);
+    const second = await patch("acme--web", { rhythm: "immediate" });
+    expect(second.status).toBe(200);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.rhythm).toBe("immediate");
+  });
+
+  test("a guarded update with a stale rhythm matches no rows", async () => {
+    await patch("acme--web", { rhythm: "monthly" });
+    const { and } = await import("drizzle-orm");
+    const updated = await db
+      .update(repositories)
+      .set({ rhythm: "immediate" })
+      .where(
+        and(eq(repositories.id, "acme--web"), eq(repositories.rhythm, "weekly"))
+      )
+      .returning({ id: repositories.id });
+    expect(updated).toEqual([]);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.rhythm).toBe("monthly");
+  });
 });
