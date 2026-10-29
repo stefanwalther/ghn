@@ -67,3 +67,9 @@
 - 5 actionable findings, all approved and fixed: 4e9a0f8 (PATCH supplied-fields), d55722a (view-keyed snapshot), finding 3 verified in place (onSettled returns invalidate), 9955edd (pin focus restore), a788e36 (contract wording).
 - 4 nitpicks fixed in 6cae6ff (recovery DELETE assertion, data-model/research/tasks wording, race middle-window assertions).
 - 5 fix replies posted (4403499601, 4403500014, 4403500328, 4403500657, 4403501006). Re-review requested via @coderabbitai review comment 6475133346.
+
+## Housekeeping 2026-10-29
+
+- Full gates on the final tree: typecheck, lint, unit 563, component 209, integration 205, all green.
+- History note: the code-review badge fix (localUnread cleared on in-place marks plus unit asserts) was still uncommitted when the triage round started and got staged into d55722a along with the view-key work. No code lost, but that commit message understates its content.
+- /tmp scratch files from the probe and triage rounds removed (ghn-*-baseline/probe, cr-comments, reply drafts).
