@@ -1585,6 +1585,7 @@ describe("repositories screen", () => {
     renderWithQuery(<ReposPage />);
     await screen.findByText("acme/web");
 
+    screen.getByRole("button", { name: "Pin acme/web" }).focus();
     fireEvent.click(screen.getByRole("button", { name: "Pin acme/web" }));
 
     await waitFor(() => {

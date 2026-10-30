@@ -25,14 +25,19 @@ export default function ReposPage() {
   // Remembers the repo a keyboard user just pinned or unpinned so focus
   // can follow its button to the other list. Only fires while focus is
   // lost (the old button unmounted); if the user moved on, it stands down.
+  // A focused Pin/Unpin button for the same repo is not "moved on": the
+  // optimistic move has not applied yet.
   const pendingFocusRef = React.useRef<{ fullName: string } | null>(null);
 
   React.useEffect(() => {
     const target = pendingFocusRef.current;
     if (!target) return;
     const active = document.activeElement;
-    if (active !== null && active !== document.body) {
-      pendingFocusRef.current = null;
+    if (active instanceof HTMLElement && active !== document.body) {
+      const label = active.getAttribute("aria-label");
+      const stillThere =
+        label === `Pin ${target.fullName}` || label === `Unpin ${target.fullName}`;
+      if (!stillThere) pendingFocusRef.current = null;
       return;
     }
     const match = Array.from(
