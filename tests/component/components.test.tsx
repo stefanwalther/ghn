@@ -716,6 +716,22 @@ describe("FilterSidebar", () => {
     ).not.toBeDisabled();
   });
 
+  test("keeps the done-view disable with a present pending set", () => {
+    renderSidebar({
+      onSnooze: vi.fn(),
+      onMarkAllDone: vi.fn(),
+      onMarkAllRead: vi.fn(),
+      markAllDoneBusy: true,
+      markAllReadBusy: true,
+      busyRepoIds: new Set(),
+    });
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+    expect(
+      screen.getByRole("menuitem", { name: "Mark all as done (4)" })
+    ).toBeDisabled();
+  });
+
   test("offers Mark all as read below Snooze on right-click", () => {
     const onMarkAllRead = vi.fn();
     renderSidebar({ onSnooze: vi.fn(), onMarkAllDone: vi.fn(), onMarkAllRead });

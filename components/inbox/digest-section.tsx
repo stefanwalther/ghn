@@ -127,10 +127,10 @@ function DigestRow({
             disabled={snoozeDisabled}
             onSnooze={onSnooze}
             onMarkAllDone={onMarkAllDone}
-            markAllDoneDisabled={(busyRepoIds?.has(g.repositoryId) ?? markAllDoneBusy) || g.pendingCount === 0}
+            markAllDoneDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllDoneBusy ?? false)) || g.pendingCount === 0}
             markAllDoneCount={g.pendingCount}
             onMarkAllRead={onMarkAllRead}
-            markAllReadDisabled={(busyRepoIds?.has(g.repositoryId) ?? markAllReadBusy) || g.pendingCount === 0}
+            markAllReadDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllReadBusy ?? false)) || g.pendingCount === 0}
             markAllReadCount={g.pendingCount}
             onCopied={onCopied}
             visible={visible}

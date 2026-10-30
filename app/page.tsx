@@ -539,7 +539,11 @@ function InboxView() {
     }
   }
 
-  const markAllDoneBusy = busy || filters.state === "done";
+  // Per-repo pending (busyRepoIds) replaced the global busy flag here, so
+  // this flag now carries only the done-view disable. OR it with the
+  // per-repo flag in the consumers: a plain ?? would let a present but
+  // empty pending set swallow the done-view disable.
+  const markAllDoneBusy = filters.state === "done";
 
   /** Marks every pending item of one repo read, with rollback on failure. */
   async function markRepoRead(repositoryId: string) {

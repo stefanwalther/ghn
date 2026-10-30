@@ -85,9 +85,9 @@ function RepoFilterRow({
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
-  const repoBusy = busyRepoIds ? busyRepoIds.has(r.id) : undefined;
-  const doneBusy = repoBusy ?? markAllDoneBusy ?? false;
-  const readBusy = repoBusy ?? markAllReadBusy ?? false;
+  const repoBusy = busyRepoIds?.has(r.id) ?? false;
+  const doneBusy = repoBusy || (markAllDoneBusy ?? false);
+  const readBusy = repoBusy || (markAllReadBusy ?? false);
   return (
     <div
       className="relative"
