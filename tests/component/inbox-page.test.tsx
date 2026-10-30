@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderWithQuery } from "./support/render-with-query";
 import { resetUIStore } from "@/lib/ui-store";
+import { queryKeys } from "@/lib/query-keys";
 import InboxPage from "@/app/page";
 import { AppShell } from "@/components/app-shell";
 import type { InboxItem } from "@/components/inbox/notification-list";
@@ -791,6 +792,93 @@ describe("inbox screen", () => {
       Response.json({ ...notificationsPayload, mainFlow: [], collapsedSection: [] })
     );
     expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+  });
+
+  test("revisiting a stale cached view shows its rows during the refetch", async () => {
+    let resolveRefetch: (value: Response) => void = () => {};
+    const refetchGate = new Promise<Response>((resolve) => {
+      resolveRefetch = resolve;
+    });
+    let doneCalls = 0;
+    const doneItem: InboxItem = {
+      ...secondItem,
+      id: "d_001",
+      repositoryId: "acme--web",
+      repositoryName: "acme/web",
+      subject: "Old finished thing",
+      isRead: 1,
+      isDone: 1,
+      sourceUrl: "https://github.com/acme/api/issues/8",
+    };
+    const seededDone = {
+      ...notificationsPayload,
+      mainFlow: [doneItem],
+      collapsedSection: [],
+    };
+    const revisitingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) {
+        if (url.includes("state=done")) {
+          doneCalls += 1;
+          if (doneCalls === 1) return Response.json(seededDone);
+          return refetchGate;
+        }
+        return Response.json(notificationsPayload);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", revisitingFetch);
+
+    const { client, rerender } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Seed the done cache with an immediate load.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    await screen.findByText("Old finished thing");
+
+    // Step back to the unread view and age the done cache past its
+    // stale window so the next visit refetches.
+    nav.params = new URLSearchParams("");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    await screen.findByText("Fix flaky login redirect");
+    client.invalidateQueries({
+      queryKey: queryKeys.notifications({ repo: "all", state: "done", type: "all", age: "all" }),
+    });
+
+    // Revisit done while its refetch is gated: the cached rows must show
+    // instead of the empty state.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("Old finished thing")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing finished yet")).not.toBeInTheDocument();
+
+    // The settling refetch refreshes the view with fresh truth.
+    resolveRefetch(
+      Response.json({
+        ...notificationsPayload,
+        mainFlow: [{ ...doneItem, subject: "New finished thing" }],
+        collapsedSection: [],
+      })
+    );
+    expect(await screen.findByText("New finished thing")).toBeInTheDocument();
   });
 
   test("a thread gone on GitHub stays gone while a bulk triage is pending", async () => {

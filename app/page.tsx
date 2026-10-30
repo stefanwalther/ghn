@@ -173,15 +173,19 @@ function InboxView() {
     base: InboxItem[];
   } | null>(null);
   const viewIntents = pendingRef.current.filter((i) => i.viewKey === viewKey);
-  // The snapshot only adopts settled server data: the shared query keeps
-  // showing the previous view's rows while the new view loads, and those
-  // must never become the trusted base. While intents for this view are
-  // pending the base stays frozen so pre-commit refetches cannot restore
-  // triaged rows.
+  // The snapshot adopts server data it can trust: settled data, or cached
+  // data that already belongs to this view. Refetching a revisited view
+  // keeps that view's own cache visible while the fresh copy loads; only
+  // placeholder data is excluded, because while a view loads it holds the
+  // previous view's rows and those must never become the trusted base.
+  // While intents for this view are pending the base stays frozen so
+  // pre-commit refetches cannot restore triaged rows.
   const settled = !notifQuery.isFetching;
   if (
     !viewSnapshot ||
-    (viewSnapshot.key !== viewKey && settled) ||
+    (viewSnapshot.key !== viewKey &&
+      !notifQuery.isPlaceholderData &&
+      !notifQuery.isPending) ||
     (viewSnapshot.key === viewKey &&
       viewIntents.length === 0 &&
       settled &&
