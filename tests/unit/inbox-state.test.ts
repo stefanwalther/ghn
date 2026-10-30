@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   applyLocalAction,
   applyOptimisticList,
+  applyPendingIntents,
+  applyRepoAction,
   nextFocusIndex,
   nextRepoAfterMarkDone,
   nextSelection,
@@ -114,11 +116,16 @@ describe("state-aware optimistic list", () => {
     expect(applyOptimisticList(rows, ["a"], "done", "done")).toEqual(rows);
   });
 
-  test("done in the all view removes the rows", () => {
-    expect(applyOptimisticList(rows, ["b"], "done", "all").map((r) => r.id)).toEqual([
-      "a",
-      "c",
-    ]);
+  test("done in the all view marks the rows in place", () => {
+    const next = applyOptimisticList(rows, ["b"], "done", "all");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[1]?.isDone).toBe(1);
+  });
+
+  test("unsubscribe in the all view marks the rows in place", () => {
+    const next = applyOptimisticList(rows, ["a"], "unsubscribe", "all");
+    expect(next.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(next[0]?.isDone).toBe(1);
   });
 
   test("read marks the rows as read and keeps them", () => {
@@ -242,5 +249,155 @@ describe("next repo after mark done", () => {
       { id: "c", main: 0, quiet: 0 },
     ];
     expect(nextRepoAfterMarkDone(mixed, "b", "b")).toBe("all");
+  });
+});
+
+describe("pending display intents", () => {
+  interface RepoRow {
+    id: string;
+    repositoryId: string;
+    isRead: number;
+    isDone: number;
+  }
+
+  const base: RepoRow[] = [
+    { id: "a", repositoryId: "web", isRead: 0, isDone: 0 },
+    { id: "b", repositoryId: "api", isRead: 0, isDone: 0 },
+  ];
+
+  test("no intents returns the base untouched", () => {
+    expect(applyPendingIntents(base, [], "v1")).toEqual(base);
+  });
+
+  test("id intents fold in order", () => {
+    const next = applyPendingIntents(base, [
+      { action: "done", ids: ["a"], state: "unread", viewKey: "v1" },
+      { action: "read", ids: ["b"], state: "unread", viewKey: "v1" },
+    ], "v1");
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+    expect(next[0]?.isRead).toBe(1);
+  });
+
+  test("intents from another view do not apply", () => {
+    const next = applyPendingIntents(
+      base,
+      [{ action: "done", ids: ["a"], state: "unread", viewKey: "other" }],
+      "v1"
+    );
+    expect(next.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+
+  test("repo done drops the whole repo in the unread view", () => {
+    const next = applyPendingIntents(base, [
+      { action: "done", ids: ["a"], state: "unread", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  test("repo done marks in place in the all view", () => {
+    const next = applyPendingIntents(base, [
+      { action: "done", ids: [], state: "all", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
+    expect(next.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(next[0]?.isDone).toBe(1);
+  });
+
+  test("repo read marks the whole repo without removing", () => {
+    const next = applyPendingIntents(base, [
+      { action: "read", ids: [], state: "unread", repositoryId: "api", viewKey: "v1" },
+    ], "v1");
+    expect(next.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(next[1]?.isRead).toBe(1);
+  });
+});
+
+describe("localUnread clearing on in-place marks", () => {
+  type RevivedRow = {
+    id: string;
+    repositoryId: string;
+    isRead: number;
+    isDone: number;
+    localUnread: boolean;
+  };
+
+  const revived: RevivedRow[] = [
+    { id: "a", repositoryId: "web", isRead: 0, isDone: 0, localUnread: true },
+    { id: "b", repositoryId: "api", isRead: 0, isDone: 0, localUnread: false },
+  ];
+
+  test("all-view done clears the local-only flag", () => {
+    const next = applyOptimisticList(revived, ["a"], "done", "all");
+    expect(next[0]).toMatchObject({ isDone: 1, localUnread: false });
+  });
+
+  test("pending repo done clears the local-only flag in the all view", () => {
+    const next = applyPendingIntents(revived, [
+      { action: "done", ids: [], state: "all", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
+    expect(next[0]).toMatchObject({ isDone: 1, localUnread: false });
+    expect(next[1]).toMatchObject({ isDone: 0, localUnread: false });
+  });
+
+  test("pending repo read clears the local-only flag", () => {
+    const next = applyPendingIntents(revived, [
+      { action: "read", ids: [], state: "unread", repositoryId: "web", viewKey: "v1" },
+    ], "v1");
+    expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
+  });
+});
+
+describe("applyRepoAction", () => {
+  type RepoRow = {
+    id: string;
+    repositoryId: string;
+    isRead: number;
+    isDone: number;
+    localUnread: boolean;
+  };
+
+  const base: RepoRow[] = [
+    { id: "a", repositoryId: "web", isRead: 0, isDone: 0, localUnread: true },
+    { id: "b", repositoryId: "api", isRead: 0, isDone: 0, localUnread: false },
+  ];
+
+  test("done removes only the named repo in the unread view", () => {
+    const next = applyRepoAction(base, "web", "done", "unread");
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  test("unsubscribe removes only the named repo in the unread view", () => {
+    const next = applyRepoAction(base, "web", "unsubscribe", "unread");
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  test("done keeps rows unchanged in the done view", () => {
+    const next = applyRepoAction(base, "web", "done", "done");
+    expect(next).toEqual(base);
+  });
+
+  test("done marks in place and clears the flag in the all view", () => {
+    const next = applyRepoAction(base, "web", "done", "all");
+    expect(next[0]).toMatchObject({ isDone: 1, localUnread: false });
+    expect(next[1]).toMatchObject({ isDone: 0, localUnread: false });
+  });
+
+  test("read marks the named repo and clears the flag in any view", () => {
+    for (const state of ["unread", "all", "done"]) {
+      const next = applyRepoAction(base, "web", "read", state);
+      expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
+      expect(next[1]).toMatchObject({ isRead: 0 });
+    }
+  });
+
+  test("read leaves done rows untouched, matching the repo-wide endpoint", () => {
+    const mixed: RepoRow[] = [
+      { id: "p", repositoryId: "web", isRead: 0, isDone: 0, localUnread: true },
+      { id: "d", repositoryId: "web", isRead: 0, isDone: 1, localUnread: false },
+    ];
+    for (const state of ["unread", "all", "done"]) {
+      const next = applyRepoAction(mixed, "web", "read", state);
+      expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
+      expect(next[1]).toMatchObject({ isRead: 0, isDone: 1 });
+    }
   });
 });

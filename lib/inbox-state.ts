@@ -78,8 +78,10 @@ export function applyLocalAction<T extends ActionableItem>(
  * and the query cache so both stay in sync.
  *
  * Mirrors applyLocalAction for the default unread view. Diverges only where
- * the filter demands it: marking done while viewing done is a no-op, and
- * marking unread while viewing done removes the restored rows.
+ * the filter demands it: marking done while viewing done is a no-op,
+ * marking unread while viewing done removes the restored rows, and marking
+ * done while viewing all marks the rows in place because the confirmed
+ * server state keeps done rows in that view.
  */
 export function applyOptimisticList<T extends ActionableItem>(
   items: T[],
@@ -90,6 +92,11 @@ export function applyOptimisticList<T extends ActionableItem>(
   const targetSet = new Set(ids);
   if (action === "done" || action === "unsubscribe") {
     if (state === "done") return items;
+    if (state === "all") {
+      return items.map((item) =>
+        targetSet.has(item.id) ? { ...item, isDone: 1, localUnread: false } : item
+      );
+    }
     return items.filter((item) => !targetSet.has(item.id));
   }
   if (action === "read") {
@@ -103,6 +110,80 @@ export function applyOptimisticList<T extends ActionableItem>(
   return items.map((item) =>
     targetSet.has(item.id) ? { ...item, isDone: 0, isRead: 0 } : item
   );
+}
+
+/**
+ * A triage intent that has been sent but not yet confirmed.
+ *
+ * Repo-wide actions name the repository because the server resolves the
+ * ids, including quiet rows the client never sees.
+ */
+export interface PendingIntent {
+  action: BulkAction;
+  ids: string[];
+  state: string;
+  repositoryId?: string;
+  /** Serialized notifications query key of the view that sent the intent. */
+  viewKey: string;
+}
+
+export interface RepoItem extends ActionableItem {
+  repositoryId: string;
+}
+
+/**
+ * One repo-wide triage action applied to a list. Done and unsubscribe keep
+ * rows in the done view and mark them in place in the all view; read only
+ * flips the flag. Shared by the display fold and the mutation caches so the
+ * three stay consistent.
+ */
+export function applyRepoAction<T extends RepoItem>(
+  items: T[],
+  repositoryId: string,
+  action: "done" | "unsubscribe" | "read",
+  state: string
+): T[] {
+  if (action === "read") {
+    // The repo-wide endpoint marks only rows with isDone === 0, so the
+    // optimistic pass must leave done rows alone or they flash read until
+    // the confirming refetch restores their real state.
+    return items.map((item) =>
+      item.repositoryId === repositoryId && (item.isDone ?? 0) === 0
+        ? { ...item, isRead: 1, localUnread: false }
+        : item
+    );
+  }
+  if (state === "done") return items;
+  if (state === "all") {
+    return items.map((item) =>
+      item.repositoryId === repositoryId ? { ...item, isDone: 1, localUnread: false } : item
+    );
+  }
+  return items.filter((item) => item.repositoryId !== repositoryId);
+}
+
+/**
+ * The displayed list: pending intents folded over the last trusted server
+ * snapshot. Server data that arrives while intents are pending never
+ * touches the snapshot, so a pre-commit refetch cannot restore rows that
+ * optimistic triage just removed.
+ */
+export function applyPendingIntents<T extends RepoItem>(
+  base: T[],
+  intents: PendingIntent[],
+  viewKey: string
+): T[] {
+  return intents
+    .filter((intent) => intent.viewKey === viewKey)
+    .reduce((list, intent) => {
+      if (intent.repositoryId === undefined) {
+        return applyOptimisticList(list, intent.ids, intent.action, intent.state);
+      }
+      if (intent.action === "read" || intent.action === "done" || intent.action === "unsubscribe") {
+        return applyRepoAction(list, intent.repositoryId, intent.action, intent.state);
+      }
+      return applyOptimisticList(list, intent.ids, intent.action, intent.state);
+    }, base);
 }
 
 /**

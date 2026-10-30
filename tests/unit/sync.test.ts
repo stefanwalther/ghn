@@ -470,4 +470,18 @@ describe("remote-done propagation", () => {
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "3003"));
     expect(rows[0]?.isDone).toBe(0);
   });
+
+  test("locally revived unread rows survive remote-done", async () => {
+    const db = createMemoryDb().db;
+    await upsertThreads(db, [thread({ id: "3004" })], null, 1792000001000, resolveUrl);
+    await db
+      .update(schema.notifications)
+      .set({ isDone: 0, isRead: 0, localUnread: 1 })
+      .where(eq(schema.notifications.id, "3004"));
+    const result = await applyRemoteDone(db, new Set(), new Set());
+    expect(result.markedDone).toBe(0);
+    const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "3004"));
+    expect(rows[0]?.isDone).toBe(0);
+    expect(rows[0]?.localUnread).toBe(1);
+  });
 });

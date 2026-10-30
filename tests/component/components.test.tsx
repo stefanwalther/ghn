@@ -1238,6 +1238,7 @@ describe("RepoRow", () => {
     snoozedUntil: null,
     isSnoozed: false,
     snoozeLabel: "Not snoozed",
+    pinned: false,
   };
 
   function renderRow(overrides: Partial<RepoRowData> = {}) {
@@ -1245,6 +1246,7 @@ describe("RepoRow", () => {
       repo: { ...repo, ...overrides },
       onRhythm: vi.fn(),
       onSnooze: vi.fn(),
+      onPin: vi.fn(),
       busy: false,
     };
     render(<RepoRow {...props} />);
@@ -1323,6 +1325,23 @@ describe("RepoRow", () => {
 
     expect(screen.getByText("Unreachable")).toBeInTheDocument();
     expect(screen.getByText(/GitHub no longer returns this repository/)).toBeInTheDocument();
+  });
+
+  test("pins an unpinned repository", () => {
+    const props = renderRow({ pinned: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin acme/web" }));
+
+    expect(props.onPin).toHaveBeenCalledWith("acme--web", true);
+  });
+
+  test("unpins a pinned repository", () => {
+    const props = renderRow({ pinned: true });
+
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Unpin acme/web" }));
+
+    expect(props.onPin).toHaveBeenCalledWith("acme--web", false);
   });
 });
 
@@ -1504,6 +1523,77 @@ describe("repositories screen", () => {
       expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ rhythm: "weekly" });
     });
   });
+
+  test("groups pinned repositories above the rest", async () => {
+    stubRepositories({
+      repositories: [
+        { ...payload.repositories[0], pinned: false },
+        { ...payload.repositories[1], pinned: true },
+      ],
+    });
+    renderWithQuery(<ReposPage />);
+    await screen.findByText("acme/web");
+
+    const pinned = screen.getByRole("region", { name: "Pinned repositories" });
+    expect(within(pinned).getByText("acme/api")).toBeInTheDocument();
+    expect(within(pinned).queryByText("acme/web")).not.toBeInTheDocument();
+    expect(screen.getByText("acme/web")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unpin acme/api" })).toBeInTheDocument();
+  });
+
+  test("hides the pinned section when nothing is pinned", async () => {
+    stubRepositories(payload);
+    renderWithQuery(<ReposPage />);
+    await screen.findByText("acme/web");
+
+    expect(screen.queryByRole("region", { name: "Pinned repositories" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Pinned Repositories")).not.toBeInTheDocument();
+  });
+
+  test("pinning patches the repository", async () => {
+    const fetchMock = stubRepositories(payload);
+    renderWithQuery(<ReposPage />);
+    await screen.findByText("acme/web");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin acme/web" }));
+
+    await waitFor(() => {
+      const patch = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === "/api/repositories/acme--web" && init?.method === "PATCH"
+      );
+      expect(patch).toBeDefined();
+      expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ pinned: true });
+    });
+  });
+
+  test("pinning moves focus to the unpin button", async () => {
+    let pinned = false;
+    const statefulFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH" && url.includes("/api/repositories/")) {
+        pinned = (JSON.parse(String(init.body)) as { pinned?: boolean }).pinned === true;
+        return Response.json({ ok: true });
+      }
+      return Response.json({
+        repositories: payload.repositories.map((r) =>
+          r.id === "acme--web" ? { ...r, pinned } : r
+        ),
+      });
+    });
+    vi.stubGlobal("fetch", statefulFetch);
+    renderWithQuery(<ReposPage />);
+    await screen.findByText("acme/web");
+
+    screen.getByRole("button", { name: "Pin acme/web" }).focus();
+    fireEvent.click(screen.getByRole("button", { name: "Pin acme/web" }));
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Unpin acme/web" })
+      );
+    });
+  });
 });
 
 describe("rate limits screen", () => {
@@ -1576,3 +1666,4 @@ describe("rate limits screen", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 });
+
