@@ -155,7 +155,7 @@ function InboxView() {
   const refreshing = notifQuery.isFetching && !notifQuery.isPending;
   const queuedBanner = queuedBannerText(notifQuery.data?.queueDepth ?? 0);
   const status =
-    notifQuery.isPending
+    notifQuery.isPending || notifQuery.isPlaceholderData
       ? "loading"
       : notifQuery.isError && !notifQuery.data
         ? "error"
@@ -192,8 +192,10 @@ function InboxView() {
     // instead of flashing one frame of stale rows.
     setViewSnapshot({ key: viewKey, base: serverList });
   }
+  // On a view mismatch the snapshot falls back to an empty list, never to
+  // the other view's rows: placeholder data must not leak across views.
   const snapshot =
-    viewSnapshot && viewSnapshot.key === viewKey ? viewSnapshot.base : serverList;
+    viewSnapshot && viewSnapshot.key === viewKey ? viewSnapshot.base : [];
   const items = applyPendingIntents(snapshot, viewIntents, viewKey);
 
   React.useEffect(() => {

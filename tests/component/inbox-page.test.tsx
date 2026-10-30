@@ -751,6 +751,48 @@ describe("inbox screen", () => {
     expect(await screen.findByText("Fix flaky login redirect")).toBeInTheDocument();
   });
 
+  test("a filter switch shows loading instead of the old view's rows", async () => {
+    let resolveDone: (value: Response) => void = () => {};
+    const doneGate = new Promise<Response>((resolve) => {
+      resolveDone = resolve;
+    });
+    const switchingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) {
+        if (url.includes("state=done")) return doneGate;
+        return Response.json(notificationsPayload);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", switchingFetch);
+
+    const { client, rerender } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Switch to the done view while its fetch is still gated.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    expect(
+      await screen.findByRole("status", { name: "Loading inbox" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+
+    resolveDone(
+      Response.json({ ...notificationsPayload, mainFlow: [], collapsedSection: [] })
+    );
+    expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+  });
+
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);
