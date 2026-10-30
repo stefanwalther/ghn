@@ -218,16 +218,17 @@ export function CommandPalette() {
     return rankSearch(trimmedTerm, repos, (r) => [r.fullName], repos.length).length;
   }, [trimmedTerm, repos]);
 
-  // Current inbox filters for the dimension subtitles. Parsed on every
-  // render (cheap) so a stale filter never labels the rows.
-  let currentFilters: InboxFilters;
-  try {
-    currentFilters = parseInboxFilters(
-      new URLSearchParams(typeof window === "undefined" ? "" : window.location.search)
-    );
-  } catch {
-    currentFilters = { repo: "all", state: "unread", type: "all", age: "all" };
-  }
+  // Read the live query string on every render. The memo keeps the parsed
+  // object stable while the string is unchanged, and fresh when the URL
+  // changes (for example through browser back or forward).
+  const search = typeof window === "undefined" ? "" : window.location.search;
+  const currentFilters = React.useMemo<InboxFilters>(() => {
+    try {
+      return parseInboxFilters(new URLSearchParams(search));
+    } catch {
+      return { repo: "all", state: "unread", type: "all", age: "all" };
+    }
+  }, [search]);
 
   // Type values come from the server facets so counts stay truthful;
   // the static type list keeps the scope usable before data lands.
