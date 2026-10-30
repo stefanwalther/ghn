@@ -56,11 +56,6 @@ export async function PATCH(
       ? null
       : computeNextDueAt(nextRhythm, now)
     : repo.nextDueAt;
-  const lastPromotedAt =
-    rhythmChanged && nextRhythm === "immediate" ? now : repo.lastPromotedAt;
-  const nextSnoozedUntil =
-    snoozedUntil === undefined ? repo.snoozedUntil : (snoozedUntil as number | null);
-  const nextPinned = pinned === undefined ? repo.pinned : (pinned ? 1 : 0);
 
   // Write only the supplied fields (plus rhythm's dependent due-date
   // fields) so concurrent PATCHes cannot undo each other.
@@ -84,33 +79,40 @@ export async function PATCH(
   // A rhythm change writes only when the row still carries the rhythm
   // this request read. A concurrent rhythm PATCH wins once; the loser
   // gets a 409 instead of silently undoing the winner.
-  if (rhythm === undefined) {
-    await db.update(repositories).set(update).where(eq(repositories.id, id));
-  } else {
-    const updated = await db
-      .update(repositories)
-      .set(update)
-      .where(and(eq(repositories.id, id), eq(repositories.rhythm, repo.rhythm)))
-      .returning({ id: repositories.id });
-    if (updated.length === 0) {
-      return NextResponse.json(
-        { error: "repository changed; retry" },
-        { status: 409 }
-      );
-    }
+  const updated = await db
+    .update(repositories)
+    .set(update)
+    .where(
+      rhythm === undefined
+        ? eq(repositories.id, id)
+        : and(eq(repositories.id, id), eq(repositories.rhythm, repo.rhythm))
+    )
+    .returning();
+  if (rhythm !== undefined && updated.length === 0) {
+    return NextResponse.json(
+      { error: "repository changed; retry" },
+      { status: 409 }
+    );
+  }
+  // The response is the row the database now holds, not the values this
+  // request computed from the earlier read: a concurrent PATCH that won
+  // in between belongs in the answer.
+  const updatedRepo = updated[0];
+  if (!updatedRepo) {
+    return NextResponse.json({ error: "unknown repository" }, { status: 404 });
   }
 
   return NextResponse.json({
-    id,
-    fullName: repo.fullName,
-    ownership: repo.ownership,
-    rhythm: nextRhythm,
-    lastPromotedAt,
-    nextDueAt,
-    nextDueLabel: formatDueDate(nextDueAt),
-    snoozedUntil: nextSnoozedUntil,
-    isSnoozed: isSnoozed(nextSnoozedUntil, now),
-    snoozeLabel: formatSnoozeUntil(nextSnoozedUntil, now),
-    pinned: nextPinned === 1,
+    id: updatedRepo.id,
+    fullName: updatedRepo.fullName,
+    ownership: updatedRepo.ownership,
+    rhythm: updatedRepo.rhythm,
+    lastPromotedAt: updatedRepo.lastPromotedAt,
+    nextDueAt: updatedRepo.nextDueAt,
+    nextDueLabel: formatDueDate(updatedRepo.nextDueAt),
+    snoozedUntil: updatedRepo.snoozedUntil,
+    isSnoozed: isSnoozed(updatedRepo.snoozedUntil, now),
+    snoozeLabel: formatSnoozeUntil(updatedRepo.snoozedUntil, now),
+    pinned: updatedRepo.pinned === 1,
   });
 }
