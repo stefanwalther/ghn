@@ -15,7 +15,7 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { useDialogFocus } from "@/lib/dialog-focus";
 import { copyText } from "@/lib/clipboard";
-import { describeBulkResult } from "@/lib/bulk";
+import { describeBulkResult, BULK_CONFIRM_THRESHOLD } from "@/lib/bulk";
 import {
   useBulkAction,
   useMarkRepoDone,
@@ -62,9 +62,34 @@ function InboxView() {
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
+  // Notices are errors (red) by default; passing confirmations go muted.
+  const [noticeKind, setNoticeKind] = React.useState<"error" | "info">("error");
+  function say(msg: string | null, kind: "error" | "info" = "error") {
+    setNotice(msg);
+    if (msg !== null) setNoticeKind(kind);
+  }
   const [confirmUnsub, setConfirmUnsub] = React.useState<string[] | null>(null);
+  const [confirmDone, setConfirmDone] = React.useState<{
+    repositoryId: string;
+    total: number;
+    main: number;
+    quiet: number;
+  } | null>(null);
+  // Same destructive guard for id-list bulks: selecting 30 rows and hitting
+  // Done must confirm just like a 30-item repo Done does.
+  const [confirmBulk, setConfirmBulk] = React.useState<{
+    action: BulkAction;
+    ids: string[];
+  } | null>(null);
   const confirmDialogRef = React.useRef<HTMLDivElement>(null);
-  useDialogFocus(confirmDialogRef, confirmUnsub !== null);
+  useDialogFocus(
+    confirmDialogRef,
+    confirmUnsub !== null || confirmDone !== null || confirmBulk !== null
+  );
+  // Per-repo pending set: only the syncing repo spins, every other repo stays
+  // usable while a large background write-back drains. Replaces the old
+  // global guard that blocked a second Done for seconds.
+  const [pendingRepos, setPendingRepos] = React.useState<Set<string>>(new Set());
   // Filter sidebar width persists across visits. It stays hidden until the
   // stored value is applied before first paint, so the wrong width never
   // flashes on screen.
@@ -160,7 +185,7 @@ function InboxView() {
 
   React.useEffect(() => {
     if (notifQuery.isError && notifQuery.data) {
-      setNotice("Refresh failed. Showing last loaded data.");
+      say("Refresh failed. Showing last loaded data.");
     }
   }, [notifQuery.isError, notifQuery.data]);
 
@@ -232,7 +257,10 @@ function InboxView() {
     }
     if (action === "copy") {
       const ok = await copyText(item.sourceUrl);
-      setNotice(ok ? "Link copied to clipboard." : "Copy failed in this browser.");
+      say(
+        ok ? "Link copied to clipboard." : "Copy failed in this browser.",
+        ok ? "info" : "error"
+      );
       return;
     }
     if (action === "open") {
@@ -269,10 +297,10 @@ function InboxView() {
       if (result.gone === true) {
         setItems((prev) => prev.filter((i) => i.id !== id));
         setDrawerItem((prev) => (prev?.id === id ? null : prev));
-        setNotice("Thread is gone on GitHub; marked done.");
+        say("Thread is gone on GitHub; marked done.", "info");
       }
     } catch {
-      setNotice("Sync failed for this item.");
+      say("Sync failed for this item.");
     }
   }
 
@@ -281,6 +309,10 @@ function InboxView() {
     if (targets.length === 0) return;
     if (action === "unsubscribe" && !opts?.confirmed) {
       setConfirmUnsub(targets);
+      return;
+    }
+    if (action === "done" && !opts?.confirmed && targets.length > BULK_CONFIRM_THRESHOLD) {
+      setConfirmBulk({ action, ids: targets });
       return;
     }
     setNotice(null);
@@ -298,15 +330,17 @@ function InboxView() {
       // explicitly: without this, triage looks like a silent no-op.
       const queued = typeof body?.queued === "number" ? body.queued : 0;
       const updated = typeof body?.updated === "number" ? body.updated : targets.length;
+      const remote = typeof body?.remote === "string" ? body.remote : null;
       const queuedNotice = describeBulkResult(action, {
         updated,
         queued,
         error: typeof body?.error === "string" ? body.error : null,
+        remote,
       });
-      if (queuedNotice) setNotice(queuedNotice);
+      if (queuedNotice) say(queuedNotice, remote === "background" ? "info" : "error");
     } catch {
       setItems(prevItems);
-      setNotice("Action failed. Restored previous state.");
+      say("Action failed. Restored previous state.");
     }
   }
 
@@ -316,7 +350,7 @@ function InboxView() {
       await updateRepo.mutateAsync({ id, patch: { snoozedUntil } });
       await notifQuery.refetch();
     } catch {
-      setNotice("Snooze failed. Previous setting restored.");
+      say("Snooze failed. Previous setting restored.");
     }
   }
 
@@ -327,18 +361,29 @@ function InboxView() {
       await updateRepo.mutateAsync({ id, patch: { rhythm: "immediate" } });
       await notifQuery.refetch();
     } catch {
-      setNotice("Promotion failed. Previous setting restored.");
+      say("Promotion failed. Previous setting restored.");
     }
   }
 
   /** Marks every pending item of one repo done, with rollback on failure. */
-  async function markRepoDone(repositoryId: string) {
-    if (markRepoDoneMutation.isPending) return;
+  async function markRepoDone(repositoryId: string, opts?: { confirmed?: boolean }) {
+    if (pendingRepos.has(repositoryId)) return;
+    const facet = repoFacets.find((r) => r.id === repositoryId);
+    const quietGroup = collapsed.find((g) => g.repositoryId === repositoryId);
+    const total = (facet?.main ?? 0) + (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0;
+    if (!opts?.confirmed && total > BULK_CONFIRM_THRESHOLD) {
+      setConfirmDone({
+        repositoryId,
+        total,
+        main: facet?.main ?? 0,
+        quiet: (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0,
+      });
+      return;
+    }
     setNotice(null);
+    setPendingRepos((prev) => new Set(prev).add(repositoryId));
     const repoName =
-      repoFacets.find((r) => r.id === repositoryId)?.fullName ??
-      collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
-      repositoryId;
+      facet?.fullName ?? quietGroup?.repositoryName ?? repositoryId;
     const prevItems = items;
     const prevDrawer = drawerItem;
     const targets = items.filter((i) => i.repositoryId === repositoryId);
@@ -356,15 +401,27 @@ function InboxView() {
       const body = await markRepoDoneMutation.mutateAsync({ repositoryId });
       const updated = typeof body?.updated === "number" ? body.updated : 0;
       const queued = typeof body?.queued === "number" ? body.queued : 0;
+      const remote = typeof body?.remote === "string" ? body.remote : null;
       if (updated === 0 && queued === 0) {
-        setNotice(`No pending items for ${repoName}.`);
+        say(`No pending items for ${repoName}.`, "info");
+      } else if (remote === "background") {
+        // Updated counts visible plus quiet; only the visible rows just left
+        // the screen, so spell out the split or the total looks wrong.
+        const quiet = Math.max(0, updated - targets.length);
+        say(
+          quiet > 0
+            ? `${updated} marked done (${targets.length} visible + ${quiet} quiet), syncing to GitHub in background.`
+            : `${updated} marked done, syncing to GitHub in background.`,
+          "info"
+        );
       } else {
         const queuedNotice = describeBulkResult("done", {
           updated,
           queued,
           error: typeof body?.error === "string" ? body.error : null,
+          remote,
         });
-        if (queuedNotice) setNotice(queuedNotice);
+        if (queuedNotice) say(queuedNotice);
         // The sidebar hides zero-item repos unless they are the active
         // filter. When the active repo was just emptied, move the filter to
         // the next visible repo (previous when last, "all" when none
@@ -390,7 +447,13 @@ function InboxView() {
       if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
         setDrawerItem(prevDrawer);
       }
-      setNotice("Mark all as done failed. Restored previous state.");
+      say("Mark all as done failed. Restored previous state.");
+    } finally {
+      setPendingRepos((prev) => {
+        const next = new Set(prev);
+        next.delete(repositoryId);
+        return next;
+      });
     }
   }
 
@@ -398,13 +461,15 @@ function InboxView() {
 
   /** Marks every pending item of one repo read, with rollback on failure. */
   async function markRepoRead(repositoryId: string) {
-    if (markRepoReadMutation.isPending) return;
+    if (pendingRepos.has(repositoryId)) return;
     setNotice(null);
+    setPendingRepos((prev) => new Set(prev).add(repositoryId));
     const repoName =
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
       collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
       repositoryId;
     const prevItems = items;
+    const visibleCount = items.filter((i) => i.repositoryId === repositoryId).length;
     setItems((prev) =>
       prev.map((i) =>
         i.repositoryId === repositoryId
@@ -416,25 +481,44 @@ function InboxView() {
       const body = await markRepoReadMutation.mutateAsync({ repositoryId });
       const updated = typeof body?.updated === "number" ? body.updated : 0;
       const queued = typeof body?.queued === "number" ? body.queued : 0;
+      const remote = typeof body?.remote === "string" ? body.remote : null;
       if (updated === 0 && queued === 0) {
-        setNotice(`No pending items for ${repoName}.`);
+        say(`No pending items for ${repoName}.`, "info");
+      } else if (remote === "background") {
+        const quiet = Math.max(0, updated - visibleCount);
+        say(
+          quiet > 0
+            ? `${updated} marked read (${visibleCount} visible + ${quiet} quiet), syncing to GitHub in background.`
+            : `${updated} marked read, syncing to GitHub in background.`,
+          "info"
+        );
       } else {
         const queuedNotice = describeBulkResult("read", {
           updated,
           queued,
           error: typeof body?.error === "string" ? body.error : null,
+          remote,
         });
-        if (queuedNotice) setNotice(queuedNotice);
+        if (queuedNotice) say(queuedNotice);
       }
       await notifQuery.refetch();
     } catch {
       setItems(prevItems);
-      setNotice("Mark all as read failed. Restored previous state.");
+      say("Mark all as read failed. Restored previous state.");
+    } finally {
+      setPendingRepos((prev) => {
+        const next = new Set(prev);
+        next.delete(repositoryId);
+        return next;
+      });
     }
   }
 
   function handleRepoCopied(_id: string, ok: boolean) {
-    setNotice(ok ? "Repo link copied to clipboard." : "Copy failed in this browser.");
+    say(
+      ok ? "Repo link copied to clipboard." : "Copy failed in this browser.",
+      ok ? "info" : "error"
+    );
   }
 
   function moveFocus(delta: number) {
@@ -561,6 +645,14 @@ function InboxView() {
           setConfirmUnsub(null);
           return;
         }
+        if (confirmDone) {
+          setConfirmDone(null);
+          return;
+        }
+        if (confirmBulk) {
+          setConfirmBulk(null);
+          return;
+        }
         if (drawerItem) setDrawerItem(null);
         else setSelected(new Set());
         return;
@@ -571,6 +663,8 @@ function InboxView() {
       // while it is open so j/k and triage keys never act behind it.
       if (document.querySelector('div[role="menu"]')) return;
       if (confirmUnsub) return;
+      if (confirmDone) return;
+      if (confirmBulk) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const drawerOpen = drawerItem !== null;
       const activeId = drawerOpen ? drawerItem.id : focusIdx !== null ? items[focusIdx]?.id : undefined;
@@ -750,6 +844,7 @@ function InboxView() {
             snoozeDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}
             markAllDoneBusy={markAllDoneBusy}
+            busyRepoIds={pendingRepos}
             onMarkAllRead={markRepoRead}
             markAllReadBusy={markAllDoneBusy}
             onCopied={handleRepoCopied}
@@ -834,7 +929,14 @@ function InboxView() {
             ) : null}
           </div>
           {notice ? (
-            <p role="alert" className="text-xs text-destructive">
+            <p
+              role={noticeKind === "error" ? "alert" : "status"}
+              className={
+                noticeKind === "error"
+                  ? "text-xs text-destructive"
+                  : "text-xs text-muted-foreground"
+              }
+            >
               {notice}
             </p>
           ) : null}
@@ -931,6 +1033,7 @@ function InboxView() {
               snoozeDisabled={updateRepo.isPending}
               onMarkAllDone={markRepoDone}
               markAllDoneBusy={markAllDoneBusy}
+              busyRepoIds={pendingRepos}
               onMarkAllRead={markRepoRead}
               markAllReadBusy={markAllDoneBusy}
               onCopied={handleRepoCopied}
@@ -971,6 +1074,79 @@ function InboxView() {
                 }}
               >
                 Unsubscribe
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {confirmDone ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
+          <div
+            ref={confirmDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-done-title"
+            aria-describedby="confirm-done-desc"
+            className="w-full max-w-sm rounded-lg bg-card p-6 shadow-md"
+          >
+            <h2 id="confirm-done-title" className="font-semibold">
+              Mark {confirmDone.total} as done?
+            </h2>
+            <p id="confirm-done-desc" className="mt-2 text-sm text-muted-foreground">
+              Removes {confirmDone.total} items from the inbox
+              {confirmDone.quiet > 0
+                ? ` (${confirmDone.main} visible + ${confirmDone.quiet} quiet)`
+                : ""}
+              {" "}and syncs to GitHub in the background. Other repos stay
+              usable while it syncs. Restore from the Done view if needed.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button variant="ghost" data-autofocus onClick={() => setConfirmDone(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const target = confirmDone;
+                  setConfirmDone(null);
+                  void markRepoDone(target.repositoryId, { confirmed: true });
+                }}
+              >
+                Mark {confirmDone.total} done
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {confirmBulk ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
+          <div
+            ref={confirmDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-bulk-title"
+            aria-describedby="confirm-bulk-desc"
+            className="w-full max-w-sm rounded-lg bg-card p-6 shadow-md"
+          >
+            <h2 id="confirm-bulk-title" className="font-semibold">
+              Mark {confirmBulk.ids.length} selected as done?
+            </h2>
+            <p id="confirm-bulk-desc" className="mt-2 text-sm text-muted-foreground">
+              Removes {confirmBulk.ids.length} items from the inbox and syncs
+              to GitHub in the background. Restore from the Done view if
+              needed.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button variant="ghost" data-autofocus onClick={() => setConfirmBulk(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const target = confirmBulk;
+                  setConfirmBulk(null);
+                  void apply(target.action, target.ids, { confirmed: true });
+                }}
+              >
+                Mark {confirmBulk.ids.length} done
               </Button>
             </div>
           </div>

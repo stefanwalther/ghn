@@ -61,6 +61,7 @@ function RepoFilterRow({
   snoozedSection,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -73,6 +74,8 @@ function RepoFilterRow({
   snoozedSection?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -80,6 +83,9 @@ function RepoFilterRow({
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
+  const repoBusy = busyRepoIds ? busyRepoIds.has(r.id) : undefined;
+  const doneBusy = repoBusy ?? markAllDoneBusy ?? false;
+  const readBusy = repoBusy ?? markAllReadBusy ?? false;
   return (
     <div
       className="relative"
@@ -115,10 +121,12 @@ function RepoFilterRow({
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
           onMarkAllDone={onMarkAllDone}
-          markAllDoneDisabled={markAllDoneBusy || pendingTotal === 0}
+          markAllDoneDisabled={doneBusy || pendingTotal === 0}
           markAllDoneCount={pendingTotal}
+          markAllDoneMain={r.main}
+          markAllDoneQuiet={r.quiet}
           onMarkAllRead={onMarkAllRead}
-          markAllReadDisabled={markAllReadBusy || pendingTotal === 0}
+          markAllReadDisabled={readBusy || pendingTotal === 0}
           markAllReadCount={pendingTotal}
           onCopied={onCopied}
           visible={visible}
@@ -149,6 +157,7 @@ export function FilterSidebar({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -166,6 +175,8 @@ export function FilterSidebar({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -324,6 +335,7 @@ export function FilterSidebar({
               snoozeDisabled={snoozeDisabled}
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
+              busyRepoIds={busyRepoIds}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}
@@ -366,6 +378,7 @@ export function FilterSidebar({
               snoozedSection
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
+              busyRepoIds={busyRepoIds}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}

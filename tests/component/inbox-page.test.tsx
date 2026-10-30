@@ -1042,4 +1042,149 @@ describe("repo-wide inbox actions", () => {
       expect(nav.replace).toHaveBeenCalledWith("/", { scroll: false });
     });
   });
+
+  test("asks to confirm before marking a large repo done", async () => {
+    const fetchMock = installFetch({
+      notifications: {
+        ...notificationsPayload,
+        facets: {
+          types: notificationsPayload.facets.types,
+          repos: [
+            {
+              id: "acme--web",
+              fullName: "acme/web",
+              main: 1,
+              quiet: 29,
+              isSnoozed: false,
+            },
+            {
+              id: "acme--api",
+              fullName: "acme/api",
+              main: 1,
+              quiet: 0,
+              isSnoozed: false,
+            },
+          ],
+        },
+      },
+    });
+    const orig = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/notifications/bulk")) {
+        return Response.json({
+          updated: 30,
+          action: "done",
+          remote: "background",
+          queued: 30,
+        });
+      }
+      return orig(input, init);
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (30)" }));
+
+    // The destructive bulk waits for confirmation instead of firing.
+    expect(
+      await screen.findByRole("alertdialog", { name: /Mark 30 as done/ })
+    ).toBeInTheDocument();
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark 30 done" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/notifications/bulk")[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      repositoryId: "acme--web",
+      action: "done",
+    });
+    // Good news renders as a status note with the visible/quiet split, not
+    // as a red alert with a bare total.
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "30 marked done (1 visible + 29 quiet), syncing to GitHub in background."
+    );
+  });
+
+  test("a second repo stays usable while the first syncs", async () => {
+    const fetchMock = installFetch();
+    const orig = fetchMock.getMockImplementation()!;
+    let resolveBulk!: (value: Response) => void;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/notifications/bulk")) {
+        return new Promise<Response>((resolve) => {
+          resolveBulk = resolve;
+        });
+      }
+      return orig(input, init);
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    openRepoMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (1)" }));
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+
+    // The syncing repo is held; every other repo keeps working.
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/api" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Mark all as done (1)" })
+    ).not.toBeDisabled();
+
+    resolveBulk(Response.json({ updated: 1, action: "done" }));
+    await waitFor(() => {
+      expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+    });
+  });
+
+  test("asks to confirm before marking a large selection done", async () => {
+    const manyItems = Array.from({ length: 30 }, (_, i) => ({
+      ...firstItem,
+      id: `sel_${i}`,
+      subject: `Bulk item ${i}`,
+    }));
+    const fetchMock = installFetch({
+      notifications: {
+        ...notificationsPayload,
+        mainFlow: manyItems,
+        facets: {
+          types: notificationsPayload.facets.types,
+          repos: [
+            {
+              id: "acme--web",
+              fullName: "acme/web",
+              main: 30,
+              quiet: 0,
+              isSnoozed: false,
+            },
+          ],
+        },
+      },
+    });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Bulk item 0");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(
+      await screen.findByRole("alertdialog", { name: /Mark 30 selected as done/ })
+    ).toBeInTheDocument();
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark 30 done" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/notifications/bulk")[0]!;
+    const body = JSON.parse(String(init?.body)) as { ids: string[]; action: string };
+    expect(body.action).toBe("done");
+    expect(body.ids).toHaveLength(30);
+  });
 });

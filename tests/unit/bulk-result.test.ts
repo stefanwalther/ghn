@@ -58,4 +58,16 @@ describe("describeBulkResult", () => {
       describeBulkResult("mystery", { updated: 1, queued: 1, error: null })
     ).toContain("mystery");
   });
+
+  test("reports a background batch without an error reason", () => {
+    const msg = describeBulkResult("done", {
+      updated: 115,
+      queued: 115,
+      remote: "background",
+    });
+    expect(msg).not.toBeNull();
+    expect(msg).toContain("115");
+    expect(msg).toContain("background");
+    expect(msg).not.toContain("Partially applied");
+  });
 });

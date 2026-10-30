@@ -696,7 +696,27 @@ describe("FilterSidebar", () => {
     expect(onMarkAllDone).toHaveBeenCalledWith("acme--web");
   });
 
-  test("offers Mark all as read above Snooze on right-click", () => {
+  test("holds only the pending repo while it syncs", () => {
+    renderSidebar({
+      onSnooze: vi.fn(),
+      onMarkAllDone: vi.fn(),
+      onMarkAllRead: vi.fn(),
+      busyRepoIds: new Set(["acme--web"]),
+    });
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+    expect(
+      screen.getByRole("menuitem", { name: "Mark all as done (4)" })
+    ).toBeDisabled();
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    fireEvent.contextMenu(screen.getByText("acme/api"));
+    expect(
+      screen.getByRole("menuitem", { name: /Mark all as done/ })
+    ).not.toBeDisabled();
+  });
+
+  test("offers Mark all as read below Snooze on right-click", () => {
     const onMarkAllRead = vi.fn();
     renderSidebar({ onSnooze: vi.fn(), onMarkAllDone: vi.fn(), onMarkAllRead });
 
@@ -705,9 +725,9 @@ describe("FilterSidebar", () => {
     const menu = screen.getByRole("menu", { name: "Actions for acme/web" });
     const entries = within(menu).getAllByRole("menuitem");
     expect(entries.map((el) => el.textContent)).toEqual([
-      "Mark all as done (4)",
-      "Mark all as read (4)",
+      "Mark all as done (4)Removes from inbox · 3 visible + 1 quiet",
       expect.stringMatching(/^Snooze/),
+      "Mark all as read (4)Stays in list",
       "Open repo",
       "Copy repo link",
     ]);
@@ -883,7 +903,7 @@ describe("DigestSection", () => {
     expect(onMarkAllDone).toHaveBeenCalledWith("acme--api");
   });
 
-  test("offers Mark all as read above Snooze for the quiet repository", () => {
+  test("offers Mark all as read below Snooze for the quiet repository", () => {
     const onMarkAllRead = vi.fn();
     render(
       <DigestSection
@@ -898,9 +918,9 @@ describe("DigestSection", () => {
     const menu = screen.getByRole("menu", { name: "Actions for acme/api" });
     const entries = within(menu).getAllByRole("menuitem");
     expect(entries.map((el) => el.textContent)).toEqual([
-      "Mark all as done (2)",
-      "Mark all as read (2)",
+      "Mark all as done (2)Removes from inbox",
       expect.stringMatching(/^Snooze/),
+      "Mark all as read (2)Stays in list",
       "Open repo",
       "Copy repo link",
     ]);
@@ -963,6 +983,35 @@ describe("RepoSnoozeMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  test("a pointer choice does not pin focus on the trigger", () => {
+    const onMarkAllDone = vi.fn();
+    renderSnoozeMenu({ onMarkAllDone, markAllDoneCount: 3 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    const entry = screen.getByRole("menuitem", { name: /Mark all as done/ });
+    fireEvent.click(entry, { detail: 1 });
+
+    expect(onMarkAllDone).toHaveBeenCalledWith("acme--web");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Actions for acme/web" })
+    ).not.toHaveFocus();
+  });
+
+  test("a keyboard choice returns focus to the trigger", () => {
+    const onMarkAllDone = vi.fn();
+    renderSnoozeMenu({ onMarkAllDone, markAllDoneCount: 3 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    const entry = screen.getByRole("menuitem", { name: /Mark all as done/ });
+    fireEvent.click(entry, { detail: 0 });
+
+    expect(onMarkAllDone).toHaveBeenCalledWith("acme--web");
+    expect(
+      screen.getByRole("button", { name: "Actions for acme/web" })
+    ).toHaveFocus();
+  });
+
   test("disables Mark all as done with nothing pending", () => {
     renderSnoozeMenu({
       onMarkAllDone: vi.fn(),
@@ -989,7 +1038,7 @@ describe("RepoSnoozeMenu", () => {
     expect(entries[0]).toHaveFocus();
   });
 
-  test("lists Mark all as read above Snooze and reports the repo", () => {
+  test("lists Mark all as read below Snooze and reports the repo", () => {
     const onMarkAllRead = vi.fn();
     renderSnoozeMenu({
       onMarkAllDone: vi.fn(),
@@ -1003,9 +1052,9 @@ describe("RepoSnoozeMenu", () => {
     const menu = screen.getByRole("menu", { name: "Actions for acme/web" });
     const entries = within(menu).getAllByRole("menuitem");
     expect(entries.map((el) => el.textContent)).toEqual([
-      "Mark all as done (4)",
-      "Mark all as read (4)",
+      "Mark all as done (4)Removes from inbox",
       expect.stringMatching(/^Snooze/),
+      "Mark all as read (4)Stays in list",
       "Open repo",
       "Copy repo link",
     ]);
@@ -1013,6 +1062,21 @@ describe("RepoSnoozeMenu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Mark all as read/ }));
     expect(onMarkAllRead).toHaveBeenCalledWith("acme--web");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("shows the quiet breakdown in the done hint", () => {
+    renderSnoozeMenu({
+      onMarkAllDone: vi.fn(),
+      markAllDoneCount: 115,
+      markAllDoneMain: 90,
+      markAllDoneQuiet: 25,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Mark all as done (115)" })
+    ).toHaveTextContent("90 visible + 25 quiet");
   });
 
   test("hides Mark all as read without the handler", () => {

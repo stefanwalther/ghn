@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { nowMs } from "@/lib/clock";
 import { and, eq, inArray } from "drizzle-orm";
 import { mutedSubjects, notifications, writebackQueue } from "@/db/schema";
-import { validateBulkInput, validateBulkRepoInput } from "@/lib/bulk";
+import { BULK_CONFIRM_THRESHOLD, validateBulkInput, validateBulkRepoInput } from "@/lib/bulk";
 import {
   getStoredToken,
   markThreadDone,
@@ -10,7 +10,12 @@ import {
   setSubscriptionIgnored,
   type GhResult,
 } from "@/lib/github";
-import { enqueueWriteback } from "@/lib/queue";
+import {
+  chunkIds,
+  drainWritebacks,
+  enqueueWriteback,
+  enqueueWritebacks,
+} from "@/lib/queue";
 import { mapWithLimit } from "@/lib/sync";
 import type { Db } from "@/db/client";
 
@@ -20,22 +25,104 @@ export const dynamic = "force-dynamic";
 // fan out one GitHub call at a time, holding the request (and the UI's busy
 // state) for minutes, with one stalled call hanging it forever.
 const REMOTE_CONCURRENCY = 8;
+// Background drains run slower than foreground retries so a 1000-item repo
+// cannot trip GitHub secondary rate limits while the user keeps triaging.
+const BACKGROUND_CONCURRENCY = 4;
 
-/** Shared local-first done path for id lists and repo-wide done. */
-async function applyDone(
+/** Chunked local update so 1000+ id lists stay under SQLite variable caps. */
+async function updateNotificationsChunked(
   db: Db,
   cleanIds: string[],
+  set: Partial<typeof notifications.$inferInsert>
+): Promise<void> {
+  for (const chunk of chunkIds(cleanIds)) {
+    await db
+      .update(notifications)
+      .set(set)
+      .where(inArray(notifications.id, chunk));
+  }
+}
+
+/**
+ * Best-effort background drain for one bulk. Failures stay queued with their
+ * reason so the next /api/sync retry picks them up; the response has already
+ * gone out, so nothing here may throw.
+ */
+async function drainInBackground(
+  cleanIds: string[],
+  action: "done" | "read" | "unsubscribe"
+): Promise<void> {
+  try {
+    const { db } = await import("@/db/client");
+    const token = await getStoredToken();
+    if (!token) return;
+    await drainWritebacks(db, token, cleanIds, action, BACKGROUND_CONCURRENCY);
+  } catch {
+    // Sync retry is the net; never fail the already-sent response.
+  }
+}
+
+/**
+ * Runs the drain after the response when the platform supports it, else
+ * detached. Response timing never depends on which branch is taken.
+ */
+function scheduleBackground(
+  cleanIds: string[],
+  action: "done" | "read" | "unsubscribe"
+): void {
+  void (async () => {
+    try {
+      const mod = (await import("next/server").catch(() => null)) as unknown as {
+        after?: (fn: () => void) => void;
+      } | null;
+      if (mod && typeof mod.after === "function") {
+        try {
+          mod.after(() => {
+            void drainInBackground(cleanIds, action);
+          });
+          return;
+        } catch {
+          // after() outside a request scope throws: fall through below.
+        }
+      }
+    } catch {
+      // Fall through to detached run below.
+    }
+    void drainInBackground(cleanIds, action);
+  })();
+}
+
+/**
+ * Local-first bulk with a split path: small selections keep the current
+ * await-the-remote behavior (strong consistency, exact partial errors);
+ * large selections enqueue and return in ms with background write-back.
+ */
+async function applyBulkWithRemote(
+  db: Db,
+  cleanIds: string[],
+  action: "done" | "read" | "unsubscribe",
+  localSet: Partial<typeof notifications.$inferInsert>,
+  remoteFn: (token: string, id: string) => Promise<GhResult<void>>,
   repositoryId?: string
 ) {
   const now = nowMs();
+  await updateNotificationsChunked(db, cleanIds, localSet);
+  if (cleanIds.length > BULK_CONFIRM_THRESHOLD) {
+    await enqueueWritebacks(db, cleanIds, action, null, now);
+    scheduleBackground(cleanIds, action);
+    const base = { updated: cleanIds.length, action };
+    const extra = repositoryId !== undefined ? { repositoryId } : {};
+    return NextResponse.json({
+      ...base,
+      ...extra,
+      remote: "background",
+      queued: cleanIds.length,
+    });
+  }
   const token = await getStoredToken();
-  await db
-    .update(notifications)
-    .set({ isDone: 1, localUnread: 0 })
-    .where(inArray(notifications.id, cleanIds));
   const remotes = await mapWithLimit(cleanIds, REMOTE_CONCURRENCY, (id) =>
     token
-      ? markThreadDone(token, id)
+      ? remoteFn(token, id)
       : Promise.resolve({ ok: false, reason: "auth" } as GhResult<void>)
   );
   let queued = 0;
@@ -44,13 +131,12 @@ async function applyDone(
     const id = cleanIds[idx] as string;
     if (!remote.ok) {
       firstError ??= remote;
-      await enqueueWriteback(db, id, "done", remote.reason ?? "unknown", now);
+      await enqueueWriteback(db, id, action, remote.reason ?? "unknown", now);
       queued += 1;
     }
   }
-  const base = { updated: cleanIds.length, action: "done" as const };
-  const extra =
-    repositoryId !== undefined ? { repositoryId } : {};
+  const base = { updated: cleanIds.length, action };
+  const extra = repositoryId !== undefined ? { repositoryId } : {};
   if (queued > 0) {
     return NextResponse.json({
       ...base,
@@ -63,46 +149,36 @@ async function applyDone(
   return NextResponse.json({ ...base, ...extra });
 }
 
+/** Shared local-first done path for id lists and repo-wide done. */
+async function applyDone(
+  db: Db,
+  cleanIds: string[],
+  repositoryId?: string
+) {
+  return applyBulkWithRemote(
+    db,
+    cleanIds,
+    "done",
+    { isDone: 1, localUnread: 0 },
+    (token, id) => markThreadDone(token, id),
+    repositoryId
+  );
+}
+
 /** Shared local-first read path for id lists and repo-wide read. */
 async function applyRead(
   db: Db,
   cleanIds: string[],
   repositoryId?: string
 ) {
-  const now = nowMs();
-  const token = await getStoredToken();
-  await db
-    .update(notifications)
-    .set({ isRead: 1, localUnread: 0 })
-    .where(inArray(notifications.id, cleanIds));
-  const remotes = await mapWithLimit(cleanIds, REMOTE_CONCURRENCY, (id) =>
-    token
-      ? markThreadRead(token, id)
-      : Promise.resolve({ ok: false, reason: "auth" } as GhResult<void>)
+  return applyBulkWithRemote(
+    db,
+    cleanIds,
+    "read",
+    { isRead: 1, localUnread: 0 },
+    (token, id) => markThreadRead(token, id),
+    repositoryId
   );
-  let queued = 0;
-  let firstError: GhResult<void> | null = null;
-  for (const [idx, remote] of remotes.entries()) {
-    const id = cleanIds[idx] as string;
-    if (!remote.ok) {
-      firstError ??= remote;
-      await enqueueWriteback(db, id, "read", remote.reason ?? "unknown", now);
-      queued += 1;
-    }
-  }
-  const base = { updated: cleanIds.length, action: "read" as const };
-  const extra =
-    repositoryId !== undefined ? { repositoryId } : {};
-  if (queued > 0) {
-    return NextResponse.json({
-      ...base,
-      ...extra,
-      remote: "partial",
-      queued,
-      error: firstError?.reason ?? "unknown",
-    });
-  }
-  return NextResponse.json({ ...base, ...extra });
 }
 
 /** Bulk triage endpoint: id-list actions plus repo-wide done/read. */
@@ -167,23 +243,19 @@ export async function POST(request: Request) {
   const now = nowMs();
 
   if (action === "unread") {
-    await db
-      .update(notifications)
-      .set({ isDone: 0, isRead: 0, localUnread: 1 })
-      .where(inArray(notifications.id, cleanIds));
+    await updateNotificationsChunked(db, cleanIds, { isDone: 0, isRead: 0, localUnread: 1 });
     // The user's latest intent wins: drop superseded retries so a queued
     // done/read cannot resurrect the row on the next sync drain.
-    await db
-      .delete(writebackQueue)
-      .where(inArray(writebackQueue.threadId, cleanIds));
+    for (const chunk of chunkIds(cleanIds)) {
+      await db
+        .delete(writebackQueue)
+        .where(inArray(writebackQueue.threadId, chunk));
+    }
     return NextResponse.json({ updated: cleanIds.length, action });
   }
 
   if (action === "unsubscribe") {
-    await db
-      .update(notifications)
-      .set({ isDone: 1 })
-      .where(inArray(notifications.id, cleanIds));
+    await updateNotificationsChunked(db, cleanIds, { isDone: 1 });
     const pairs = new Map(
       existing.map((n) => [`${n.repositoryId}::${n.subject}`, n])
     );
@@ -192,6 +264,16 @@ export async function POST(request: Request) {
         .insert(mutedSubjects)
         .values({ repositoryId: n.repositoryId, subject: n.subject })
         .onConflictDoNothing();
+    }
+    if (cleanIds.length > BULK_CONFIRM_THRESHOLD) {
+      await enqueueWritebacks(db, cleanIds, "unsubscribe", null, now);
+      scheduleBackground(cleanIds, "unsubscribe");
+      return NextResponse.json({
+        updated: cleanIds.length,
+        action,
+        remote: "background",
+        queued: cleanIds.length,
+      });
     }
     const token = await getStoredToken();
     let queued = 0;

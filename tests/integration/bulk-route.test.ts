@@ -511,3 +511,71 @@ describe("the write-back queue fallback", () => {
     expect(rows.every((r) => r.isDone === 1)).toBe(true);
   });
 });
+
+describe("the large-batch background path", () => {
+  test("over-threshold done returns instantly with queued background work", async () => {
+    restoreEnv?.();
+    restoreEnv = withEnv({
+      GHN_TOKEN: "",
+      GHN_API_BASE: standIn.url,
+      GHN_NOW: String(NOW),
+    });
+    const ids = Array.from({ length: 30 }, (_, i) => `bulk_${String(i + 1).padStart(3, "0")}`);
+    await db.insert(notifications).values(
+      ids.map((id) => ({
+        id,
+        repositoryId: "acme--web",
+        subject: `Bulk item ${id}`,
+        reason: "mention",
+        createdAt: NOW,
+        sourceUrl: "https://github.com/acme/web/issues/1",
+      }))
+    );
+    const { status, body } = await bulk({ ids, action: "done" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: 30,
+      action: "done",
+      remote: "background",
+      queued: 30,
+    });
+    // Local state hides immediately without touching GitHub on the request.
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(inArray(notifications.id, ids));
+    expect(rows.every((r) => r.isDone === 1)).toBe(true);
+    expect(standIn.requests).toHaveLength(0);
+    const queued = await queueRows();
+    expect(queued).toHaveLength(30);
+  });
+
+  test("with a credential the background drain reaches GitHub and clears", async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => `drain_${String(i + 1).padStart(3, "0")}`);
+    await db.insert(notifications).values(
+      ids.map((id) => ({
+        id,
+        repositoryId: "acme--web",
+        subject: `Drain item ${id}`,
+        reason: "mention",
+        createdAt: NOW,
+        sourceUrl: "https://github.com/acme/web/issues/1",
+      }))
+    );
+    const { status, body } = await bulk({ ids, action: "done" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ updated: 30, remote: "background", queued: 30 });
+
+    // The response is already out; the drain finishes shortly after.
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const queued = await queueRows();
+      if (queued.length === 0) break;
+      if (Date.now() > deadline) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(await queueRows()).toHaveLength(0);
+    const deletes = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(deletes).toHaveLength(30);
+  });
+});

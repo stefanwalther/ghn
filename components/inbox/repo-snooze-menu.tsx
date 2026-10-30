@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 const MENU_WIDTH = 220;
 const SUBMENU_WIDTH = 260;
 const MENU_GAP = 8;
-const MENU_ITEM_HEIGHT = 37;
+const MENU_ITEM_HEIGHT = 44;
 const MENU_LIST_PADDING = 8;
 
 /** The five inbox presets from the request, in order. */
@@ -72,6 +72,8 @@ export function RepoSnoozeMenu({
   onMarkAllDone,
   markAllDoneDisabled,
   markAllDoneCount,
+  markAllDoneMain,
+  markAllDoneQuiet,
   onMarkAllRead,
   markAllReadDisabled,
   markAllReadCount,
@@ -94,6 +96,10 @@ export function RepoSnoozeMenu({
   markAllDoneDisabled?: boolean;
   /** Pending total shown in the done entry label. Omit for no count. */
   markAllDoneCount?: number;
+  /** Visible main-flow items within the done total, for the quiet breakdown. */
+  markAllDoneMain?: number;
+  /** Collapsed quiet items within the done total, for the quiet breakdown. */
+  markAllDoneQuiet?: number;
   /** Marks every pending notification of this repo read. Omit to hide. */
   onMarkAllRead?: (id: string) => void;
   /** Disables the read entry, e.g. while busy or with nothing pending. */
@@ -222,23 +228,34 @@ export function RepoSnoozeMenu({
     }
   }
 
+  /**
+   * Whether a menu click came from the keyboard (Enter/Space carry detail 0;
+   * real pointer clicks carry the click count). Focus returns to the trigger
+   * only for keyboard use: handing it back after a pointer click pins the
+   * trigger visible with a focus ring after the menu is gone.
+   */
+  function refocusForClick(e: React.SyntheticEvent): boolean {
+    const detail = (e as unknown as { detail?: number }).detail;
+    return detail === 0;
+  }
+
   /** Applies one snooze preset choice and closes the menu. */
-  function choose(at: number | null) {
-    closeAll(true);
+  function choose(at: number | null, e: React.SyntheticEvent) {
+    closeAll(refocusForClick(e));
     onSnooze(repoId, at);
   }
 
   /** Reports the repo-wide done action unless the entry is disabled. */
-  function chooseMarkAllDone() {
+  function chooseMarkAllDone(e: React.SyntheticEvent) {
     if (markAllDoneDisabled) return;
-    closeAll(true);
+    closeAll(refocusForClick(e));
     onMarkAllDone?.(repoId);
   }
 
   /** Reports the repo-wide read action unless the entry is disabled. */
-  function chooseMarkAllRead() {
+  function chooseMarkAllRead(e: React.SyntheticEvent) {
     if (markAllReadDisabled) return;
-    closeAll(true);
+    closeAll(refocusForClick(e));
     onMarkAllRead?.(repoId);
   }
 
@@ -250,18 +267,27 @@ export function RepoSnoozeMenu({
     typeof markAllReadCount === "number"
       ? `Mark all as read (${markAllReadCount})`
       : "Mark all as read";
+  // Consequence hints live in the row itself, so no native title tooltip is
+  // needed on these two rows (the duplicated-label ghost from the sidebar).
+  const markAllDoneHint =
+    typeof markAllDoneMain === "number" &&
+    typeof markAllDoneQuiet === "number" &&
+    markAllDoneQuiet > 0
+      ? `Removes from inbox · ${markAllDoneMain} visible + ${markAllDoneQuiet} quiet`
+      : "Removes from inbox";
+  const markAllReadHint = "Stays in list";
   const rootUrl = repoUrl ?? `https://github.com/${fullName}`;
 
   /** Opens the repository root in a new window and closes the menu. */
-  function openRepo() {
-    closeAll(true);
+  function openRepo(e: React.SyntheticEvent) {
+    closeAll(refocusForClick(e));
     window.open(rootUrl, "_blank", "noopener");
   }
 
   /** Copies the repository link and reports the clipboard result. */
-  async function copyRepoLink() {
+  async function copyRepoLink(e: React.SyntheticEvent) {
     const ok = await copyText(rootUrl);
-    closeAll(true);
+    closeAll(refocusForClick(e));
     onCopiedRef.current?.(repoId, ok);
   }
 
@@ -378,31 +404,37 @@ export function RepoSnoozeMenu({
               style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
             >
               {onMarkAllDone ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title={markAllDoneLabel}
-                  disabled={markAllDoneDisabled}
-                  onClick={chooseMarkAllDone}
-                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <CheckCheck className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{markAllDoneLabel}</span>
-                </button>
+                <>
+                  <p
+                    aria-hidden="true"
+                    className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+                  >
+                    Triage
+                  </p>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-label={markAllDoneLabel}
+                    disabled={markAllDoneDisabled}
+                    onClick={chooseMarkAllDone}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckCheck className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{markAllDoneLabel}</span>
+                      <span aria-hidden="true" className="block truncate text-xs text-muted-foreground">
+                        {markAllDoneHint}
+                      </span>
+                    </span>
+                  </button>
+                </>
               ) : null}
-              {onMarkAllRead ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title={markAllReadLabel}
-                  disabled={markAllReadDisabled}
-                  onClick={chooseMarkAllRead}
-                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <MailOpen className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{markAllReadLabel}</span>
-                </button>
-              ) : null}
+              <p
+                aria-hidden="true"
+                className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase"
+              >
+                Manage
+              </p>
               <button
                 ref={snoozeRowRef}
                 type="button"
@@ -432,6 +464,24 @@ export function RepoSnoozeMenu({
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               </button>
+              {onMarkAllRead ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-label={markAllReadLabel}
+                  disabled={markAllReadDisabled}
+                  onClick={chooseMarkAllRead}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm opacity-80 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <MailOpen className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{markAllReadLabel}</span>
+                    <span aria-hidden="true" className="block truncate text-xs text-muted-foreground">
+                      {markAllReadHint}
+                    </span>
+                  </span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
@@ -486,7 +536,7 @@ export function RepoSnoozeMenu({
                   type="button"
                   role="menuitem"
                   title={p.label}
-                  onClick={() => choose(p.at)}
+                  onClick={(e) => choose(p.at, e)}
                   className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <span className="min-w-0 flex-1 truncate">{p.label}</span>
@@ -497,7 +547,7 @@ export function RepoSnoozeMenu({
                   type="button"
                   role="menuitem"
                   title={`Unsnooze ${fullName}`}
-                  onClick={() => choose(null)}
+                  onClick={(e) => choose(null, e)}
                   className="flex w-full cursor-pointer items-center gap-2 border-t border-border/40 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <span className="min-w-0 flex-1 truncate">Unsnooze</span>
