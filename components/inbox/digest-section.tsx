@@ -12,6 +12,8 @@ export interface DigestGroup {
   nextDueAt: number | null;
   nextDueLabel: string;
   pendingCount: number;
+  /** Unread rows among the collapsed items; drives the read button. */
+  unreadCount?: number;
   isSnoozed?: boolean;
   snoozeLabel?: string;
 }
@@ -82,6 +84,9 @@ function DigestRow({
 }) {
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  // Quiet rows are all not-done, so done targets the full pending count.
+  // Read targets only the unread subset once the server reports it.
+  const readable = g.unreadCount ?? g.pendingCount;
   return (
     <div
       className="flex items-start gap-0.5"
@@ -124,8 +129,8 @@ function DigestRow({
             markAllDoneDisabled={markAllDoneBusy || g.pendingCount === 0}
             markAllDoneCount={g.pendingCount}
             onMarkAllRead={onMarkAllRead}
-            markAllReadDisabled={markAllReadBusy || g.pendingCount === 0}
-            markAllReadCount={g.pendingCount}
+            markAllReadDisabled={markAllReadBusy || readable === 0}
+            markAllReadCount={readable}
             onCopied={onCopied}
             visible={visible}
             contextAnchor={contextAnchor}

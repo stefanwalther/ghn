@@ -111,9 +111,11 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
 
   // Repo-wide bulk: { repositoryId, action: "done" | "read" } applies to
-  // every pending notification of one repository, including quiet digests
-  // and rows hidden by the current list filter. The client never has those
-  // ids.
+  // every actionable notification of one repository, including quiet
+  // digests and rows hidden by the current list filter. The client never
+  // has those ids. Done targets every not-done row; read targets every
+  // unread row (including done-but-unread, which the old isDone-only
+  // filter missed and reported as "No pending" while items remained).
   if (body != null && typeof body === "object" && "repositoryId" in body) {
     const checked = validateBulkRepoInput(
       (body as { repositoryId?: unknown }).repositoryId,
@@ -126,16 +128,18 @@ export async function POST(request: Request) {
       );
     }
     const { repositoryId, action } = checked;
-    const pending = await db
+    const actionable = await db
       .select({ id: notifications.id })
       .from(notifications)
       .where(
         and(
           eq(notifications.repositoryId, repositoryId),
-          eq(notifications.isDone, 0)
+          action === "read"
+            ? eq(notifications.isRead, 0)
+            : eq(notifications.isDone, 0)
         )
       );
-    const cleanIds = pending.map((n) => n.id);
+    const cleanIds = actionable.map((n) => n.id);
     if (cleanIds.length === 0) {
       return NextResponse.json({ updated: 0, action, repositoryId });
     }

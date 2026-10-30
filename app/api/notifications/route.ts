@@ -100,11 +100,21 @@ export async function GET(request: Request) {
     if (isMergedItem({ reason: n.reason, prMerged })) mergedCount += 1;
     if (isClosedItem({ reason: n.reason, prMerged, subjectState })) closedCount += 1;
   }
-  const repoFacets = new Map<string, { main: number; quiet: number }>();
+  const repoFacets = new Map<
+    string,
+    { main: number; quiet: number; pending: number; unread: number }
+  >();
   for (const n of rows) {
     if (!matchBase(n, "repo")) continue;
-    const entry = repoFacets.get(n.repositoryId) ?? { main: 0, quiet: 0 };
+    const entry = repoFacets.get(n.repositoryId) ?? {
+      main: 0,
+      quiet: 0,
+      pending: 0,
+      unread: 0,
+    };
     entry[placement(n)] += 1;
+    if (n.isDone === 0) entry.pending += 1;
+    if (n.isRead === 0) entry.unread += 1;
     repoFacets.set(n.repositoryId, entry);
   }
 
@@ -128,6 +138,8 @@ export async function GET(request: Request) {
       fullName: r.fullName,
       main: repoFacets.get(r.id)?.main ?? 0,
       quiet: repoFacets.get(r.id)?.quiet ?? 0,
+      pending: repoFacets.get(r.id)?.pending ?? 0,
+      unread: repoFacets.get(r.id)?.unread ?? 0,
       isSnoozed: isSnoozed(r.snoozedUntil, now),
     })),
   };
@@ -201,13 +213,15 @@ export async function GET(request: Request) {
   const collapsedSection = [...collapsedByRepo.entries()].map(([id, entry]) => {
     const repo = reposById.get(id);
     const snoozed = repo ? isSnoozed(repo.snoozedUntil, now) : false;
+    const items = entry.items as Array<{ isRead?: number }>;
     return {
       repositoryId: id,
       repositoryName: repo?.fullName ?? id,
       rhythm: repo?.rhythm ?? "weekly",
       nextDueAt: repo?.nextDueAt ?? null,
       nextDueLabel: formatDueDate(repo?.nextDueAt ?? null),
-      pendingCount: (entry.items as unknown[]).length,
+      pendingCount: items.length,
+      unreadCount: items.filter((i) => (i.isRead ?? 0) === 0).length,
       items: stateFilter === "done" ? [] : [],
       isSnoozed: snoozed,
       snoozeLabel: formatSnoozeUntil(repo?.snoozedUntil ?? null, now),
