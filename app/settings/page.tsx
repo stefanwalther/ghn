@@ -6,6 +6,7 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { ThemePicker } from "@/components/theme-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSettings } from "@/components/inbox/empty-states";
+import { formatDatabaseSize } from "@/lib/format-database-size";
 import { useSettings } from "@/lib/queries";
 
 interface SettingsPayload {
@@ -28,21 +29,6 @@ function StatusDot({ ok }: { ok: boolean }) {
       className={`inline-block h-2.5 w-2.5 rounded-full ${ok ? "bg-emerald-500" : "bg-destructive"}`}
     />
   );
-}
-
-export function formatDatabaseSize(sizeBytes: number | null): string {
-  if (sizeBytes === null) return "Not created yet";
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = sizeBytes / 1024;
-  let unit = units[0];
-  for (let i = 0; i < units.length; i++) {
-    unit = units[i];
-    if (value < 1024 || i === units.length - 1) break;
-    value /= 1024;
-  }
-  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${rounded.toLocaleString("en-US")} ${unit} (${sizeBytes.toLocaleString("en-US")} bytes)`;
 }
 
 export default function SettingsPage() {
