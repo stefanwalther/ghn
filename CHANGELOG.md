@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.5.2...ghn-v0.6.0) (2026-10-30)
+
+
+### Features
+
+* **inbox:** filter the repository list from universal search ([#111](https://github.com/stefanwalther/ghn/issues/111)) ([dfb93c5](https://github.com/stefanwalther/ghn/commit/dfb93c57f4177cf8e0430377d4623b70c7fb3b4a))
+* **inbox:** item-state lifecycle and single-source list ([#116](https://github.com/stefanwalther/ghn/issues/116)) ([3ae6dfa](https://github.com/stefanwalther/ghn/commit/3ae6dfa6f486d71bafb2713f9473f0320dfd3047))
+
+## [0.5.2](https://github.com/stefanwalther/ghn/compare/ghn-v0.5.1...ghn-v0.5.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* **update-popover:** portal dialog to document.body ([#113](https://github.com/stefanwalther/ghn/issues/113)) ([e1249c7](https://github.com/stefanwalther/ghn/commit/e1249c71c9b7d55b5ed1e25cb1aba9aeb121f269))
+
 ## [0.5.1](https://github.com/stefanwalther/ghn/compare/ghn-v0.5.0...ghn-v0.5.1) (2026-10-26)
 
 

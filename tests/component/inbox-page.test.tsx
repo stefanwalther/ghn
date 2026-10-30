@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { renderWithQuery } from "./support/render-with-query";
-import { resetUIStore } from "@/lib/ui-store";
+import { resetUIStore, useUIStore } from "@/lib/ui-store";
+import { queryKeys } from "@/lib/query-keys";
 import InboxPage from "@/app/page";
 import { AppShell } from "@/components/app-shell";
 import type { InboxItem } from "@/components/inbox/notification-list";
@@ -281,6 +283,18 @@ describe("inbox screen", () => {
     expect(nav.replace).toHaveBeenCalledWith("/?repo=acme--api", { scroll: false });
   });
 
+  test("the sidebar repository search box narrows the repo list on the live page", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const input = screen.getByRole("searchbox", { name: "Filter repositories" });
+    fireEvent.change(input, { target: { value: "web" } });
+
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Filter by acme/api" })).not.toBeInTheDocument();
+  });
+
   test("snoozing a repo from the sidebar patches the repository", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);
@@ -314,6 +328,35 @@ describe("inbox screen", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Preview drawer" })).not.toBeInTheDocument();
     });
+  });
+
+  test("a palette request for an item outside the current filter still opens the drawer", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const ghost: InboxItem = {
+      id: "n_999",
+      repositoryId: "acme--web",
+      repositoryName: "acme/web",
+      subject: "Collapsed digest item the filter hides",
+      subjectType: "PullRequest",
+      subjectState: "open",
+      reason: "subscribed",
+      prMerged: false,
+      createdAt: Date.now(),
+      isRead: 0,
+      isDone: 0,
+      sourceUrl: "https://github.com/acme/web/pull/999",
+      due: true,
+      dueLabel: null,
+    };
+    act(() => {
+      useUIStore.getState().requestOpenThread(ghost.id, ghost.repositoryId, ghost);
+    });
+
+    const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+    expect(drawer).toHaveTextContent("Collapsed digest item the filter hides");
   });
 
   test("a bulk action posts the selected ids and the action to the bulk endpoint", async () => {
@@ -445,6 +488,498 @@ describe("inbox screen", () => {
     expect(
       within(screen.getByRole("button", { name: "Show all" })).getByText("0")
     ).toBeInTheDocument();
+  });
+
+  test("in the all view, bulk done marks rows in place instead of removing them", async () => {
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    const gatedFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", gatedFetch);
+    nav.params = new URLSearchParams("state=all");
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // The bulk request is still gated and the all view keeps done rows, so
+    // both subjects must stay visible instead of flashing out and back.
+    expect(await screen.findByText("Fix flaky login redirect")).toBeInTheDocument();
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+
+    resolveBulk(Response.json({ updated: 2, action: "done" }));
+    await waitFor(() => {
+      expect(gatedFetch.mock.calls.filter(([input]) => String(input) === "/api/notifications/bulk")).toHaveLength(1);
+    });
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+  });
+
+  test("a pre-commit refetch while bulk is pending never restores removed rows", async () => {
+    let notifCalls = 0;
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    let resolveSlow: (value: Response) => void = () => {};
+    const slowGate = new Promise<Response>((resolve) => {
+      resolveSlow = resolve;
+    });
+    let resolveFinal: (value: Response) => void = () => {};
+    const finalGate = new Promise<Response>((resolve) => {
+      resolveFinal = resolve;
+    });
+    const stalePayload = { ...notificationsPayload };
+    const emptiedPayload = { ...notificationsPayload, mainFlow: [] };
+    const racingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) {
+        notifCalls += 1;
+        if (notifCalls === 1) return Response.json(notificationsPayload);
+        if (notifCalls === 2) return slowGate;
+        return finalGate;
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", racingFetch);
+
+    const { client } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("All caught up")).toBeInTheDocument();
+
+    // Background refetch starts against the pre-commit database.
+    void client.invalidateQueries({ queryKey: ["notifications"] });
+    await waitFor(() => expect(notifCalls).toBeGreaterThanOrEqual(2));
+
+    // The pre-commit GET resolves while the bulk action is still pending.
+    resolveSlow(Response.json(stalePayload));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+
+    resolveBulk(Response.json({ updated: 2, action: "done" }));
+    await waitFor(() => expect(notifCalls).toBeGreaterThanOrEqual(3));
+    // The confirm refetch is still in flight: intents are held until it
+    // lands, so the stale snapshot cannot flash back in between.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    resolveFinal(Response.json(emptiedPayload));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+  });
+
+  test("a mid-triage manual refresh with a pre-commit response keeps removed rows absent", async () => {
+    let notifCalls = 0;
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    let resolveSlow: (value: Response) => void = () => {};
+    const slowGate = new Promise<Response>((resolve) => {
+      resolveSlow = resolve;
+    });
+    let resolveFinal: (value: Response) => void = () => {};
+    const finalGate = new Promise<Response>((resolve) => {
+      resolveFinal = resolve;
+    });
+    const stalePayload = { ...notificationsPayload };
+    const emptiedPayload = { ...notificationsPayload, mainFlow: [] };
+    const racingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) {
+        notifCalls += 1;
+        if (notifCalls === 1) return Response.json(notificationsPayload);
+        if (notifCalls === 2) return slowGate;
+        return finalGate;
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", racingFetch);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("All caught up")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh inbox from GitHub" }));
+    await waitFor(() => expect(notifCalls).toBeGreaterThanOrEqual(2));
+
+    resolveSlow(Response.json(stalePayload));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+
+    resolveBulk(Response.json({ updated: 2, action: "done" }));
+    await waitFor(() => expect(notifCalls).toBeGreaterThanOrEqual(3));
+    // The confirm refetch is still in flight: intents are held until it
+    // lands, so the stale snapshot cannot flash back in between.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    resolveFinal(Response.json(emptiedPayload));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+  });
+
+  test("a queued depth shows the waiting banner", async () => {
+    installFetch({ notifications: { ...notificationsPayload, queueDepth: 2 } });
+    renderWithQuery(<InboxPage />);
+    expect(await screen.findByText(/2 changes waiting for GitHub/)).toBeInTheDocument();
+  });
+
+  test("no queued depth hides the waiting banner", async () => {
+    installFetch({ notifications: { ...notificationsPayload, queueDepth: 0 } });
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+    expect(screen.queryByText(/waiting for GitHub/)).not.toBeInTheDocument();
+  });
+
+  test("repo-wide done on a quiet repo states the hidden pending items", async () => {
+    const quietGroup = {
+      repositoryId: "acme--api",
+      repositoryName: "acme/api",
+      rhythm: "weekly",
+      nextDueAt: Date.parse("2026-01-22T09:00:00Z"),
+      nextDueLabel: "in 7 days",
+      pendingCount: 2,
+      isSnoozed: false,
+      snoozeLabel: "Not snoozed",
+    };
+    const quietPayload = {
+      lastSyncAt: null,
+      stale: false,
+      mainFlow: [firstItem],
+      collapsedSection: [quietGroup],
+      facets: {
+        types: [{ value: "pull_request", label: "Pull requests", count: 1 }],
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false },
+          { id: "acme--api", fullName: "acme/api", main: 0, quiet: 2, isSnoozed: false },
+        ],
+      },
+    };
+    const emptiedQuiet = {
+      ...quietPayload,
+      collapsedSection: [],
+      facets: {
+        ...quietPayload.facets,
+        repos: quietPayload.facets.repos.map((r) => ({ ...r, quiet: 0 })),
+      },
+    };
+    let notifCalls = 0;
+    const quietFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        return Response.json({ updated: 2, action: "done", repositoryId: "acme--api" });
+      }
+      if (url.includes("/api/notifications")) {
+        notifCalls += 1;
+        return Response.json(notifCalls === 1 ? quietPayload : emptiedQuiet);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", quietFetch);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.contextMenu(screen.getByText("acme/api"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (2)" }));
+    expect(
+      await screen.findByText("acme/api marked done, including 2 hidden pending items.")
+    ).toBeInTheDocument();
+    await waitFor(() => expect(quietFetch.mock.calls.length).toBeGreaterThan(2));
+    expect(screen.queryByText("acme/api")).not.toBeInTheDocument();
+    expect(screen.getByText("Fix flaky login redirect")).toBeInTheDocument();
+  });
+
+  test("a mid-triage filter switch shows the new view, not the old rows", async () => {
+    let bulkResolve: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      bulkResolve = resolve;
+    });
+    let doneCalls = 0;
+    const doneItem = { ...firstItem, isDone: 1 };
+    const doneEmpty = {
+      ...notificationsPayload,
+      mainFlow: [],
+      collapsedSection: [],
+    };
+    const doneFull = {
+      ...notificationsPayload,
+      mainFlow: [doneItem],
+      collapsedSection: [],
+    };
+    const switchingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/notifications")) {
+        if (url.includes("state=done")) {
+          doneCalls += 1;
+          return Response.json(doneCalls === 1 ? doneEmpty : doneFull);
+        }
+        return Response.json(notificationsPayload);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", switchingFetch);
+
+    const { client, rerender } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+
+    // Switch to the done view while the bulk action is still pending.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(doneCalls).toBeGreaterThanOrEqual(1));
+    expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+    expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+
+    // The confirm refetch lands the finished row in the done view.
+    bulkResolve(Response.json({ updated: 1, action: "done" }));
+    expect(await screen.findByText("Fix flaky login redirect")).toBeInTheDocument();
+  });
+
+  test("a filter switch shows loading instead of the old view's rows", async () => {
+    let resolveDone: (value: Response) => void = () => {};
+    const doneGate = new Promise<Response>((resolve) => {
+      resolveDone = resolve;
+    });
+    const switchingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) {
+        if (url.includes("state=done")) return doneGate;
+        return Response.json(notificationsPayload);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", switchingFetch);
+
+    const { client, rerender } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Switch to the done view while its fetch is still gated.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    expect(
+      await screen.findByRole("status", { name: "Loading inbox" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+
+    resolveDone(
+      Response.json({ ...notificationsPayload, mainFlow: [], collapsedSection: [] })
+    );
+    expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
+  });
+
+  test("revisiting a stale cached view shows its rows during the refetch", async () => {
+    let resolveRefetch: (value: Response) => void = () => {};
+    const refetchGate = new Promise<Response>((resolve) => {
+      resolveRefetch = resolve;
+    });
+    let doneCalls = 0;
+    const doneItem: InboxItem = {
+      ...secondItem,
+      id: "d_001",
+      repositoryId: "acme--web",
+      repositoryName: "acme/web",
+      subject: "Old finished thing",
+      isRead: 1,
+      isDone: 1,
+      sourceUrl: "https://github.com/acme/api/issues/8",
+    };
+    const seededDone = {
+      ...notificationsPayload,
+      mainFlow: [doneItem],
+      collapsedSection: [],
+    };
+    const revisitingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) {
+        if (url.includes("state=done")) {
+          doneCalls += 1;
+          if (doneCalls === 1) return Response.json(seededDone);
+          return refetchGate;
+        }
+        return Response.json(notificationsPayload);
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", revisitingFetch);
+
+    const { client, rerender } = renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Seed the done cache with an immediate load.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    await screen.findByText("Old finished thing");
+
+    // Step back to the unread view and age the done cache past its
+    // stale window so the next visit refetches.
+    nav.params = new URLSearchParams("");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    await screen.findByText("Fix flaky login redirect");
+    client.invalidateQueries({
+      queryKey: queryKeys.notifications({ repo: "all", state: "done", type: "all", age: "all" }),
+    });
+
+    // Revisit done while its refetch is gated: the cached rows must show
+    // instead of the empty state.
+    nav.params = new URLSearchParams("state=done");
+    rerender(
+      <QueryClientProvider client={client}>
+        <InboxPage />
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("Old finished thing")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing finished yet")).not.toBeInTheDocument();
+
+    // The settling refetch refreshes the view with fresh truth.
+    resolveRefetch(
+      Response.json({
+        ...notificationsPayload,
+        mainFlow: [{ ...doneItem, subject: "New finished thing" }],
+        collapsedSection: [],
+      })
+    );
+    expect(await screen.findByText("New finished thing")).toBeInTheDocument();
+  });
+
+  test("a thread gone on GitHub stays gone while a bulk triage is pending", async () => {
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    let gone = false;
+    let bulkConfirmed = false;
+    const racingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/thread/sync")) {
+        gone = true;
+        return Response.json({ gone: true, id: "n_002" });
+      }
+      if (url.includes("/api/notifications")) {
+        if (bulkConfirmed) {
+          return Response.json({ ...notificationsPayload, mainFlow: [], collapsedSection: [] });
+        }
+        return Response.json(
+          gone
+            ? { ...notificationsPayload, mainFlow: [firstItem] }
+            : notificationsPayload
+        );
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", racingFetch);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Start a bulk triage and leave it unconfirmed.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+
+    // Meanwhile a per-item sync learns the other thread is gone on GitHub.
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Bump the linter" }));
+    const menu = await screen.findByRole("menu", { name: "Actions for Bump the linter" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Sync this item/ }));
+
+    // The gone thread must stay gone even though the bulk intent is pending.
+    await waitFor(() => {
+      expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+    });
+
+    // The bulk confirm keeps both rows gone.
+    resolveBulk(Response.json({ updated: 1, action: "done" }));
+    bulkConfirmed = true;
+    expect(await screen.findByText("All caught up")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
   });
 
   test("a triage action from the drawer closes the drawer and posts the item", async () => {

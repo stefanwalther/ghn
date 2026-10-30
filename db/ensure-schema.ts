@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS writeback_queue (
       "ALTER TABLE repositories ADD COLUMN unreachable INTEGER NOT NULL DEFAULT 0"
     );
   }
+  if (!repoCols.includes("pinned")) {
+    sqlite.exec(
+      "ALTER TABLE repositories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"
+    );
+  }
   const notifCols = tableInfo(sqlite, "notifications");
   if (!notifCols.includes("subject_type")) {
     sqlite.exec("ALTER TABLE notifications ADD COLUMN subject_type TEXT");

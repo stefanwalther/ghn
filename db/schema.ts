@@ -12,6 +12,7 @@ export const repositories = sqliteTable(
     lastPromotedAt: integer("last_promoted_at"),
     nextDueAt: integer("next_due_at"),
     snoozedUntil: integer("snoozed_until"),
+    pinned: integer("pinned").notNull().default(0),
     unreachable: integer("unreachable").notNull().default(0),
     createdAt: integer("created_at").notNull(),
   },

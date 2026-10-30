@@ -157,6 +157,23 @@ describe("VersionIndicator", () => {
     expect(dialog).toHaveClass("absolute", "bottom-16", "left-4");
   });
 
+  test("portals the backdrop to document.body so sidebar stacking cannot trap it", async () => {
+    stubVersion(UPDATE);
+
+    render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
+    await screen.findByRole("dialog", { name: "Update available" });
+
+    // The popover renders inside the sticky app sidebar. Without the
+    // portal, the fixed backdrop stays in the sidebar stacking context
+    // and sibling main-column rows paint over the dialog.
+    expect(screen.getByTestId("update-backdrop").parentElement).toBe(
+      document.body
+    );
+  });
+
   test("closes on Escape", async () => {
 
     stubVersion(UPDATE);

@@ -1,8 +1,15 @@
 import { create } from "zustand";
+import type { InboxItem } from "@/components/inbox/notification-list";
 
 export interface OpenThreadRequest {
   id: string;
   repositoryId?: string;
+  /**
+   * Full snapshot from the palette's own cache. Lets the inbox open the
+   * drawer even when the thread is absent from the current filter view
+   * (different state, type, or digest bucket).
+   */
+  item?: InboxItem | null;
   /** Monotonic sequence so repeated opens of the same thread re-trigger. */
   n: number;
 }
@@ -22,17 +29,20 @@ interface UIState {
   menuRequest: MenuRequest | null;
   refreshRequest: number;
   scrollTopRequest: number;
+  /** Narrows the inbox repository list; set from the palette, edited in the sidebar. */
+  repoListFilter: string;
   toggleSidebar: () => void;
   setSidebar: (open: boolean) => void;
   openPalette: () => void;
   closePalette: () => void;
   openHelp: () => void;
   closeHelp: () => void;
-  requestOpenThread: (id: string, repositoryId?: string) => void;
+  requestOpenThread: (id: string, repositoryId?: string, item?: InboxItem | null) => void;
   consumeOpenThread: () => void;
   requestMenu: (id: string) => void;
   requestRefresh: () => void;
   requestScrollTop: () => void;
+  setRepoListFilter: (query: string) => void;
 }
 
 const SIDEBAR_KEY = "ghn:sidebar";
@@ -69,6 +79,7 @@ function baseState(): Pick<
   | "menuRequest"
   | "refreshRequest"
   | "scrollTopRequest"
+  | "repoListFilter"
 > {
   return {
     sidebarOpen: true,
@@ -78,6 +89,7 @@ function baseState(): Pick<
     menuRequest: null,
     refreshRequest: 0,
     scrollTopRequest: 0,
+    repoListFilter: "",
   };
 }
 
@@ -102,9 +114,9 @@ export const useUIStore = create<UIState>()((set) => ({
   closePalette: () => set({ paletteOpen: false }),
   openHelp: () => set({ helpOpen: true }),
   closeHelp: () => set({ helpOpen: false }),
-  requestOpenThread: (id, repositoryId) => {
+  requestOpenThread: (id, repositoryId, item) => {
     openThreadSeq += 1;
-    set({ openThread: { id, repositoryId, n: openThreadSeq } });
+    set({ openThread: { id, repositoryId, item: item ?? null, n: openThreadSeq } });
   },
   consumeOpenThread: () => set({ openThread: null }),
   requestMenu: (id) => {
@@ -113,6 +125,7 @@ export const useUIStore = create<UIState>()((set) => ({
   },
   requestRefresh: () => set((s) => ({ refreshRequest: s.refreshRequest + 1 })),
   requestScrollTop: () => set((s) => ({ scrollTopRequest: s.scrollTopRequest + 1 })),
+  setRepoListFilter: (query) => set({ repoListFilter: query }),
 }));
 
 /** Test helper: restore the store to inert defaults between checks. */

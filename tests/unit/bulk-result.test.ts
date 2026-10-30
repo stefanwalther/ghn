@@ -71,3 +71,54 @@ describe("describeBulkResult", () => {
     expect(msg).not.toContain("Partially applied");
   });
 });
+
+describe("queuedBannerText", () => {
+  test("returns null when the queue is empty", async () => {
+    const { queuedBannerText } = await import("@/lib/bulk");
+    expect(queuedBannerText(0)).toBeNull();
+    expect(queuedBannerText(-1)).toBeNull();
+  });
+
+  test("names the waiting pushes without busy wording", async () => {
+    const { queuedBannerText } = await import("@/lib/bulk");
+    expect(queuedBannerText(1)).toBe(
+      "1 change waiting for GitHub. Hidden rows stay hidden until the push succeeds."
+    );
+    expect(queuedBannerText(3)).toBe(
+      "3 changes waiting for GitHub. Hidden rows stay hidden until the push succeeds."
+    );
+  });
+});
+
+describe("describeRepoDoneResult", () => {
+  test("falls back to the bulk wording when nothing was hidden", async () => {
+    const { describeRepoDoneResult } = await import("@/lib/bulk");
+    expect(
+      describeRepoDoneResult("acme/api", { updated: 2, queued: 0, hiddenPending: 0 })
+    ).toBeNull();
+  });
+
+  test("states the hidden pending items that were cleared", async () => {
+    const { describeRepoDoneResult } = await import("@/lib/bulk");
+    expect(
+      describeRepoDoneResult("acme/api", { updated: 2, queued: 0, hiddenPending: 2 })
+    ).toBe("acme/api marked done, including 2 hidden pending items.");
+    expect(
+      describeRepoDoneResult("acme/api", { updated: 1, queued: 0, hiddenPending: 1 })
+    ).toBe("acme/api marked done, including 1 hidden pending item.");
+  });
+
+  test("appends the queued remainder when part of the push failed", async () => {
+    const { describeRepoDoneResult } = await import("@/lib/bulk");
+    expect(
+      describeRepoDoneResult("acme/api", {
+        updated: 1,
+        queued: 1,
+        error: "network",
+        hiddenPending: 2,
+      })
+    ).toBe(
+      "acme/api marked done, including 2 hidden pending items. 1 queued for retry (GitHub unreachable)."
+    );
+  });
+});

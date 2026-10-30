@@ -20,7 +20,7 @@ Zero friction. Based on the [`gh` CLI](https://cli.github.com/). If `gh` works, 
 
 ## Why ghn
 
-- **Fewer clicks** - bulk select and clear 20 threads in one action. Full keyboard flow, no mouse needed.
+- **Fewer clicks** - bulk select and clear 20 threads in one action. Keyboard-first with vim-style keys (`j`/`k` to move, `x` to select, `d` for done), no mouse needed.
 - **Quicker insights** - no more jumping to a PR or Action to decide. Thread body, checks, and Dependabot detail show inline in the drawer.
 - **Clever filtering** - slice by repo, type, age, and read or done state. The queue narrows to what matters now.
 - **Repo rhythms** - define which repos show immediately, weekly, or monthly, plus snooze for an hour, this evening, or next week.
@@ -51,7 +51,7 @@ docker compose pull app && docker compose up -d
 For development with hot reload, use `make dev` instead.
 
 1. Press refresh to sync from GitHub.
-2. Clear the queue: filter by repo or reason, select with `x`, press `e` for done.
+2. Clear the queue: filter by repo or reason, select with `x`, press `d` for done.
 3. Silence one noisy repo in `/repos` by setting it to weekly.
 
 Trying it out? In dev, use Reseed demo data before the first sync, or run `bun run db:seed`.
@@ -93,9 +93,20 @@ Three pages, one local SQLite database, all sourced from the GitHub Notification
 - `/repos` - per-repo rhythm (immediate, weekly, biweekly, monthly) plus snooze
 - `/rate-limits` - live API quota from response headers
 
-Press `?` in the app for all keyboard shortcuts.
+Keyboard-first with vim-style bindings, see [docs/keybindings.md](docs/keybindings.md). Press `?` in the app for all keyboard shortcuts.
 
 Press `Cmd+K` anywhere for search and commands: threads, repos, filters, and navigation in one ranked list.
+
+### Universal search tricks
+
+- `Enter` runs the top hit: a thread opens in the preview drawer, selecting a repo filters the inbox to it.
+- `Shift+Enter` on a thread filters the inbox to that thread's repository instead of opening it.
+- The All / Repos / Types / State / Age tabs scope the list; typing `repo:`, `type:`, `state:`, or `age:` does the same.
+- Typing `r` or `type:` suggests the qualifier itself; `Enter` completes it and keeps searching.
+- Typing `filter` lists the four filter dimensions with their current values; picking one drills in.
+- A `Filter repository list to …` row hands the query to the repository list in the sidebar.
+- The inbox sidebar has its own repository filter box; scope qualifiers typed there are ignored.
+- `bg#862` keeps working: `#` stays part of the PR number and never scopes anything.
 
 ## ghn vs github.com/notifications
 

@@ -6,10 +6,11 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { ThemePicker } from "@/components/theme-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSettings } from "@/components/inbox/empty-states";
+import { formatDatabaseSize } from "@/lib/format-database-size";
 import { useSettings } from "@/lib/queries";
 
 interface SettingsPayload {
-  database: { configPath: string; databasePath: string };
+  database: { configPath: string; databasePath: string; sizeBytes: number | null };
   github: {
     connected: boolean;
     viewerLogin: string | null;
@@ -118,6 +119,12 @@ export default function SettingsPage() {
                     Config path
                   </dt>
                   <dd className="break-all">{data.database.configPath}</dd>
+                </div>
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+                  <dt className="w-32 shrink-0 font-sans font-medium text-muted-foreground">
+                    Database size
+                  </dt>
+                  <dd className="break-all">{formatDatabaseSize(data.database.sizeBytes)}</dd>
                 </div>
               </dl>
             </CardContent>

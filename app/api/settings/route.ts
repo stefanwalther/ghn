@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getResolvedConfig } from "@/lib/config";
+import { getDatabaseSizeBytes } from "@/lib/database-size";
 import { getStoredToken, probeConnection, tokenDisabled } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,7 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      database: { configPath, databasePath },
+      database: { configPath, databasePath, sizeBytes: getDatabaseSizeBytes(databasePath) },
       github: {
         connected: probe.connected,
         viewerLogin: probe.viewerLogin,
