@@ -62,8 +62,12 @@ settled names which layer confirmed.
 
 - G1: done rows never return from a stale fetch. A notifications GET started
   before the bulk POST commits must not overwrite an optimistic removal.
-  Current risk is `app/page.tsx` copying `serverList` into local `items`
-  without a generation guard.
+  `app/page.tsx` applies `applyPendingIntents` from `lib/inbox-state.ts`
+  over a per-view snapshot. Once the active view has a snapshot, refetches
+  do not replace it while that view has pending intents. When the view
+  changes, the snapshot adopts data that is neither placeholder nor
+  pending; placeholder rows, which hold the previous view's data while a
+  fresh view loads, never become the base and render as an empty list.
 - G2: done rows stay done across sync. `lib/sync.ts` skips rows with
   `isDone=1` on upsert. New GitHub activity on a done thread does not
   reopen it unless unread is used. If reopen on new activity is ever wanted,
