@@ -144,8 +144,13 @@ export function applyRepoAction<T extends RepoItem>(
   state: string
 ): T[] {
   if (action === "read") {
+    // The repo-wide endpoint marks only rows with isDone === 0, so the
+    // optimistic pass must leave done rows alone or they flash read until
+    // the confirming refetch restores their real state.
     return items.map((item) =>
-      item.repositoryId === repositoryId ? { ...item, isRead: 1, localUnread: false } : item
+      item.repositoryId === repositoryId && (item.isDone ?? 0) === 0
+        ? { ...item, isRead: 1, localUnread: false }
+        : item
     );
   }
   if (state === "done") return items;
