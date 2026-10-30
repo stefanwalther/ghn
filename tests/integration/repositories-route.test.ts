@@ -36,6 +36,7 @@ interface RepoView {
   snoozedUntil: number | null;
   isSnoozed: boolean;
   snoozeLabel: string;
+  pinned: boolean;
 }
 
 async function list(): Promise<RepoView[]> {
@@ -275,5 +276,75 @@ describe("PATCH /api/repositories/[id]", () => {
     const { status, body } = await patch("nope--nope", { rhythm: "weekly" });
     expect(status).toBe(404);
     expect(body.error).toBe("unknown repository");
+  });
+});
+
+describe("PATCH /api/repositories/[id] pin", () => {
+  test("repositories start unpinned in the list shape", async () => {
+    const views = await list();
+    for (const repo of views) {
+      expect(repo.pinned).toBe(false);
+    }
+  });
+
+  test("pinning flips the flag in the response and the database", async () => {
+    const { status, body } = await patch("acme--web", { pinned: true });
+    expect(status).toBe(200);
+    expect(body.pinned).toBe(true);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.pinned).toBe(1);
+    const views = await list();
+    expect(repoView(views, "acme--web").pinned).toBe(true);
+  });
+
+  test("a pin-only patch leaves rhythm and due dates untouched", async () => {
+    await patch("acme--web", { rhythm: "weekly" });
+    const before = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    const { status } = await patch("acme--web", { pinned: true });
+    expect(status).toBe(200);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.rhythm).toBe("weekly");
+    expect(rows[0]?.nextDueAt).toBe(before[0]?.nextDueAt);
+    expect(rows[0]?.snoozedUntil).toBe(before[0]?.snoozedUntil);
+    expect(rows[0]?.pinned).toBe(1);
+  });
+
+  test("sequential rhythm patches both succeed with last write winning", async () => {
+    const first = await patch("acme--web", { rhythm: "monthly" });
+    expect(first.status).toBe(200);
+    const second = await patch("acme--web", { rhythm: "immediate" });
+    expect(second.status).toBe(200);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.rhythm).toBe("immediate");
+  });
+
+  test("a guarded update with a stale rhythm matches no rows", async () => {
+    await patch("acme--web", { rhythm: "monthly" });
+    const { and } = await import("drizzle-orm");
+    const updated = await db
+      .update(repositories)
+      .set({ rhythm: "immediate" })
+      .where(
+        and(eq(repositories.id, "acme--web"), eq(repositories.rhythm, "weekly"))
+      )
+      .returning({ id: repositories.id });
+    expect(updated).toEqual([]);
+    const rows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(rows[0]?.rhythm).toBe("monthly");
   });
 });

@@ -35,6 +35,7 @@ export async function GET() {
       snoozedUntil: repo.snoozedUntil,
       isSnoozed: isSnoozed(repo.snoozedUntil, now),
       snoozeLabel: formatSnoozeUntil(repo.snoozedUntil, now),
+      pinned: repo.pinned === 1,
     });
   }
   return NextResponse.json({ repositories: result });

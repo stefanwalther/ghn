@@ -22,12 +22,52 @@ export default function ReposPage() {
       ? "error"
       : "ready";
   const busy = updateRepo.isPending;
+  // Remembers the repo a keyboard user just pinned or unpinned so focus
+  // can follow its button to the other list. Only fires while focus is
+  // lost (the old button unmounted); if the user moved on, it stands down.
+  // A focused Pin/Unpin button for the same repo is not "moved on": the
+  // optimistic move has not applied yet.
+  const pendingFocusRef = React.useRef<{ fullName: string } | null>(null);
+
+  React.useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (!target) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) {
+      const label = active.getAttribute("aria-label");
+      const stillThere =
+        label === `Pin ${target.fullName}` || label === `Unpin ${target.fullName}`;
+      if (!stillThere) pendingFocusRef.current = null;
+      return;
+    }
+    const match = Array.from(
+      document.querySelectorAll('button[aria-label^="Pin "], button[aria-label^="Unpin "]')
+    ).find(
+      (el) =>
+        el.getAttribute("aria-label") === `Pin ${target.fullName}` ||
+        el.getAttribute("aria-label") === `Unpin ${target.fullName}`
+    );
+    const button = match instanceof HTMLButtonElement ? match : null;
+    if (button && !button.disabled) {
+      pendingFocusRef.current = null;
+      button.focus({ preventScroll: true });
+    }
+  });
 
   const visible = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return repos;
     return repos.filter((r) => r.fullName.toLowerCase().includes(q));
   }, [repos, query]);
+
+  const pinnedVisible = React.useMemo(
+    () => visible.filter((r) => r.pinned),
+    [visible]
+  );
+  const unpinnedVisible = React.useMemo(
+    () => visible.filter((r) => !r.pinned),
+    [visible]
+  );
 
   async function setRhythm(id: string, rhythm: string) {
     setNotice(null);
@@ -44,6 +84,17 @@ export default function ReposPage() {
       await updateRepo.mutateAsync({ id, patch: { snoozedUntil } });
     } catch {
       setNotice("Snooze update failed. Previous setting restored.");
+    }
+  }
+
+  async function setPinned(id: string, pinned: boolean) {
+    const repoName = repos.find((r) => r.id === id)?.fullName ?? id;
+    pendingFocusRef.current = { fullName: repoName };
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { pinned } });
+    } catch {
+      setNotice("Pin change failed. Previous setting restored.");
     }
   }
 
@@ -100,9 +151,34 @@ export default function ReposPage() {
           </Button>
         </div>
       ) : null}
+      {status === "ready" && pinnedVisible.length > 0 ? (
+        <section aria-label="Pinned repositories" className="flex flex-col gap-4">
+          <h2 className="text-sm font-semibold">Pinned Repositories</h2>
+          {pinnedVisible.map((repo) => (
+            <RepoRow
+              key={repo.id}
+              repo={repo}
+              onRhythm={setRhythm}
+              onSnooze={setSnooze}
+              onPin={setPinned}
+              busy={busy}
+            />
+          ))}
+        </section>
+      ) : null}
+      {status === "ready" && pinnedVisible.length > 0 ? (
+        <h2 className="text-sm font-semibold">Repositories</h2>
+      ) : null}
       {status === "ready"
-        ? visible.map((repo) => (
-      <RepoRow key={repo.id} repo={repo} onRhythm={setRhythm} onSnooze={setSnooze} busy={busy} />
+        ? unpinnedVisible.map((repo) => (
+      <RepoRow
+        key={repo.id}
+        repo={repo}
+        onRhythm={setRhythm}
+        onSnooze={setSnooze}
+        onPin={setPinned}
+        busy={busy}
+      />
           ))
         : null}
     </div>

@@ -15,7 +15,7 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { useDialogFocus } from "@/lib/dialog-focus";
 import { copyText } from "@/lib/clipboard";
-import { describeBulkResult } from "@/lib/bulk";
+import { describeBulkResult, describeRepoDoneResult, queuedBannerText } from "@/lib/bulk";
 import {
   useBulkAction,
   useMarkRepoDone,
@@ -24,15 +24,17 @@ import {
   useSyncFlow,
   useThreadSync,
   useUpdateRepository,
+  type NotificationsResponse,
 } from "@/lib/queries";
 import { useUIStore } from "@/lib/ui-store";
 import { selectByQuickFilter } from "@/lib/filters";
 import {
-  applyOptimisticList,
+  applyPendingIntents,
   nextFocusIndex,
   nextRepoAfterMarkDone,
   nextSelection,
   toggleAllSelection,
+  type PendingIntent,
 } from "@/lib/inbox-state";
 import {
   parseInboxFilters,
@@ -47,6 +49,8 @@ import {
   saveFilterWidth,
   type InboxFilters as Filters,
 } from "@/lib/view-state";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 // Runs before paint on the client (no-op on the server) so the stored
 // width is applied before anything is shown.
@@ -56,7 +60,12 @@ const useIsomorphicLayoutEffect =
 function InboxView() {
   const router = useRouter();  const searchParams = useSearchParams();
   const filters = parseInboxFilters(searchParams);
-  const [items, setItems] = React.useState<InboxItem[]>([]);
+  const client = useQueryClient();
+  const notifKey = queryKeys.notifications(filters);
+  // Sent triage intents not yet confirmed. The displayed list folds these
+  // over the last trusted server snapshot, so pre-commit refetches can
+  // never restore rows that optimistic triage just removed.
+  const pendingRef = React.useRef<PendingIntent[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
@@ -144,19 +153,54 @@ function InboxView() {
   const typeFacets = notifQuery.data?.facets?.types ?? [];
   const repoFacets = notifQuery.data?.facets?.repos ?? [];
   const refreshing = notifQuery.isFetching && !notifQuery.isPending;
+  const queuedBanner = queuedBannerText(notifQuery.data?.queueDepth ?? 0);
   const status =
-    notifQuery.isPending
+    notifQuery.isPending || notifQuery.isPlaceholderData
       ? "loading"
       : notifQuery.isError && !notifQuery.data
         ? "error"
         : "ready";
 
-  // The list is a local working copy of the cached server snapshot so the
-  // existing optimistic triage below keeps working. Background refetches
-  // replace it with the confirmed server state.
-  React.useEffect(() => {
-    if (serverList.length > 0 || notifQuery.data) setItems(serverList);
-  }, [serverList, notifQuery.data]);
+  // The displayed list folds sent-but-unconfirmed triage intents over the
+  // last trusted server snapshot for the active view. Intents only apply
+  // to the view that sent them, and the snapshot refreshes on every view
+  // change, so rows from another filter can never appear here. Facets and
+  // sidebar counts come from the shared cache, which applies the same
+  // optimistic math.
+  const viewKey = JSON.stringify(notifKey);
+  const [viewSnapshot, setViewSnapshot] = React.useState<{
+    key: string;
+    base: InboxItem[];
+  } | null>(null);
+  const viewIntents = pendingRef.current.filter((i) => i.viewKey === viewKey);
+  // The snapshot adopts server data it can trust: settled data, or cached
+  // data that already belongs to this view. Refetching a revisited view
+  // keeps that view's own cache visible while the fresh copy loads; only
+  // placeholder data is excluded, because while a view loads it holds the
+  // previous view's rows and those must never become the trusted base.
+  // While intents for this view are pending the base stays frozen so
+  // pre-commit refetches cannot restore triaged rows.
+  const settled = !notifQuery.isFetching;
+  if (
+    !viewSnapshot ||
+    (viewSnapshot.key !== viewKey &&
+      !notifQuery.isPlaceholderData &&
+      !notifQuery.isPending) ||
+    (viewSnapshot.key === viewKey &&
+      viewIntents.length === 0 &&
+      settled &&
+      viewSnapshot.base !== serverList)
+  ) {
+    // Adjusting state during render for a changed key or a fresh snapshot
+    // is the sanctioned pattern; it renders the corrected value immediately
+    // instead of flashing one frame of stale rows.
+    setViewSnapshot({ key: viewKey, base: serverList });
+  }
+  // On a view mismatch the snapshot falls back to an empty list, never to
+  // the other view's rows: placeholder data must not leak across views.
+  const snapshot =
+    viewSnapshot && viewSnapshot.key === viewKey ? viewSnapshot.base : [];
+  const items = applyPendingIntents(snapshot, viewIntents, viewKey);
 
   React.useEffect(() => {
     if (notifQuery.isError && notifQuery.data) {
@@ -267,7 +311,20 @@ function InboxView() {
     try {
       const result = await syncThread(id);
       if (result.gone === true) {
-        setItems((prev) => prev.filter((i) => i.id !== id));
+        // Confirmed server truth, safe to drop from the shared cache and
+        // the snapshot. The snapshot follows cache updates on the next
+        // render, but a pending triage intent would freeze it with the gone
+        // row still in it, so drop the row here too.
+        client.setQueryData<NotificationsResponse>(notifKey, (old) =>
+          old
+            ? { ...old, mainFlow: old.mainFlow.filter((row) => row.id !== id) }
+            : old
+        );
+        setViewSnapshot((prev) =>
+          prev && prev.key === viewKey
+            ? { key: prev.key, base: prev.base.filter((i) => i.id !== id) }
+            : prev
+        );
         setDrawerItem((prev) => (prev?.id === id ? null : prev));
         setNotice("Thread is gone on GitHub; marked done.");
       }
@@ -285,11 +342,13 @@ function InboxView() {
     }
     setNotice(null);
     const targetSet = new Set(targets);
-    const prevItems = items;
     if (drawerItem && targetSet.has(drawerItem.id) && (action === "done" || action === "unsubscribe")) {
       setDrawerItem(null);
     }
-    setItems((prev) => applyOptimisticList(prev, targets, action, filters.state));
+    // The displayed list folds this intent over the trusted snapshot until
+    // the mutation confirms or fails. Rollback lives in the mutation cache.
+    const intent: PendingIntent = { action, ids: targets, state: filters.state, viewKey };
+    pendingRef.current = [...pendingRef.current, intent];
     setSelected(new Set());
     try {
       const body = await bulkMutation.mutateAsync({ action, ids: targets });
@@ -305,8 +364,9 @@ function InboxView() {
       });
       if (queuedNotice) setNotice(queuedNotice);
     } catch {
-      setItems(prevItems);
       setNotice("Action failed. Restored previous state.");
+    } finally {
+      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
     }
   }
 
@@ -339,13 +399,21 @@ function InboxView() {
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
       collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
       repositoryId;
-    const prevItems = items;
     const prevDrawer = drawerItem;
     const targets = items.filter((i) => i.repositoryId === repositoryId);
     if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
       setDrawerItem(null);
     }
-    setItems((prev) => prev.filter((i) => i.repositoryId !== repositoryId));
+    const intent: PendingIntent = {
+      action: "done",
+      ids: targets.map((t) => t.id),
+      state: filters.state,
+      repositoryId,
+      viewKey,
+    };
+    pendingRef.current = [...pendingRef.current, intent];
+    const hiddenPending =
+      collapsed.find((g) => g.repositoryId === repositoryId)?.pendingCount ?? 0;
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const next = new Set(prev);
@@ -359,12 +427,22 @@ function InboxView() {
       if (updated === 0 && queued === 0) {
         setNotice(`No pending items for ${repoName}.`);
       } else {
+        const hiddenNotice =
+          hiddenPending > 0
+            ? describeRepoDoneResult(repoName, {
+                updated,
+                queued,
+                error: typeof body?.error === "string" ? body.error : null,
+                hiddenPending,
+              })
+            : null;
         const queuedNotice = describeBulkResult("done", {
           updated,
           queued,
           error: typeof body?.error === "string" ? body.error : null,
         });
-        if (queuedNotice) setNotice(queuedNotice);
+        if (hiddenNotice) setNotice(hiddenNotice);
+        else if (queuedNotice) setNotice(queuedNotice);
         // The sidebar hides zero-item repos unless they are the active
         // filter. When the active repo was just emptied, move the filter to
         // the next visible repo (previous when last, "all" when none
@@ -384,13 +462,13 @@ function InboxView() {
           }
         }
       }
-      await notifQuery.refetch();
     } catch {
-      setItems(prevItems);
       if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
         setDrawerItem(prevDrawer);
       }
       setNotice("Mark all as done failed. Restored previous state.");
+    } finally {
+      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
     }
   }
 
@@ -404,14 +482,15 @@ function InboxView() {
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
       collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
       repositoryId;
-    const prevItems = items;
-    setItems((prev) =>
-      prev.map((i) =>
-        i.repositoryId === repositoryId
-          ? { ...i, isRead: 1, localUnread: false as const }
-          : i
-      )
-    );
+    const targets = items.filter((i) => i.repositoryId === repositoryId);
+    const intent: PendingIntent = {
+      action: "read",
+      ids: targets.map((t) => t.id),
+      state: filters.state,
+      repositoryId,
+      viewKey,
+    };
+    pendingRef.current = [...pendingRef.current, intent];
     try {
       const body = await markRepoReadMutation.mutateAsync({ repositoryId });
       const updated = typeof body?.updated === "number" ? body.updated : 0;
@@ -426,10 +505,10 @@ function InboxView() {
         });
         if (queuedNotice) setNotice(queuedNotice);
       }
-      await notifQuery.refetch();
     } catch {
-      setItems(prevItems);
       setNotice("Mark all as read failed. Restored previous state.");
+    } finally {
+      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
     }
   }
 
@@ -837,6 +916,22 @@ function InboxView() {
             <p role="alert" className="text-xs text-destructive">
               {notice}
             </p>
+          ) : null}
+          {queuedBanner ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-input bg-card px-4 py-3 shadow-sm"
+            >
+              <p className="flex-1 text-sm text-muted-foreground">{queuedBanner}</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refresh()}
+                disabled={syncing}
+              >
+                Retry now
+              </Button>
+            </div>
           ) : null}
           {conn && !conn.connected ? (
             <div

@@ -69,3 +69,43 @@ export function describeBulkResult(action: string, outcome: BulkOutcome): string
     `items restored until GitHub confirms.`
   );
 }
+
+/**
+ * Persistent banner copy for unpushed write-backs. Returns null when the
+ * queue is empty. Worded to never read as a busy or syncing state: queued
+ * means waiting on the remote push, busy means work is in flight.
+ */
+export function queuedBannerText(depth: number): string | null {
+  if (depth <= 0) return null;
+  const changes = depth === 1 ? "1 change" : `${depth} changes`;
+  return (
+    `${changes} waiting for GitHub. ` +
+    `Hidden rows stay hidden until the push succeeds.`
+  );
+}
+
+export interface RepoDoneOutcome {
+  updated: number;
+  queued: number;
+  error?: string | null;
+  hiddenPending: number;
+}
+
+/**
+ * Notice for a repo-wide done. When the repo had hidden pending items the
+ * notice must say so, because those rows were never visible to triage.
+ * Falls back to the standard bulk wording when nothing was hidden.
+ */
+export function describeRepoDoneResult(
+  repoName: string,
+  outcome: RepoDoneOutcome
+): string | null {
+  if (outcome.hiddenPending <= 0) return describeBulkResult("done", outcome);
+  const cleared =
+    outcome.hiddenPending === 1
+      ? "1 hidden pending item"
+      : `${outcome.hiddenPending} hidden pending items`;
+  const done = `${repoName} marked done, including ${cleared}.`;
+  if (outcome.queued <= 0) return done;
+  return `${done} ${outcome.queued} queued for retry (${bulkReasonText(outcome.error)}).`;
+}

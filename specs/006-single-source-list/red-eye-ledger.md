@@ -1,0 +1,75 @@
+# Red-Eye Ledger: 006-single-source-list
+
+**Run start**: 2026-10-27 02:42:30 CET, cap 6h, wrap-up reserve from 07:57:30.
+**Artifact**: ghn-lifecycle-make-it-happen.html (Dropbox html-artifacts).
+**Scope**: whole artifact, spec 006 stories 1-6.
+**Attempts per task**: 5. **Abort threshold**: never, grind to cap.
+**PR base**: t3/clarify-item-state-worktrees. **Report**: beside the artifact.
+**Day checkpoint**: f32efd8 on t3/clarify-item-state-worktrees.
+
+## Assumptions
+
+- A1: spec 006 adopted as-is instead of re-running specify. It was written and validated today from the same artifact. Saves run time, same content.
+- A2: remaining speckit commands (plan, tasks, implement, ext.validate, ext.finalize) resolve the same way specify did. If any is missing, stop that stage and point to speckit-install.
+- A3: `.specify/feature.json` is gitignored, so it lives on disk only. Downstream commands read it from the worktree; the PR will not carry it.
+- A4: `bun install` ran during the day session (560 packages). Logged as the run dependency.
+- A5: test baseline green at run start: typecheck, lint, unit 549, component 197, integration 197.
+- A6: per-thread PATCH read:false probe already closed the unread question. No further live GitHub mutation without cause. Sync tests use the stand-in only.
+- A7: run branch t3/red-eye-006-single-source-list carries overnight commits. Day branch untouched after checkpoint.
+
+## Parked tasks
+
+(none yet)
+
+## Scope cuts
+
+(none yet)
+
+## Dependencies added
+
+(none yet; bun install predates the run)
+
+## Errors
+
+(none yet)
+
+## Pipeline log
+
+- 02:42:30 run start, caffeinate 38169, 6h cap.
+- Checkpoint f32efd8 committed on t3/clarify-item-state-worktrees (day work: docs, P2 guard, all-view fix, tests, spec 006 draft).
+- Run branch t3/red-eye-006-single-source-list created.
+- Plan: setup-plan.sh needed bash (sh fails on process substitution), plan.md plus research.md, data-model.md, contracts/behavior.md, quickstart.md written.
+- Tasks: 35 tasks T001-T035, phases 1-9, MVP backbone US1 plus US2.
+- US1+US2 committed as 28d3d64 (single-source list, intent fold, repo-done view fixes, regression tests). Gates at commit: typecheck, lint, unit 554, component 199, integration 197. T001-T013 ticked.
+- US5 committed (mute precedence lock, repo-done hidden notice). Gates: typecheck, lint, unit 559, component 202, integration 202. T023-T026 ticked (26/35).
+
+## Wrap-up prep
+
+- US6 committed as aed2643 (pin end to end). Gates then: typecheck, lint, unit 559, component 207, integration 205.
+- T033 quickstart mapping: throttled triage plus mid-triage refresh (component pre-commit tests), failure restore (existing bulk failure tests), all-view mark-in-place (component), offline plus revive plus full sync (integration P2 tests), placement (integration mute-beats-rhythm), pin (component grouping plus integration contract). All green.
+- T034 drift check: item-lifecycle P1-P3 plus G1-G7 all match implementation. queuedBannerText wording distinct from busy copy. Pin touches pinned only. No doc changes needed.
+- T035 gates final: typecheck, lint, unit 559, component 207, integration 205. Coverage 86.15% vs baseline 86.09%, ratchet pass.
+
+## Finalize
+
+- No transient files in spec dir (only core artifacts plus ledger, all preserved).
+- Workspace docs untouched deliberately: CHANGELOG is release-please owned, README has no milestone section and onboarding must stay untouched. No backups needed, nothing edited.
+- Validate verdict: READY TO MERGE (35/35 tasks, gates green, coverage ratchet pass, no debug code, no TODOs).
+
+## Close-out
+
+- PR #115 opened: t3/red-eye-006-single-source-list into t3/clarify-item-state-worktrees.
+- Deviation logged: day branch had never been pushed, so the base ref did not exist on the remote. Pushed t3/clarify-item-state-worktrees first, then opened the PR. One extra push beyond the single-push contract, unavoidable for a stacked PR.
+- Morning report written beside the artifact (Dropbox html-artifacts), original untouched. Caffeinate stopped. Run end ~03:00 CET, inside the 6h cap with the full reserve intact.
+
+## CodeRabbit triage 2026-10-28
+
+- 5 actionable findings, all approved and fixed: 4e9a0f8 (PATCH supplied-fields), d55722a (view-keyed snapshot), finding 3 verified in place (onSettled returns invalidate), 9955edd (pin focus restore), a788e36 (contract wording).
+- 4 nitpicks fixed in 6cae6ff (recovery DELETE assertion, data-model/research/tasks wording, race middle-window assertions).
+- 5 fix replies posted (4403499601, 4403500014, 4403500328, 4403500657, 4403501006). Re-review requested via @coderabbitai review comment 6475133346.
+
+## Housekeeping 2026-10-29
+
+- Full gates on the final tree: typecheck, lint, unit 563, component 209, integration 205, all green.
+- History note: the code-review badge fix (localUnread cleared on in-place marks plus unit asserts) was still uncommitted when the triage round started and got staged into d55722a along with the view-key work. No code lost, but that commit message understates its content.
+- /tmp scratch files from the probe and triage rounds removed (ghn-*-baseline/probe, cr-comments, reply drafts).
