@@ -132,6 +132,32 @@ export interface RepoItem extends ActionableItem {
 }
 
 /**
+ * One repo-wide triage action applied to a list. Done and unsubscribe keep
+ * rows in the done view and mark them in place in the all view; read only
+ * flips the flag. Shared by the display fold and the mutation caches so the
+ * three stay consistent.
+ */
+export function applyRepoAction<T extends RepoItem>(
+  items: T[],
+  repositoryId: string,
+  action: "done" | "unsubscribe" | "read",
+  state: string
+): T[] {
+  if (action === "read") {
+    return items.map((item) =>
+      item.repositoryId === repositoryId ? { ...item, isRead: 1, localUnread: false } : item
+    );
+  }
+  if (state === "done") return items;
+  if (state === "all") {
+    return items.map((item) =>
+      item.repositoryId === repositoryId ? { ...item, isDone: 1, localUnread: false } : item
+    );
+  }
+  return items.filter((item) => item.repositoryId !== repositoryId);
+}
+
+/**
  * The displayed list: pending intents folded over the last trusted server
  * snapshot. Server data that arrives while intents are pending never
  * touches the snapshot, so a pre-commit refetch cannot restore rows that
@@ -145,22 +171,13 @@ export function applyPendingIntents<T extends RepoItem>(
   return intents
     .filter((intent) => intent.viewKey === viewKey)
     .reduce((list, intent) => {
-      const next = applyOptimisticList(list, intent.ids, intent.action, intent.state);
-      if (intent.repositoryId === undefined) return next;
-      if (intent.action === "done" || intent.action === "unsubscribe") {
-        if (intent.state === "done") return next;
-        if (intent.state === "all") {
-          return next.map((item) =>
-            item.repositoryId === intent.repositoryId
-              ? { ...item, isDone: 1, localUnread: false }
-              : item
-          );
-        }
-        return next.filter((item) => item.repositoryId !== intent.repositoryId);
+      if (intent.repositoryId === undefined) {
+        return applyOptimisticList(list, intent.ids, intent.action, intent.state);
       }
-      return next.map((item) =>
-        item.repositoryId === intent.repositoryId ? { ...item, isRead: 1, localUnread: false } : item
-      );
+      if (intent.action === "read" || intent.action === "done" || intent.action === "unsubscribe") {
+        return applyRepoAction(list, intent.repositoryId, intent.action, intent.state);
+      }
+      return applyOptimisticList(list, intent.ids, intent.action, intent.state);
     }, base);
 }
 

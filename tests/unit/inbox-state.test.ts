@@ -3,6 +3,7 @@ import {
   applyLocalAction,
   applyOptimisticList,
   applyPendingIntents,
+  applyRepoAction,
   nextFocusIndex,
   nextRepoAfterMarkDone,
   nextSelection,
@@ -342,5 +343,49 @@ describe("localUnread clearing on in-place marks", () => {
       { action: "read", ids: [], state: "unread", repositoryId: "web", viewKey: "v1" },
     ], "v1");
     expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
+  });
+});
+
+describe("applyRepoAction", () => {
+  type RepoRow = {
+    id: string;
+    repositoryId: string;
+    isRead: number;
+    isDone: number;
+    localUnread: boolean;
+  };
+
+  const base: RepoRow[] = [
+    { id: "a", repositoryId: "web", isRead: 0, isDone: 0, localUnread: true },
+    { id: "b", repositoryId: "api", isRead: 0, isDone: 0, localUnread: false },
+  ];
+
+  test("done removes only the named repo in the unread view", () => {
+    const next = applyRepoAction(base, "web", "done", "unread");
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  test("unsubscribe removes only the named repo in the unread view", () => {
+    const next = applyRepoAction(base, "web", "unsubscribe", "unread");
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  test("done keeps rows unchanged in the done view", () => {
+    const next = applyRepoAction(base, "web", "done", "done");
+    expect(next).toEqual(base);
+  });
+
+  test("done marks in place and clears the flag in the all view", () => {
+    const next = applyRepoAction(base, "web", "done", "all");
+    expect(next[0]).toMatchObject({ isDone: 1, localUnread: false });
+    expect(next[1]).toMatchObject({ isDone: 0, localUnread: false });
+  });
+
+  test("read marks the named repo and clears the flag in any view", () => {
+    for (const state of ["unread", "all", "done"]) {
+      const next = applyRepoAction(base, "web", "read", state);
+      expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
+      expect(next[1]).toMatchObject({ isRead: 0 });
+    }
   });
 });

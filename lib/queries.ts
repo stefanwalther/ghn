@@ -8,7 +8,7 @@ import type {
   ThreadComment,
   WorkflowRun,
 } from "@/lib/github";
-import { type BulkAction, applyOptimisticList } from "./inbox-state";
+import { type BulkAction, applyOptimisticList, applyRepoAction } from "./inbox-state";
 import { matchesTypeFilter } from "./filters";
 import { pollWindow } from "./inbox-state";
 import { syncErrorMessage } from "./sync-errors";
@@ -298,16 +298,7 @@ export function useMarkRepoDone(filters: InboxFilters) {
       const removed = leavesView
         ? previous.mainFlow.filter((item) => item.repositoryId === vars.repositoryId)
         : [];
-      const nextMainFlow =
-        filters.state === "done"
-          ? previous.mainFlow
-          : filters.state === "all"
-            ? previous.mainFlow.map((item) =>
-                item.repositoryId === vars.repositoryId
-                  ? { ...item, isDone: 1, localUnread: false }
-                  : item
-              )
-            : previous.mainFlow.filter((item) => item.repositoryId !== vars.repositoryId);
+      const nextMainFlow = applyRepoAction(previous.mainFlow, vars.repositoryId, "done", filters.state);
       const nextTypes = previous.facets.types.map((facet) => {
         if (facet.value === "all") {
           return { ...facet, count: Math.max(0, facet.count - removed.length) };
@@ -376,11 +367,7 @@ export function useMarkRepoRead(filters: InboxFilters) {
       if (!previous) return { previous };
       const next: NotificationsResponse = {
         ...previous,
-        mainFlow: previous.mainFlow.map((item) =>
-          item.repositoryId === vars.repositoryId
-            ? { ...item, isRead: 1 as const, localUnread: false }
-            : item
-        ),
+        mainFlow: applyRepoAction(previous.mainFlow, vars.repositoryId, "read", filters.state),
       };
       client.setQueryData<NotificationsResponse>(key, next);
       return { previous };
