@@ -54,7 +54,7 @@ For development with hot reload, use `make dev` instead.
 2. Clear the queue: filter by repo or reason, select with `x`, press `e` for done.
 3. Silence one noisy repo in `/repos` by setting it to weekly.
 
-Trying it out? In dev, use Reseed demo data before the first sync, or run `bun run db:seed`.
+Trying it out in dev? Run `bun run db:seed` before the first sync.
 
 Alternative: token-based Docker run, see [docs/docker.md](docs/docker.md).
 

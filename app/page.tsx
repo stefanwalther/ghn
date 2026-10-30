@@ -713,18 +713,6 @@ function InboxView() {
               </span>
             </span>
           ) : null}
-          {lastSyncAt === null ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={async () => {
-                await fetch("/api/notifications/seed", { method: "POST" });
-                await notifQuery.refetch();
-              }}
-            >
-              Reseed demo data
-            </Button>
-          ) : null}
         </div>
       </div>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
