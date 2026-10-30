@@ -72,6 +72,7 @@ async function ensureRepository(
     lastPromotedAt: null,
     nextDueAt: computeNextDueAt(rhythm, now),
     snoozedUntil: null,
+    pinned: 0,
     unreachable: 0,
     createdAt: now,
   });
