@@ -793,6 +793,66 @@ describe("inbox screen", () => {
     expect(await screen.findByText("Nothing finished yet")).toBeInTheDocument();
   });
 
+  test("a thread gone on GitHub stays gone while a bulk triage is pending", async () => {
+    let resolveBulk: (value: Response) => void = () => {};
+    const bulkGate = new Promise<Response>((resolve) => {
+      resolveBulk = resolve;
+    });
+    let gone = false;
+    let bulkConfirmed = false;
+    const racingFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) return bulkGate;
+      if (url.includes("/api/thread/sync")) {
+        gone = true;
+        return Response.json({ gone: true, id: "n_002" });
+      }
+      if (url.includes("/api/notifications")) {
+        if (bulkConfirmed) {
+          return Response.json({ ...notificationsPayload, mainFlow: [], collapsedSection: [] });
+        }
+        return Response.json(
+          gone
+            ? { ...notificationsPayload, mainFlow: [firstItem] }
+            : notificationsPayload
+        );
+      }
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      if (url.includes("/api/sync")) {
+        return Response.json({ fresh: true, pollIntervalSecs: 60, lastSyncAt: Date.now() });
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", racingFetch);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Start a bulk triage and leave it unconfirmed.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Fix flaky login redirect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
+
+    // Meanwhile a per-item sync learns the other thread is gone on GitHub.
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Bump the linter" }));
+    const menu = await screen.findByRole("menu", { name: "Actions for Bump the linter" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Sync this item/ }));
+
+    // The gone thread must stay gone even though the bulk intent is pending.
+    await waitFor(() => {
+      expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+    });
+
+    // The bulk confirm keeps both rows gone.
+    resolveBulk(Response.json({ updated: 1, action: "done" }));
+    bulkConfirmed = true;
+    expect(await screen.findByText("All caught up")).toBeInTheDocument();
+    expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bump the linter")).not.toBeInTheDocument();
+  });
+
   test("a triage action from the drawer closes the drawer and posts the item", async () => {
     const fetchMock = installFetch();
     renderWithQuery(<InboxPage />);

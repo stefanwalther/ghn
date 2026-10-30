@@ -307,12 +307,19 @@ function InboxView() {
     try {
       const result = await syncThread(id);
       if (result.gone === true) {
-        // Confirmed server truth, safe to drop from the shared cache. The
-        // snapshot follows it on the next render since no intent is pending.
+        // Confirmed server truth, safe to drop from the shared cache and
+        // the snapshot. The snapshot follows cache updates on the next
+        // render, but a pending triage intent would freeze it with the gone
+        // row still in it, so drop the row here too.
         client.setQueryData<NotificationsResponse>(notifKey, (old) =>
           old
             ? { ...old, mainFlow: old.mainFlow.filter((row) => row.id !== id) }
             : old
+        );
+        setViewSnapshot((prev) =>
+          prev && prev.key === viewKey
+            ? { key: prev.key, base: prev.base.filter((i) => i.id !== id) }
+            : prev
         );
         setDrawerItem((prev) => (prev?.id === id ? null : prev));
         setNotice("Thread is gone on GitHub; marked done.");
