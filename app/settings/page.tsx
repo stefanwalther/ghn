@@ -9,7 +9,7 @@ import { LoadingSettings } from "@/components/inbox/empty-states";
 import { useSettings } from "@/lib/queries";
 
 interface SettingsPayload {
-  database: { configPath: string; databasePath: string };
+  database: { configPath: string; databasePath: string; sizeBytes: number | null };
   github: {
     connected: boolean;
     viewerLogin: string | null;
@@ -28,6 +28,21 @@ function StatusDot({ ok }: { ok: boolean }) {
       className={`inline-block h-2.5 w-2.5 rounded-full ${ok ? "bg-emerald-500" : "bg-destructive"}`}
     />
   );
+}
+
+export function formatDatabaseSize(sizeBytes: number | null): string {
+  if (sizeBytes === null) return "Not created yet";
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = sizeBytes / 1024;
+  let unit = units[0];
+  for (let i = 0; i < units.length; i++) {
+    unit = units[i];
+    if (value < 1024 || i === units.length - 1) break;
+    value /= 1024;
+  }
+  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded.toLocaleString("en-US")} ${unit} (${sizeBytes.toLocaleString("en-US")} bytes)`;
 }
 
 export default function SettingsPage() {
@@ -118,6 +133,12 @@ export default function SettingsPage() {
                     Config path
                   </dt>
                   <dd className="break-all">{data.database.configPath}</dd>
+                </div>
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+                  <dt className="w-32 shrink-0 font-sans font-medium text-muted-foreground">
+                    Database size
+                  </dt>
+                  <dd className="break-all">{formatDatabaseSize(data.database.sizeBytes)}</dd>
                 </div>
               </dl>
             </CardContent>

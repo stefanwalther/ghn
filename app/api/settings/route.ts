@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { NextResponse } from "next/server";
 import { getResolvedConfig } from "@/lib/config";
 import { getStoredToken, probeConnection, tokenDisabled } from "@/lib/github";
@@ -5,6 +6,27 @@ import { getStoredToken, probeConnection, tokenDisabled } from "@/lib/github";
 export const dynamic = "force-dynamic";
 
 export type TokenSource = "GHN_TOKEN" | "GH_TOKEN" | "GITHUB_TOKEN" | "gh CLI" | "none";
+
+/**
+ * Total on-disk size of the SQLite database, including WAL sidecar files
+ * (`-wal`/`-shm`) when present. Returns null when no database file exists yet.
+ */
+export function getDatabaseSizeBytes(databasePath: string): number | null {
+  let total = 0;
+  let found = false;
+  for (const suffix of ["", "-wal", "-shm"]) {
+    try {
+      const stat = fs.statSync(`${databasePath}${suffix}`);
+      if (stat.isFile()) {
+        total += stat.size;
+        found = true;
+      }
+    } catch {
+      // Missing sidecar files are normal; ignore.
+    }
+  }
+  return found ? total : null;
+}
 
 function describeTokenSource(token: string | null): TokenSource {
   if (tokenDisabled()) return "none";
@@ -48,7 +70,7 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      database: { configPath, databasePath },
+      database: { configPath, databasePath, sizeBytes: getDatabaseSizeBytes(databasePath) },
       github: {
         connected: probe.connected,
         viewerLogin: probe.viewerLogin,

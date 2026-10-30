@@ -583,7 +583,7 @@ export function useUpdateRepository() {
 }
 
 export interface SettingsResponse {
-  database: { configPath: string; databasePath: string };
+  database: { configPath: string; databasePath: string; sizeBytes: number | null };
   github: {
     connected: boolean;
     viewerLogin: string | null;
