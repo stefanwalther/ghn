@@ -373,6 +373,80 @@ describe("the queue drain", () => {
   });
 });
 
+describe("dirty local beats sync", () => {
+  test("a failed push keeps the done row hidden until the retry succeeds", async () => {
+    await db.insert(notifications).values({
+      id: "live_001",
+      repositoryId: "acme--web",
+      subject: "An item done offline",
+      subjectType: "Issue",
+      subjectState: "open",
+      reason: "mention",
+      createdAt: NOW - 3600 * 1000,
+      githubUpdatedAt: null,
+      isRead: 0,
+      isDone: 1,
+      localUnread: 0,
+      sourceUrl: "https://github.com/acme/web/issues/9",
+    });
+    await db.insert(writebackQueue).values({
+      threadId: "live_001",
+      action: "done",
+      attempts: 0,
+      lastError: "network",
+      createdAt: NOW,
+    });
+    standIn.setScenario("/notifications/threads/live_001", { status: 500 });
+
+    const failing = await sync();
+    expect(failing.queueDepth).toBe(1);
+    const kept = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, "live_001"));
+    expect(kept[0]?.isDone).toBe(1);
+
+    standIn.reset();
+    standIn.setThreads(buildThreads(standIn.url));
+    const recovered = await sync({ full: true });
+    expect(recovered.queueDepth).toBe(0);
+    const retries = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(retries.map((r) => r.path)).toEqual([
+      "/notifications/threads/live_001",
+    ]);
+    const still = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, "live_001"));
+    expect(still[0]?.isDone).toBe(1);
+  });
+
+  test("a revived row missing from GitHub survives a full sync", async () => {
+    await db.insert(notifications).values({
+      id: "live_002",
+      repositoryId: "acme--web",
+      subject: "An item brought back",
+      subjectType: "Issue",
+      subjectState: "open",
+      reason: "mention",
+      createdAt: NOW - 3600 * 1000,
+      githubUpdatedAt: null,
+      isRead: 0,
+      isDone: 0,
+      localUnread: 1,
+      sourceUrl: "https://github.com/acme/web/issues/10",
+    });
+    const body = await sync();
+    expect(body.markedDone).toBe(0);
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, "live_002"));
+    expect(rows[0]?.isDone).toBe(0);
+    expect(rows[0]?.localUnread).toBe(1);
+  });
+});
+
 describe("a repeated sync", () => {
   test("inside the poll interval nothing is fetched again", async () => {
     await sync();

@@ -5,6 +5,8 @@ import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RepoSnoozeMenu, useRowVisibility } from "@/components/inbox/repo-snooze-menu";
 import type { DigestGroup } from "@/components/inbox/digest-section";
+import { rankSearch } from "@/lib/search";
+import { stripScopePrefix } from "@/lib/palette-commands";
 import { cn } from "@/lib/utils";
 
 export interface TypeFacet {
@@ -163,6 +165,8 @@ export function FilterSidebar({
   quietGroups = [],
   quietActive = false,
   onQuietView,
+  repoFilter,
+  onRepoFilterChange,
 }: {
   types: TypeFacet[];
   activeType: string;
@@ -180,6 +184,9 @@ export function FilterSidebar({
   quietGroups?: DigestGroup[];
   quietActive?: boolean;
   onQuietView?: () => void;
+  /** Optional controlled repo-list filter; falls back to local state. */
+  repoFilter?: string;
+  onRepoFilterChange?: (query: string) => void;
 }) {
   // Render open on the server and first client paint; saved prefs apply after
   // mount so hydration stays consistent.
@@ -189,6 +196,11 @@ export function FilterSidebar({
     snoozed: false,
     quiet: false,
   });
+  // Controlled when the inbox wires the palette handoff through; otherwise
+  // local so the sidebar works standalone in tests and embeds.
+  const [internalFilter, setInternalFilter] = React.useState("");
+  const repoQuery = repoFilter ?? internalFilter;
+  const setRepoQuery = onRepoFilterChange ?? setInternalFilter;
 
   React.useEffect(() => {
     try {
@@ -223,8 +235,28 @@ export function FilterSidebar({
   const visibleRepos = repos.filter(
     (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
   );
-  const regularRepos = visibleRepos.filter((r) => !r.isSnoozed);
-  const snoozedRepos = visibleRepos.filter((r) => r.isSnoozed);
+  // Same fuzzy engine as the command palette, so a palette query handed
+  // off here behaves identically. Scope qualifiers (`repo:`, `type:`…)
+  // are stripped: this box already lists only repositories, and the
+  // active repo stays pinned so the current filter never vanishes from
+  // under the user.
+  const trimmedQuery = stripScopePrefix(repoQuery).trim();
+  const searchedRepos = trimmedQuery
+    ? rankSearch(trimmedQuery, visibleRepos, (r) => [r.fullName], visibleRepos.length).map(
+        (r) => r.item
+      )
+    : visibleRepos;
+  const listedRepos =
+    activeRepo !== "all" && trimmedQuery
+      ? searchedRepos.some((r) => r.id === activeRepo)
+        ? searchedRepos
+        : [
+            ...visibleRepos.filter((r) => r.id === activeRepo),
+            ...searchedRepos,
+          ]
+      : searchedRepos;
+  const regularRepos = listedRepos.filter((r) => !r.isSnoozed);
+  const snoozedRepos = listedRepos.filter((r) => r.isSnoozed);
   const activeSnoozedName = snoozedRepos.find((r) => r.id === activeRepo)?.fullName;
   const quietTotal = quietGroups.reduce((n, g) => n + g.pendingCount, 0);
 
@@ -312,6 +344,42 @@ export function FilterSidebar({
         </button>
         {collapsed.repos ? null : (
         <div className="flex flex-col gap-0.5">
+          <div className="relative px-0 pb-1">
+            <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-[calc(50%+2px)] text-muted-foreground">⌕</span>
+            <input
+              type="search"
+              value={repoQuery}
+              onChange={(e) => setRepoQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && repoQuery) {
+                  e.stopPropagation();
+                  setRepoQuery("");
+                }
+              }}
+              placeholder="Filter repositories…"
+              aria-label="Filter repositories"
+              autoComplete="off"
+              spellCheck={false}
+              className="h-8 w-full rounded-md border border-input bg-background pr-7 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
+            />
+            {repoQuery ? (
+              <button
+                type="button"
+                aria-label="Clear repository filter"
+                onClick={() => setRepoQuery("")}
+                className="absolute top-1/2 right-1 -translate-y-[calc(50%+2px)] cursor-pointer rounded px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+          {trimmedQuery ? (
+            <p className="px-3 pb-1 text-xs text-muted-foreground" role="status">
+              {listedRepos.length === 0
+                ? `No repositories match “${trimmedQuery}”.`
+                : `${listedRepos.length} of ${visibleRepos.length} repositories`}
+            </p>
+          ) : null}
           <SidebarButton
             active={activeRepo === "all"}
             label="Show all repositories"
@@ -337,6 +405,15 @@ export function FilterSidebar({
               onCopied={onCopied}
             />
           ))}
+          {trimmedQuery && regularRepos.length === 0 && snoozedRepos.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => setRepoQuery("")}
+              className="cursor-pointer rounded-md px-3 py-2 text-left text-sm text-muted-foreground underline-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Clear the filter to see every repository.
+            </button>
+          ) : null}
         </div>
         )}
       </section>

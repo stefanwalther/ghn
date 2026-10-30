@@ -17,6 +17,7 @@ export interface RepoRowData {
   snoozedUntil: number | null;
   isSnoozed: boolean;
   snoozeLabel: string;
+  pinned: boolean;
 }
 
 function toLocalInputValue(ts: number): string {
@@ -29,11 +30,13 @@ export function RepoRow({
   repo,
   onRhythm,
   onSnooze,
+  onPin,
   busy,
 }: {
   repo: RepoRowData;
   onRhythm: (id: string, rhythm: string) => void;
   onSnooze: (id: string, snoozedUntil: number | null) => void;
+  onPin: (id: string, pinned: boolean) => void;
   busy: boolean;
 }) {
   const presets = React.useMemo(() => snoozePresets(Date.now()), []);
@@ -70,6 +73,7 @@ export function RepoRow({
           <span className="text-sm font-medium">{repo.fullName}</span>
           <Badge variant="muted">{repo.ownership}</Badge>
           <Badge variant="muted">{repo.pendingCount} pending</Badge>
+          {repo.pinned ? <Badge variant="accent">Pinned</Badge> : null}
           {repo.isSnoozed ? <Badge variant="accent">Snoozed until {repo.snoozeLabel}</Badge> : null}
           {repo.unreachable ? (
             <Badge
@@ -87,6 +91,16 @@ export function RepoRow({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => onPin(repo.id, !repo.pinned)}
+          aria-label={`${repo.pinned ? "Unpin" : "Pin"} ${repo.fullName}`}
+          title={repo.pinned ? "Unpin this repository" : "Pin this repository"}
+        >
+          {repo.pinned ? "Unpin" : "Pin"}
+        </Button>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           Rhythm
           <Select

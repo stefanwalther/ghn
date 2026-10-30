@@ -6,6 +6,7 @@ import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
 import { isClosedItem, isMergedItem, matchAge, matchesTypeFilter, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
 import { parsePaletteLimit } from "@/lib/view-state";
 import { readSyncStatus } from "@/lib/sync";
+import { queueDepth as writebackDepth } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
   const repos = await db.select().from(repositories);
   const reposById = new Map(repos.map((r) => [r.id, r]));
   const { lastSyncAt, stale } = await readSyncStatus(db, now);
+  const pendingPushes = await writebackDepth(db);
 
   const rows = await db.select().from(notifications);
   const repoName = (id: string) => reposById.get(id)?.fullName ?? id;
@@ -226,5 +228,5 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({ now, lastSyncAt, stale, mainFlow: limit !== null ? mainFlow.slice(0, limit) : mainFlow, collapsedSection, facets });
+  return NextResponse.json({ now, lastSyncAt, stale, queueDepth: pendingPushes, mainFlow: limit !== null ? mainFlow.slice(0, limit) : mainFlow, collapsedSection, facets });
 }

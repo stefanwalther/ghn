@@ -72,6 +72,7 @@ async function ensureRepository(
     lastPromotedAt: null,
     nextDueAt: computeNextDueAt(rhythm, now),
     snoozedUntil: null,
+    pinned: 0,
     unreachable: 0,
     createdAt: now,
   });
@@ -238,10 +239,11 @@ export async function applyRemoteDone(
   queuedThreadIds: Set<string>
 ): Promise<{ markedDone: number }> {
   const rows = await db
-    .select({ id: notifications.id })
+    .select({ id: notifications.id, localUnread: notifications.localUnread })
     .from(notifications)
     .where(sql`${notifications.isDone} = 0`);
   const missing = rows
+    .filter((r) => (r.localUnread ?? 0) === 0)
     .map((r) => r.id)
     .filter((id) => !id.startsWith("n_") && !seenIds.has(id) && !queuedThreadIds.has(id));
   if (missing.length > 0) {

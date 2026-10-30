@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ExternalLink, FolderGit2, Gauge, Github, Search, Settings } from "lucide-react";
+import { Bell, CircleHelp, ExternalLink, FolderGit2, Gauge, Github, Search, Settings, Settings2 } from "lucide-react";
 import * as React from "react";
 import { ContributionsChip } from "@/components/contributions-chip";
 import { BrandMark } from "@/components/brand-mark";
@@ -22,6 +22,7 @@ const NAV = [
   { href: "/repos", label: "Repositories", icon: FolderGit2 },
   { href: "/rate-limits", label: "Rate limits", icon: Gauge },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/help", label: "Help", icon: CircleHelp },
 ];
 
 const GITHUB_NAV = [

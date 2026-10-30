@@ -8,7 +8,7 @@ import type {
   ThreadComment,
   WorkflowRun,
 } from "@/lib/github";
-import { type BulkAction, applyOptimisticList } from "./inbox-state";
+import { type BulkAction, applyOptimisticList, applyRepoAction } from "./inbox-state";
 import { matchesTypeFilter } from "./filters";
 import { pollWindow } from "./inbox-state";
 import { syncErrorMessage } from "./sync-errors";
@@ -90,6 +90,7 @@ export interface NotificationsResponse {
   facets: { types: TypeFacet[]; repos: RepoFacet[] };
   lastSyncAt: number | null;
   stale: boolean;
+  queueDepth: number;
 }
 
 export interface RepositoriesResponse {
@@ -253,8 +254,11 @@ export function useBulkAction(filters: InboxFilters) {
       if (context?.previous) client.setQueryData(key, context.previous);
     },
     onSettled: () => {
-      client.invalidateQueries({ queryKey: key });
+      const notificationsRefresh = client.invalidateQueries({
+        queryKey: ["notifications"],
+      });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
+      return notificationsRefresh;
     },
   });
 }
@@ -287,12 +291,14 @@ export function useMarkRepoDone(filters: InboxFilters) {
       await client.cancelQueries({ queryKey: key });
       const previous = client.getQueryData<NotificationsResponse>(key);
       if (!previous) return { previous };
-      const removed = previous.mainFlow.filter(
-        (item) => item.repositoryId === vars.repositoryId
-      );
-      const nextMainFlow = previous.mainFlow.filter(
-        (item) => item.repositoryId !== vars.repositoryId
-      );
+      // Done rows stay put in the done view and are marked in place in the
+      // all view, matching the confirmed server state. Only the unread view
+      // removes rows.
+      const leavesView = filters.state !== "done" && filters.state !== "all";
+      const removed = leavesView
+        ? previous.mainFlow.filter((item) => item.repositoryId === vars.repositoryId)
+        : [];
+      const nextMainFlow = applyRepoAction(previous.mainFlow, vars.repositoryId, "done", filters.state);
       const nextTypes = previous.facets.types.map((facet) => {
         if (facet.value === "all") {
           return { ...facet, count: Math.max(0, facet.count - removed.length) };
@@ -307,12 +313,16 @@ export function useMarkRepoDone(filters: InboxFilters) {
       });
       const nextRepos = previous.facets.repos.map((repo) =>
         repo.id === vars.repositoryId
-          ? { ...repo, main: 0, quiet: 0, pending: 0 }
+          ? leavesView
+            ? { ...repo, main: 0, quiet: 0, pending: 0 }
+            : { ...repo, pending: 0 }
           : repo
       );
-      const nextCollapsed = (previous.collapsedSection ?? []).filter(
-        (group) => group.repositoryId !== vars.repositoryId
-      );
+      const nextCollapsed = leavesView
+        ? (previous.collapsedSection ?? []).filter(
+            (group) => group.repositoryId !== vars.repositoryId
+          )
+        : (previous.collapsedSection ?? []);
       const next: NotificationsResponse = {
         ...previous,
         mainFlow: nextMainFlow,
@@ -326,8 +336,11 @@ export function useMarkRepoDone(filters: InboxFilters) {
       if (context?.previous) client.setQueryData(key, context.previous);
     },
     onSettled: () => {
-      client.invalidateQueries({ queryKey: key });
+      const notificationsRefresh = client.invalidateQueries({
+        queryKey: ["notifications"],
+      });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
+      return notificationsRefresh;
     },
   });
 }
@@ -358,11 +371,7 @@ export function useMarkRepoRead(filters: InboxFilters) {
       if (!previous) return { previous };
       const next: NotificationsResponse = {
         ...previous,
-        mainFlow: previous.mainFlow.map((item) =>
-          item.repositoryId === vars.repositoryId
-            ? { ...item, isRead: 1 as const, localUnread: false }
-            : item
-        ),
+        mainFlow: applyRepoAction(previous.mainFlow, vars.repositoryId, "read", filters.state),
         collapsedSection: (previous.collapsedSection ?? []).map((group) =>
           group.repositoryId === vars.repositoryId
             ? { ...group, unreadCount: 0 }
@@ -382,8 +391,11 @@ export function useMarkRepoRead(filters: InboxFilters) {
       if (context?.previous) client.setQueryData(key, context.previous);
     },
     onSettled: () => {
-      client.invalidateQueries({ queryKey: key });
+      const notificationsRefresh = client.invalidateQueries({
+        queryKey: ["notifications"],
+      });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
+      return notificationsRefresh;
     },
   });
 }
@@ -540,6 +552,7 @@ export function useSyncFlow(filters: InboxFilters) {
 export interface RepositoryPatch {
   rhythm?: string;
   snoozedUntil?: number | null;
+  pinned?: boolean;
 }
 
 /**
@@ -585,7 +598,7 @@ export function useUpdateRepository() {
 }
 
 export interface SettingsResponse {
-  database: { configPath: string; databasePath: string };
+  database: { configPath: string; databasePath: string; sizeBytes: number | null };
   github: {
     connected: boolean;
     viewerLogin: string | null;
