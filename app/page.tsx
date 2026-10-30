@@ -396,7 +396,7 @@ function InboxView() {
 
   const markAllDoneBusy = busy || filters.state === "done";
 
-  /** Marks every pending item of one repo read, with rollback on failure. */
+  /** Marks every unread item of one repo read, with rollback on failure. */
   async function markRepoRead(repositoryId: string) {
     if (markRepoReadMutation.isPending) return;
     setNotice(null);
@@ -417,7 +417,7 @@ function InboxView() {
       const updated = typeof body?.updated === "number" ? body.updated : 0;
       const queued = typeof body?.queued === "number" ? body.queued : 0;
       if (updated === 0 && queued === 0) {
-        setNotice(`No pending items for ${repoName}.`);
+        setNotice(`All items for ${repoName} are already read.`);
       } else {
         const queuedNotice = describeBulkResult("read", {
           updated,

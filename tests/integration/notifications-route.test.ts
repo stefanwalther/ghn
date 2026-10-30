@@ -50,6 +50,8 @@ interface RepoFacet {
   fullName: string;
   main: number;
   quiet: number;
+  pending?: number;
+  unread?: number;
   isSnoozed: boolean;
 }
 
@@ -60,6 +62,7 @@ interface CollapsedGroup {
   nextDueAt: number | null;
   nextDueLabel: string;
   pendingCount: number;
+  unreadCount?: number;
   items: unknown[];
   isSnoozed: boolean;
   snoozeLabel: string;
@@ -373,6 +376,38 @@ describe("the facet counts", () => {
     const quiet = body.facets.repos.reduce((sum, r) => sum + r.quiet, 0);
     expect(main).toBe(30);
     expect(quiet).toBe(170);
+  });
+
+  test("the repository facets carry actionable pending and unread counts", async () => {
+    const body = await load();
+    // acme/web is seeded fully read: 10 pending but 0 unread.
+    expect(repoFacet(body.facets, "acme--web")).toMatchObject({
+      pending: 10,
+      unread: 0,
+    });
+    // acme/api is seeded fully unread: 10 pending and 10 unread.
+    expect(repoFacet(body.facets, "acme--api")).toMatchObject({
+      pending: 10,
+      unread: 10,
+    });
+    // A quiet repo reports both totals: 25 pending, 16 unread.
+    expect(repoFacet(body.facets, "vendor--slow-dep")).toMatchObject({
+      pending: 25,
+      unread: 16,
+    });
+    const group = body.collapsedSection.find(
+      (g) => g.repositoryId === "vendor--slow-dep"
+    );
+    expect(group?.pendingCount).toBe(25);
+    expect(group?.unreadCount).toBe(16);
+  });
+
+  test("the all-state facets keep done rows visible but report zero pending", async () => {
+    const body = await load("?state=all");
+    // In the all view the main badge still counts done rows, but the
+    // done button must see zero actionable rows once everything is done.
+    // Seed has nothing done, so pending still equals the visible total.
+    expect(repoFacet(body.facets, "acme--web").pending).toBe(10);
   });
 });
 

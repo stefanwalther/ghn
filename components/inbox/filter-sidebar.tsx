@@ -18,6 +18,10 @@ export interface RepoFacet {
   fullName: string;
   main: number;
   quiet: number;
+  /** Not-done rows among the current filter; drives the done button. */
+  pending?: number;
+  /** Unread rows among the current filter; drives the read button. */
+  unread?: number;
   isSnoozed: boolean;
 }
 
@@ -80,6 +84,10 @@ function RepoFilterRow({
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
+  // Actionable counts fall back to the visible total for payloads that
+  // predate the pending/unread facet fields (tests, cached responses).
+  const doneable = r.pending ?? pendingTotal;
+  const readable = r.unread ?? pendingTotal;
   return (
     <div
       className="relative"
@@ -115,11 +123,11 @@ function RepoFilterRow({
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
           onMarkAllDone={onMarkAllDone}
-          markAllDoneDisabled={markAllDoneBusy || pendingTotal === 0}
-          markAllDoneCount={pendingTotal}
+          markAllDoneDisabled={markAllDoneBusy || doneable === 0}
+          markAllDoneCount={doneable}
           onMarkAllRead={onMarkAllRead}
-          markAllReadDisabled={markAllReadBusy || pendingTotal === 0}
-          markAllReadCount={pendingTotal}
+          markAllReadDisabled={markAllReadBusy || readable === 0}
+          markAllReadCount={readable}
           onCopied={onCopied}
           visible={visible}
           contextAnchor={contextAnchor}

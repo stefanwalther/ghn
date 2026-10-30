@@ -252,22 +252,22 @@ describe("the repo-wide done action", () => {
 });
 
 describe("the repo-wide read action", () => {
-  test("it marks every pending notification of the repository read", async () => {
+  test("it marks every unread notification of the repository read", async () => {
     const before = await db
       .select({ id: notifications.id })
       .from(notifications)
-      .where(eq(notifications.repositoryId, "acme--web"));
+      .where(eq(notifications.repositoryId, "acme--api"));
     expect(before.length).toBeGreaterThan(1);
 
     const { status, body } = await bulk({
-      repositoryId: "acme--web",
+      repositoryId: "acme--api",
       action: "read",
     });
     expect(status).toBe(200);
     expect(body).toMatchObject({
       updated: before.length,
       action: "read",
-      repositoryId: "acme--web",
+      repositoryId: "acme--api",
     });
 
     const after = await db
@@ -277,15 +277,60 @@ describe("the repo-wide read action", () => {
         isDone: notifications.isDone,
       })
       .from(notifications)
-      .where(eq(notifications.repositoryId, "acme--web"));
+      .where(eq(notifications.repositoryId, "acme--api"));
     expect(after.every((r) => r.isRead === 1)).toBe(true);
     expect(after.every((r) => r.isDone === 0)).toBe(true);
 
-    const other = await row("n_002");
-    expect(other?.isRead).toBe(0);
+    // Another repository is untouched: n_001 (acme/web, already read)
+    // stays read and n_003 (acme/mobile, unread) stays unread.
+    expect((await row("n_001"))?.isRead).toBe(1);
+    expect((await row("n_003"))?.isRead).toBe(0);
 
     const requests = standIn.requests.filter((r) => r.method === "PATCH");
     expect(requests.length).toBe(before.length);
+  });
+
+  test("it marks done-but-unread notifications read", async () => {
+    // Regression: accelins/it-pylon showed 202 done rows with 87 still
+    // unread, but repo-wide read reported "No pending items" and changed
+    // nothing because it filtered on isDone only.
+    await bulk({ repositoryId: "acme--api", action: "done" });
+    const doneRows = await db
+      .select({ id: notifications.id, isRead: notifications.isRead })
+      .from(notifications)
+      .where(eq(notifications.repositoryId, "acme--api"));
+    expect(doneRows.every((r) => r.isRead === 0)).toBe(true);
+
+    const { status, body } = await bulk({
+      repositoryId: "acme--api",
+      action: "read",
+    });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: doneRows.length,
+      action: "read",
+      repositoryId: "acme--api",
+    });
+
+    const after = await db
+      .select({ id: notifications.id, isRead: notifications.isRead })
+      .from(notifications)
+      .where(eq(notifications.repositoryId, "acme--api"));
+    expect(after.every((r) => r.isRead === 1)).toBe(true);
+  });
+
+  test("it reports zero when the repository is already fully read", async () => {
+    // acme--web is seeded fully read, so the first call has nothing to do.
+    const { status, body } = await bulk({
+      repositoryId: "acme--web",
+      action: "read",
+    });
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      updated: 0,
+      action: "read",
+      repositoryId: "acme--web",
+    });
   });
 
   test("it reports zero when the repository has nothing pending", async () => {
