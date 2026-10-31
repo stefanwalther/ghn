@@ -67,6 +67,41 @@ export async function enqueueWritebacks(
   }
 }
 
+/**
+ * Synchronous bulk replacement enqueue for use inside `db.transaction`.
+ * Drizzle Bun SQLite transactions take a sync callback; awaiting inside
+ * one is the footgun, so this variant uses `.run()` throughout.
+ */
+export function enqueueWritebacksSync(
+  tx: Pick<Db, "delete" | "insert">,
+  ids: string[],
+  action: WritebackAction,
+  lastError: string | null,
+  now: number
+): void {
+  if (ids.length === 0) return;
+  for (const chunk of chunkIds(ids)) {
+    tx
+      .delete(writebackQueue)
+      .where(inArray(writebackQueue.threadId, chunk))
+      .run();
+  }
+  for (const chunk of chunkIds(ids)) {
+    tx
+      .insert(writebackQueue)
+      .values(
+        chunk.map((threadId) => ({
+          threadId,
+          action,
+          attempts: 0,
+          lastError,
+          createdAt: now,
+        }))
+      )
+      .run();
+  }
+}
+
 export async function getQueuedThreadIds(db: Db): Promise<Set<string>> {
   const rows = await db.select({ threadId: writebackQueue.threadId }).from(writebackQueue);
   return new Set(rows.map((r) => r.threadId));

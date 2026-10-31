@@ -15,6 +15,7 @@ import {
   drainWritebacks,
   enqueueWriteback,
   enqueueWritebacks,
+  enqueueWritebacksSync,
 } from "@/lib/queue";
 import { mapWithLimit } from "@/lib/sync";
 import type { Db } from "@/db/client";
@@ -40,6 +41,24 @@ async function updateNotificationsChunked(
       .update(notifications)
       .set(set)
       .where(inArray(notifications.id, chunk));
+  }
+}
+
+/**
+ * Synchronous chunked update for use inside `db.transaction`. Same
+ * atomicity note as `enqueueWritebacksSync`: `.run()`, never await.
+ */
+function updateNotificationsChunkedSync(
+  tx: Pick<Db, "update">,
+  cleanIds: string[],
+  set: Partial<typeof notifications.$inferInsert>
+): void {
+  for (const chunk of chunkIds(cleanIds)) {
+    tx
+      .update(notifications)
+      .set(set)
+      .where(inArray(notifications.id, chunk))
+      .run();
   }
 }
 
@@ -106,9 +125,13 @@ async function applyBulkWithRemote(
   repositoryId?: string
 ) {
   const now = nowMs();
-  await updateNotificationsChunked(db, cleanIds, localSet);
   if (cleanIds.length > BULK_CONFIRM_THRESHOLD) {
-    await enqueueWritebacks(db, cleanIds, action, null, now);
+    // One transaction: a queue failure must never leave rows hidden
+    // without their matching writebacks.
+    db.transaction((tx) => {
+      updateNotificationsChunkedSync(tx, cleanIds, localSet);
+      enqueueWritebacksSync(tx, cleanIds, action, null, now);
+    });
     scheduleBackground(cleanIds, action);
     const base = { updated: cleanIds.length, action };
     const extra = repositoryId !== undefined ? { repositoryId } : {};
@@ -119,6 +142,7 @@ async function applyBulkWithRemote(
       queued: cleanIds.length,
     });
   }
+  await updateNotificationsChunked(db, cleanIds, localSet);
   const token = await getStoredToken();
   const remotes = await mapWithLimit(cleanIds, REMOTE_CONCURRENCY, (id) =>
     token
@@ -255,18 +279,23 @@ export async function POST(request: Request) {
   }
 
   if (action === "unsubscribe") {
-    await updateNotificationsChunked(db, cleanIds, { isDone: 1 });
     const pairs = new Map(
       existing.map((n) => [`${n.repositoryId}::${n.subject}`, n])
     );
-    for (const n of pairs.values()) {
-      await db
-        .insert(mutedSubjects)
-        .values({ repositoryId: n.repositoryId, subject: n.subject })
-        .onConflictDoNothing();
-    }
     if (cleanIds.length > BULK_CONFIRM_THRESHOLD) {
-      await enqueueWritebacks(db, cleanIds, "unsubscribe", null, now);
+      // One transaction: local unsubscribe, mutes, and queue replacement
+      // commit together or not at all.
+      db.transaction((tx) => {
+        updateNotificationsChunkedSync(tx, cleanIds, { isDone: 1 });
+        for (const n of pairs.values()) {
+          tx
+            .insert(mutedSubjects)
+            .values({ repositoryId: n.repositoryId, subject: n.subject })
+            .onConflictDoNothing()
+            .run();
+        }
+        enqueueWritebacksSync(tx, cleanIds, "unsubscribe", null, now);
+      });
       scheduleBackground(cleanIds, "unsubscribe");
       return NextResponse.json({
         updated: cleanIds.length,
@@ -274,6 +303,13 @@ export async function POST(request: Request) {
         remote: "background",
         queued: cleanIds.length,
       });
+    }
+    await updateNotificationsChunked(db, cleanIds, { isDone: 1 });
+    for (const n of pairs.values()) {
+      await db
+        .insert(mutedSubjects)
+        .values({ repositoryId: n.repositoryId, subject: n.subject })
+        .onConflictDoNothing();
     }
     const token = await getStoredToken();
     let queued = 0;
