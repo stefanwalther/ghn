@@ -107,7 +107,7 @@ make web-open    # ensure the server is running and fresh (restart when stale), 
 | `GHN_RELEASES_API_BASE` | `https://api.github.com` | Override for the release check (tests, mocks) |
 | `GHN_DISABLE_UPDATE_CHECK` | unset | Set to `1` to skip the release check and always show the running version |
 
-The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. The default lives outside the repo at `~/.local/share/ghn/ghn.db` (`$XDG_DATA_HOME/ghn/ghn.db` when set), so it is never committed and never synced by Dropbox. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
+The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. When `$XDG_DATA_HOME` is unset, the default lives outside the repo at `~/.local/share/ghn/ghn.db`. If the selected path is in Dropbox, whether through `$XDG_DATA_HOME`, `GHN_DB_PATH`, or `databasePath`/`dbPath`, SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
 
 `GHN_TOKEN` and `GHN_NOW` exist for the test suite. `GHN_TOKEN` is what
 guarantees that no check can reach a real account on a machine where `gh` is
