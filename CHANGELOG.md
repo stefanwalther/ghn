@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.7.0...ghn-v0.8.0) (2026-10-31)
+
+
+### Features
+
+* **inbox:** local-first bulk triage, background sync ([#124](https://github.com/stefanwalther/ghn/issues/124)) ([2a315f0](https://github.com/stefanwalther/ghn/commit/2a315f097ef4ec62f6863585c2d6dc66ab74f182))
+
 ## [0.7.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.6.0...ghn-v0.7.0) (2026-10-31)
 
 
