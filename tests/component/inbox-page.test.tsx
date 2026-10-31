@@ -1579,6 +1579,7 @@ describe("repo-wide inbox actions", () => {
   });
 
   test("asks to confirm before marking a large repo done", async () => {
+    nav.params = new URLSearchParams("repo=acme--web");
     const fetchMock = installFetch({
       notifications: {
         ...notificationsPayload,
@@ -1642,6 +1643,12 @@ describe("repo-wide inbox actions", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "30 marked done (1 visible + 29 quiet), syncing to GitHub in background."
     );
+    // The background path empties the repo too, so the filter moves on.
+    await waitFor(() => {
+      expect(nav.replace).toHaveBeenCalledWith("/?repo=acme--api", {
+        scroll: false,
+      });
+    });
   });
 
   test("a second repo stays usable while the first syncs", async () => {
