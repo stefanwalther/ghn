@@ -96,9 +96,7 @@ function scheduleBackground(
       } | null;
       if (mod && typeof mod.after === "function") {
         try {
-          mod.after(() => {
-            void drainInBackground(cleanIds, action);
-          });
+          mod.after(() => drainInBackground(cleanIds, action));
           return;
         } catch {
           // after() outside a request scope throws: fall through below.

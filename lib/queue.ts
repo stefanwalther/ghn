@@ -146,11 +146,12 @@ export async function drainWritebacks(
           ? await markThreadRead(token, id)
           : await setSubscriptionIgnored(token, id, true);
     if (remote.ok) {
+      // Delete only the rows this drain selected: a second request may
+      // have replaced the row while the remote call was in flight, and
+      // that replacement still needs its own retry.
       await db
         .delete(writebackQueue)
-        .where(
-          and(eq(writebackQueue.threadId, id), eq(writebackQueue.action, action))
-        );
+        .where(inArray(writebackQueue.id, pending.map((r) => r.id)));
       succeeded += 1;
     } else {
       for (const r of pending) {
