@@ -73,4 +73,4 @@ principles or expanded guidance, PATCH for wording fixes. All plans and
 reviews MUST verify compliance in their Constitution Check and call out
 any vacuous pass. Use `docs/development.md` for runtime guidance.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-24 | **Last Amended**: 2026-10-24
+**Version**: 1.1.0 | **Ratified**: 2026-10-24 | **Last Amended**: 2026-10-31
