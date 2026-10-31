@@ -95,15 +95,22 @@ describe("resolveDatabasePath", () => {
     const main = path.join(dir, "main");
     fs.mkdirSync(main);
     execFileSync("git", ["init"], { cwd: main, stdio: "ignore" });
-    execFileSync("git", ["config", "user.email"], {
-      cwd: main,
-      stdio: "ignore",
-    });
-    execFileSync("git", ["config", "user.name"], { cwd: main, stdio: "ignore" });
-    execFileSync("git", ["commit", "--allow-empty", "-m", "init"], {
-      cwd: main,
-      stdio: "ignore",
-    });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.email=t@t.example",
+        "-c",
+        "user.name=t",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "init",
+      ],
+      { cwd: main, stdio: "ignore" }
+    );
     const wt = path.join(dir, "wt");
     execFileSync("git", ["worktree", "add", wt], { cwd: main, stdio: "ignore" });
     const env = { GIT_CEILING_DIRECTORIES: dir };
