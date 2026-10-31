@@ -4,7 +4,7 @@ import path from "node:path";
 
 export const APP_NAME = "ghn";
 export const CONFIG_FILENAME = "config.json";
-export const DEFAULT_DB_RELATIVE = "./data/ghn.db";
+export const DB_FILENAME = "ghn.db";
 
 export interface FileConfig {
   databasePath?: string;
@@ -85,6 +85,17 @@ function pickDatabaseRaw(fileConfig: FileConfig): string | undefined {
   return undefined;
 }
 
+export function getDefaultDatabasePath(
+  env: Env = process.env,
+  homeDir: string = os.homedir()
+): string {
+  const xdg = env.XDG_DATA_HOME?.trim();
+  if (xdg) {
+    return path.join(expandPath(xdg, env, homeDir), APP_NAME, DB_FILENAME);
+  }
+  return path.join(homeDir, ".local", "share", APP_NAME, DB_FILENAME);
+}
+
 export function resolveDatabasePath(
   opts: {
     env?: Env;
@@ -112,7 +123,7 @@ export function resolveDatabasePath(
     return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
   }
 
-  return path.resolve(cwd, DEFAULT_DB_RELATIVE);
+  return getDefaultDatabasePath(env, homeDir);
 }
 
 export function getDatabasePath(): string {

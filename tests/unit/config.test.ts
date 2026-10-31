@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   expandPath,
   getConfigPath,
+  getDefaultDatabasePath,
   loadFileConfig,
   resolveDatabasePath,
 } from "@/lib/config";
@@ -16,6 +17,7 @@ afterEach(() => {
   delete process.env.GHN_DB_PATH;
   delete process.env.GHN_CONFIG_PATH;
   delete process.env.XDG_CONFIG_HOME;
+  delete process.env.XDG_DATA_HOME;
 });
 
 describe("getConfigPath", () => {
@@ -58,9 +60,15 @@ describe("expandPath", () => {
 });
 
 describe("resolveDatabasePath", () => {
-  test("falls back to ./data/ghn.db under cwd", () => {
+  test("falls back to ~/.local/share/ghn/ghn.db", () => {
     expect(resolveDatabasePath({ env: {}, homeDir: HOME, cwd: CWD })).toBe(
-      path.resolve(CWD, "./data/ghn.db")
+      path.join(HOME, ".local", "share", "ghn", "ghn.db")
+    );
+  });
+
+  test("getDefaultDatabasePath respects XDG_DATA_HOME", () => {
+    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "/xdg-data" }, HOME)).toBe(
+      path.join("/xdg-data", "ghn", "ghn.db")
     );
   });
 
@@ -76,7 +84,7 @@ describe("resolveDatabasePath", () => {
     ).toBe("/env/db.sqlite");
   });
 
-  test("config databasePath supports Dropbox-style ~/ expansion", () => {
+  test("config databasePath supports ~/ expansion", () => {
     expect(
       resolveDatabasePath({
         env: {},

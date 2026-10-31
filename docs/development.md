@@ -100,14 +100,14 @@ make web-open    # ensure the server is running and fresh (restart when stale), 
 |-----|---------|---------|
 | `PORT` | `21120` | Dev and prod server port |
 | `GHN_API_BASE` | `https://api.github.com` | Override for GitHub Enterprise or mocks |
-| `GHN_DB_PATH` | `./data/ghn.db` | Database location, highest precedence |
+| `GHN_DB_PATH` | `~/.local/share/ghn/ghn.db` (`$XDG_DATA_HOME/ghn/ghn.db` when set) | Database location, highest precedence |
 | `GHN_CONFIG_PATH` | `$XDG_CONFIG_HOME/ghn/config.json` | Override the config file location |
 | `GHN_TOKEN` | unset | Override the GitHub credential. An empty value means no credential at all, and never falls back to the local `gh` helper |
 | `GHN_NOW` | unset | Freeze the instant the application reads as "now" |
 | `GHN_RELEASES_API_BASE` | `https://api.github.com` | Override for the release check (tests, mocks) |
 | `GHN_DISABLE_UPDATE_CHECK` | unset | Set to `1` to skip the release check and always show the running version |
 
-The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
+The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. The default lives outside the repo at `~/.local/share/ghn/ghn.db` (`$XDG_DATA_HOME/ghn/ghn.db` when set), so it is never committed and never synced by Dropbox. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
 
 `GHN_TOKEN` and `GHN_NOW` exist for the test suite. `GHN_TOKEN` is what
 guarantees that no check can reach a real account on a machine where `gh` is
