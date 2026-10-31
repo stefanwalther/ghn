@@ -1080,6 +1080,24 @@ describe("RepoSnoozeMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  test("describes the bulk entries with their hints", () => {
+    renderSnoozeMenu({
+      onMarkAllDone: vi.fn(),
+      markAllDoneCount: 115,
+      markAllDoneMain: 90,
+      markAllDoneQuiet: 25,
+      onMarkAllRead: vi.fn(),
+      markAllReadCount: 115,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+
+    const done = screen.getByRole("menuitem", { name: "Mark all as done (115)" });
+    const read = screen.getByRole("menuitem", { name: "Mark all as read (115)" });
+    expect(done).toHaveAccessibleDescription("Removes from inbox · 90 visible + 25 quiet");
+    expect(read).toHaveAccessibleDescription("Stays in list");
+  });
+
   test("shows the quiet breakdown in the done hint", () => {
     renderSnoozeMenu({
       onMarkAllDone: vi.fn(),

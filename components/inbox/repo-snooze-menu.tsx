@@ -141,6 +141,10 @@ export function RepoSnoozeMenu({
 
   // Fresh timestamps at open time so "1 hr" never goes stale on a long-lived page.
   const [presets, setPresets] = React.useState(() => inboxPresets(Date.now()));
+  // Unique hint ids per menu instance for aria-describedby below.
+  const hintIdBase = React.useId();
+  const markAllDoneHintId = `${hintIdBase}-done-hint`;
+  const markAllReadHintId = `${hintIdBase}-read-hint`;
 
   // Parent callback without re-subscribing effects on every parent render.
   const contextCloseRef = React.useRef(onContextClose);
@@ -415,6 +419,7 @@ export function RepoSnoozeMenu({
                     type="button"
                     role="menuitem"
                     aria-label={markAllDoneLabel}
+                    aria-describedby={markAllDoneHintId}
                     disabled={markAllDoneDisabled}
                     onClick={chooseMarkAllDone}
                     className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -422,7 +427,7 @@ export function RepoSnoozeMenu({
                     <CheckCheck className="h-4 w-4 shrink-0" aria-hidden />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{markAllDoneLabel}</span>
-                      <span aria-hidden="true" className="block truncate text-xs text-muted-foreground">
+                      <span id={markAllDoneHintId} className="block truncate text-xs text-muted-foreground">
                         {markAllDoneHint}
                       </span>
                     </span>
@@ -469,6 +474,7 @@ export function RepoSnoozeMenu({
                   type="button"
                   role="menuitem"
                   aria-label={markAllReadLabel}
+                  aria-describedby={markAllReadHintId}
                   disabled={markAllReadDisabled}
                   onClick={chooseMarkAllRead}
                   className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm opacity-80 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -476,7 +482,7 @@ export function RepoSnoozeMenu({
                   <MailOpen className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{markAllReadLabel}</span>
-                    <span aria-hidden="true" className="block truncate text-xs text-muted-foreground">
+                    <span id={markAllReadHintId} className="block truncate text-xs text-muted-foreground">
                       {markAllReadHint}
                     </span>
                   </span>
