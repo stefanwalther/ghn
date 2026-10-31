@@ -69,7 +69,7 @@ describe("enqueueWritebacks", () => {
 });
 
 describe("drainWritebacks", () => {
-  let stopApi: (() => void) | null = null;
+  let stopApi: (() => Promise<void>) | null = null;
   const deletedThreads: string[] = [];
 
   beforeEach(async () => {
@@ -84,15 +84,15 @@ describe("drainWritebacks", () => {
       return new Response("unexpected call", { status: 500 });
     });
     process.env.GHN_API_BASE = server.url;
-    stopApi = () => {
+    stopApi = async () => {
       delete process.env.GHN_API_BASE;
-      void server.stop(true);
+      await server.stop(true);
       stopApi = null;
     };
   });
 
-  afterEach(() => {
-    stopApi?.();
+  afterEach(async () => {
+    await stopApi?.();
     deletedThreads.length = 0;
   });
 
