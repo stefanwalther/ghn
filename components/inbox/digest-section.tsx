@@ -23,6 +23,7 @@ export function DigestSection({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -32,6 +33,8 @@ export function DigestSection({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -51,6 +54,7 @@ export function DigestSection({
           snoozeDisabled={snoozeDisabled}
           onMarkAllDone={onMarkAllDone}
           markAllDoneBusy={markAllDoneBusy}
+          busyRepoIds={busyRepoIds}
           onMarkAllRead={onMarkAllRead}
           markAllReadBusy={markAllReadBusy}
           onCopied={onCopied}
@@ -67,6 +71,7 @@ function DigestRow({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -76,6 +81,7 @@ function DigestRow({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -121,10 +127,10 @@ function DigestRow({
             disabled={snoozeDisabled}
             onSnooze={onSnooze}
             onMarkAllDone={onMarkAllDone}
-            markAllDoneDisabled={markAllDoneBusy || g.pendingCount === 0}
+            markAllDoneDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllDoneBusy ?? false)) || g.pendingCount === 0}
             markAllDoneCount={g.pendingCount}
             onMarkAllRead={onMarkAllRead}
-            markAllReadDisabled={markAllReadBusy || g.pendingCount === 0}
+            markAllReadDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllReadBusy ?? false)) || g.pendingCount === 0}
             markAllReadCount={g.pendingCount}
             onCopied={onCopied}
             visible={visible}

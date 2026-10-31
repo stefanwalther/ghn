@@ -21,7 +21,16 @@ export interface BulkOutcome {
   updated: number;
   queued: number;
   error?: string | null;
+  remote?: string | null;
 }
+
+/**
+ * Shared thresholds: small bulks stay strongly consistent (remote awaited on
+ * the request), large bulks go local-first with background write-back. The
+ * same cutoff gates the destructive confirm dialog so one number explains
+ * both behaviors.
+ */
+export const BULK_CONFIRM_THRESHOLD = 25;
 
 /** Validation for repo-wide bulk actions: { repositoryId, action }. */
 export function validateBulkRepoInput(
@@ -56,6 +65,12 @@ function bulkActionLabel(action: string): string {
 // Human-readable notice for a bulk response that queued write-backs.
 // Returns null when everything applied remotely and no notice is needed.
 export function describeBulkResult(action: string, outcome: BulkOutcome): string | null {
+  if (outcome.remote === "background" && outcome.updated > 0) {
+    return (
+      `${outcome.updated} ${bulkActionLabel(action)}, ` +
+      `syncing to GitHub in background.`
+    );
+  }
   if (outcome.queued <= 0) return null;
   const reason = bulkReasonText(outcome.error);
   if (outcome.updated > 0) {
