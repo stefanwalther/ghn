@@ -173,26 +173,13 @@ test.describe("inbox load", () => {
     expect([...origins]).toEqual([APP_URL]);
   });
 
-  test("cannot reseed through the button in a production build", async ({ page }) => {
+  test("never offers demo-data seeding in the production UI", async ({ page }) => {
     await page.goto("/");
-
-    const reseed = page.getByRole("button", { name: "Reseed demo data" });
-    await expect(reseed).toBeVisible();
-
-    const reseedResponse = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/notifications/seed") &&
-        response.request().method() === "POST"
-    );
-    await reseed.click();
-
-    // The seed route is disabled in a production build, which is what proves
-    // this suite runs against one. The script based reset is the only way in.
-    const response = await reseedResponse;
-    expect(response.status()).toBe(403);
-
     await expect(inboxRows(page)).toHaveCount(30);
-    expect(await inboxNotificationIds(page)).toEqual(VISIBLE_IDS);
+
+    // Demo data loads through `bun run db:seed` only. The UI keeps no
+    // seeding control, before or after a sync.
+    await expect(page.getByRole("button", { name: "Reseed demo data" })).toHaveCount(0);
   });
 
   test("reports the stand-in as connected and the data as demo data", async ({ page }) => {

@@ -178,6 +178,7 @@ export interface BulkMutationBody {
   updated?: number;
   queued?: number;
   error?: string;
+  remote?: string;
   repositoryId?: string;
 }
 

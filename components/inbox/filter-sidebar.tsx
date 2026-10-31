@@ -67,6 +67,7 @@ function RepoFilterRow({
   snoozedSection,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -79,6 +80,8 @@ function RepoFilterRow({
   snoozedSection?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -90,6 +93,9 @@ function RepoFilterRow({
   // predate the pending/unread facet fields (tests, cached responses).
   const doneable = r.pending ?? pendingTotal;
   const readable = r.unread ?? pendingTotal;
+  const repoBusy = busyRepoIds?.has(r.id) ?? false;
+  const doneBusy = repoBusy || (markAllDoneBusy ?? false);
+  const readBusy = repoBusy || (markAllReadBusy ?? false);
   return (
     <div
       className="relative"
@@ -125,10 +131,12 @@ function RepoFilterRow({
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
           onMarkAllDone={onMarkAllDone}
-          markAllDoneDisabled={markAllDoneBusy || doneable === 0}
+          markAllDoneDisabled={doneBusy || doneable === 0}
           markAllDoneCount={doneable}
+          markAllDoneMain={r.main}
+          markAllDoneQuiet={r.quiet}
           onMarkAllRead={onMarkAllRead}
-          markAllReadDisabled={markAllReadBusy || readable === 0}
+          markAllReadDisabled={readBusy || readable === 0}
           markAllReadCount={readable}
           onCopied={onCopied}
           visible={visible}
@@ -159,6 +167,7 @@ export function FilterSidebar({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -178,6 +187,8 @@ export function FilterSidebar({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -400,6 +411,7 @@ export function FilterSidebar({
               snoozeDisabled={snoozeDisabled}
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
+              busyRepoIds={busyRepoIds}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}
@@ -451,6 +463,7 @@ export function FilterSidebar({
               snoozedSection
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
+              busyRepoIds={busyRepoIds}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}

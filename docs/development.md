@@ -89,7 +89,7 @@ that is reported rather than failed.
 
 ```bash
 bun run dev      # local inbox on http://localhost:21120
-bun run db:seed  # load demo data
+bun run db:seed  # replace all notifications and repositories with demo data; development database only (the UI never seeds)
 bun run db:push  # explicit schema push, also runs automatically on boot
 make web-open    # ensure the server is running and fresh (restart when stale), then open it
 ```
