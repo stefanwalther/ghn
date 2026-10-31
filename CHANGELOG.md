@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.6.0...ghn-v0.7.0) (2026-10-31)
+
+
+### Features
+
+* **settings:** show database size in DB section ([#120](https://github.com/stefanwalther/ghn/issues/120)) ([7af3a5f](https://github.com/stefanwalther/ghn/commit/7af3a5f8808d7fceeeb4480e968773d28836f1db))
+
 ## [0.6.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.5.2...ghn-v0.6.0) (2026-10-30)
 
 
