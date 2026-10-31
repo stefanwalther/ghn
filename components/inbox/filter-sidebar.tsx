@@ -63,7 +63,7 @@ function RepoFilterRow({
   snoozedSection,
   onMarkAllDone,
   markAllDoneBusy,
-  isBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -76,8 +76,8 @@ function RepoFilterRow({
   snoozedSection?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
-  /** True while this specific repo has an in-flight done/read request. */
-  isBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -85,6 +85,9 @@ function RepoFilterRow({
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
+  const repoBusy = busyRepoIds?.has(r.id) ?? false;
+  const doneBusy = repoBusy || (markAllDoneBusy ?? false);
+  const readBusy = repoBusy || (markAllReadBusy ?? false);
   return (
     <div
       className="relative"
@@ -104,7 +107,6 @@ function RepoFilterRow({
         <span className="min-w-0 flex-1 truncate" title={r.fullName}>
           {r.fullName}
           {r.isSnoozed && !snoozedSection ? " · snoozed" : ""}
-          {isBusy ? " · working" : ""}
         </span>
         <span className="flex items-center gap-1">
           {r.quiet > 0 ? (
@@ -121,10 +123,12 @@ function RepoFilterRow({
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
           onMarkAllDone={onMarkAllDone}
-          markAllDoneDisabled={markAllDoneBusy || isBusy || pendingTotal === 0}
+          markAllDoneDisabled={doneBusy || pendingTotal === 0}
           markAllDoneCount={pendingTotal}
+          markAllDoneMain={r.main}
+          markAllDoneQuiet={r.quiet}
           onMarkAllRead={onMarkAllRead}
-          markAllReadDisabled={markAllReadBusy || isBusy || pendingTotal === 0}
+          markAllReadDisabled={readBusy || pendingTotal === 0}
           markAllReadCount={pendingTotal}
           onCopied={onCopied}
           visible={visible}
@@ -175,7 +179,7 @@ export function FilterSidebar({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
-  /** Repos with an in-flight done/read request; only those rows disable. */
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
   busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
@@ -399,7 +403,7 @@ export function FilterSidebar({
               snoozeDisabled={snoozeDisabled}
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
-              isBusy={busyRepoIds?.has(r.id)}
+              busyRepoIds={busyRepoIds}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}
@@ -451,7 +455,7 @@ export function FilterSidebar({
               snoozedSection
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
-              isBusy={busyRepoIds?.has(r.id)}
+              busyRepoIds={busyRepoIds}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}

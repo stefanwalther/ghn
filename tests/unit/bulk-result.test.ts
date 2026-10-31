@@ -59,17 +59,16 @@ describe("describeBulkResult", () => {
     ).toContain("mystery");
   });
 
-  test("reports deferred background sync without failure wording", () => {
+  test("reports a background batch without an error reason", () => {
     const msg = describeBulkResult("done", {
-      updated: 30,
-      queued: 5,
-      error: "deferred",
+      updated: 115,
+      queued: 115,
+      remote: "background",
     });
     expect(msg).not.toBeNull();
-    expect(msg).toContain("30");
-    expect(msg).toContain("5");
-    expect(msg).toContain("syncing in background");
-    expect(msg).not.toContain("queued for retry");
+    expect(msg).toContain("115");
+    expect(msg).toContain("background");
+    expect(msg).not.toContain("Partially applied");
   });
 });
 
@@ -120,20 +119,6 @@ describe("describeRepoDoneResult", () => {
       })
     ).toBe(
       "acme/api marked done, including 2 hidden pending items. 1 queued for retry (GitHub unreachable)."
-    );
-  });
-
-  test("reports deferred background sync without failure wording", async () => {
-    const { describeRepoDoneResult } = await import("@/lib/bulk");
-    expect(
-      describeRepoDoneResult("acme/api", {
-        updated: 30,
-        queued: 5,
-        error: "deferred",
-        hiddenPending: 4,
-      })
-    ).toBe(
-      "acme/api marked done, including 4 hidden pending items. 5 syncing in background."
     );
   });
 });

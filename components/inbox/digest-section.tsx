@@ -33,6 +33,7 @@ export function DigestSection({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Per-repo pending set; when provided it replaces the global busy flag. */
   busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
@@ -53,7 +54,7 @@ export function DigestSection({
           snoozeDisabled={snoozeDisabled}
           onMarkAllDone={onMarkAllDone}
           markAllDoneBusy={markAllDoneBusy}
-          isBusy={busyRepoIds?.has(g.repositoryId)}
+          busyRepoIds={busyRepoIds}
           onMarkAllRead={onMarkAllRead}
           markAllReadBusy={markAllReadBusy}
           onCopied={onCopied}
@@ -70,7 +71,7 @@ function DigestRow({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
-  isBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -80,7 +81,7 @@ function DigestRow({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
-  isBusy?: boolean;
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -126,10 +127,10 @@ function DigestRow({
             disabled={snoozeDisabled}
             onSnooze={onSnooze}
             onMarkAllDone={onMarkAllDone}
-            markAllDoneDisabled={markAllDoneBusy || isBusy || g.pendingCount === 0}
+            markAllDoneDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllDoneBusy ?? false)) || g.pendingCount === 0}
             markAllDoneCount={g.pendingCount}
             onMarkAllRead={onMarkAllRead}
-            markAllReadDisabled={markAllReadBusy || isBusy || g.pendingCount === 0}
+            markAllReadDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllReadBusy ?? false)) || g.pendingCount === 0}
             markAllReadCount={g.pendingCount}
             onCopied={onCopied}
             visible={visible}

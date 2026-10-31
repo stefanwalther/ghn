@@ -21,7 +21,16 @@ export interface BulkOutcome {
   updated: number;
   queued: number;
   error?: string | null;
+  remote?: string | null;
 }
+
+/**
+ * Shared thresholds: small bulks stay strongly consistent (remote awaited on
+ * the request), large bulks go local-first with background write-back. The
+ * same cutoff gates the destructive confirm dialog so one number explains
+ * both behaviors.
+ */
+export const BULK_CONFIRM_THRESHOLD = 25;
 
 /** Validation for repo-wide bulk actions: { repositoryId, action }. */
 export function validateBulkRepoInput(
@@ -42,7 +51,6 @@ function bulkReasonText(reason: string | null | undefined): string {
   if (reason === "auth") return "GitHub access missing";
   if (reason === "rate_limited") return "GitHub rate limit reached";
   if (reason === "network") return "GitHub unreachable";
-  if (reason === "deferred") return "syncing in background";
   return "GitHub reported an error";
 }
 
@@ -57,15 +65,13 @@ function bulkActionLabel(action: string): string {
 // Human-readable notice for a bulk response that queued write-backs.
 // Returns null when everything applied remotely and no notice is needed.
 export function describeBulkResult(action: string, outcome: BulkOutcome): string | null {
-  if (outcome.queued <= 0) return null;
-  // Deferred-only means the request was capped for speed, not a failure:
-  // rows are hidden locally and the remote push continues in the background.
-  if (outcome.error === "deferred") {
+  if (outcome.remote === "background" && outcome.updated > 0) {
     return (
       `${outcome.updated} ${bulkActionLabel(action)}, ` +
-      `${outcome.queued} syncing in background.`
+      `syncing to GitHub in background.`
     );
   }
+  if (outcome.queued <= 0) return null;
   const reason = bulkReasonText(outcome.error);
   if (outcome.updated > 0) {
     return (
@@ -116,8 +122,5 @@ export function describeRepoDoneResult(
       : `${outcome.hiddenPending} hidden pending items`;
   const done = `${repoName} marked done, including ${cleared}.`;
   if (outcome.queued <= 0) return done;
-  if (outcome.error === "deferred") {
-    return `${done} ${outcome.queued} syncing in background.`;
-  }
   return `${done} ${outcome.queued} queued for retry (${bulkReasonText(outcome.error)}).`;
 }

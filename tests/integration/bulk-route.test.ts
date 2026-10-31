@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../support/db-client.node";
 import { seedTestDataset } from "../support/fixtures";
 import { startGitHubStandIn, type StandIn } from "../support/github-stand-in";
 import { withEnv } from "../support/test-env";
-import { mutedSubjects, notifications, repositories, writebackQueue } from "@/db/schema";
+import { mutedSubjects, notifications, writebackQueue } from "@/db/schema";
 
 vi.mock("@/db/client", async () => {
   const mod = await import("../support/db-client.node");
@@ -248,69 +248,6 @@ describe("the repo-wide done action", () => {
     expect((await row("n_001"))?.isDone).toBe(1);
     const queued = await queueRows();
     expect(queued.map((q) => q.threadId)).toContain("n_001");
-  });
-});
-
-describe("the deferred large-batch path", () => {
-  test("rows beyond the sync cap queue with a deferred marker and stay hidden locally", async () => {
-    const total = 30;
-    await db.insert(repositories).values({
-      id: "big--repo",
-      fullName: "big/repo",
-      ownership: "owned",
-      rhythm: "immediate",
-      lastPromotedAt: null,
-      nextDueAt: null,
-      snoozedUntil: null,
-      pinned: 0,
-      unreachable: 0,
-      createdAt: NOW,
-    });
-    const ids = Array.from({ length: total }, (_, i) => `big_${String(i).padStart(3, "0")}`);
-    await db.insert(notifications).values(
-      ids.map((id) => ({
-        id,
-        repositoryId: "big--repo",
-        subject: `Thread ${id}`,
-        subjectType: "PullRequest",
-        subjectState: "open",
-        reason: "mention",
-        prMerged: 0,
-        createdAt: NOW,
-        githubUpdatedAt: NOW,
-        isRead: 0,
-        isDone: 0,
-        localUnread: 0,
-        sourceUrl: "https://github.com/big/repo/pull/1",
-      }))
-    );
-
-    const { status, body } = await bulk({ repositoryId: "big--repo", action: "done" });
-    expect(status).toBe(200);
-    expect(body).toMatchObject({
-      updated: total,
-      action: "done",
-      repositoryId: "big--repo",
-      remote: "partial",
-      queued: total - 25,
-      error: "deferred",
-    });
-
-    // Only the capped slice hits GitHub inline; the response stays fast.
-    const deletes = standIn.requests.filter((r) => r.method === "DELETE");
-    expect(deletes.length).toBe(25);
-
-    // Every row is hidden locally, including the deferred remainder.
-    const left = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(and(eq(notifications.repositoryId, "big--repo"), eq(notifications.isDone, 0)));
-    expect(left).toHaveLength(0);
-
-    const queued = await queueRows();
-    expect(queued).toHaveLength(total - 25);
-    expect(new Set(queued.map((q) => q.lastError))).toEqual(new Set(["deferred"]));
-    expect(new Set(queued.map((q) => q.action))).toEqual(new Set(["done"]));
   });
 });
 
@@ -572,5 +509,73 @@ describe("the write-back queue fallback", () => {
       .from(notifications)
       .where(inArray(notifications.id, ["n_001", "n_002"]));
     expect(rows.every((r) => r.isDone === 1)).toBe(true);
+  });
+});
+
+describe("the large-batch background path", () => {
+  test("over-threshold done returns instantly with queued background work", async () => {
+    restoreEnv?.();
+    restoreEnv = withEnv({
+      GHN_TOKEN: "",
+      GHN_API_BASE: standIn.url,
+      GHN_NOW: String(NOW),
+    });
+    const ids = Array.from({ length: 30 }, (_, i) => `bulk_${String(i + 1).padStart(3, "0")}`);
+    await db.insert(notifications).values(
+      ids.map((id) => ({
+        id,
+        repositoryId: "acme--web",
+        subject: `Bulk item ${id}`,
+        reason: "mention",
+        createdAt: NOW,
+        sourceUrl: "https://github.com/acme/web/issues/1",
+      }))
+    );
+    const { status, body } = await bulk({ ids, action: "done" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      updated: 30,
+      action: "done",
+      remote: "background",
+      queued: 30,
+    });
+    // Local state hides immediately without touching GitHub on the request.
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(inArray(notifications.id, ids));
+    expect(rows.every((r) => r.isDone === 1)).toBe(true);
+    expect(standIn.requests).toHaveLength(0);
+    const queued = await queueRows();
+    expect(queued).toHaveLength(30);
+  });
+
+  test("with a credential the background drain reaches GitHub and clears", async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => `drain_${String(i + 1).padStart(3, "0")}`);
+    await db.insert(notifications).values(
+      ids.map((id) => ({
+        id,
+        repositoryId: "acme--web",
+        subject: `Drain item ${id}`,
+        reason: "mention",
+        createdAt: NOW,
+        sourceUrl: "https://github.com/acme/web/issues/1",
+      }))
+    );
+    const { status, body } = await bulk({ ids, action: "done" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ updated: 30, remote: "background", queued: 30 });
+
+    // The response is already out; the drain finishes shortly after.
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const queued = await queueRows();
+      if (queued.length === 0) break;
+      if (Date.now() > deadline) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(await queueRows()).toHaveLength(0);
+    const deletes = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(deletes).toHaveLength(30);
   });
 });
