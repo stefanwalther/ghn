@@ -40,18 +40,33 @@ export interface DrainResult {
 
 export async function drainQueue(
   db: Db,
-  apply: (threadId: string, action: WritebackAction) => Promise<GhResult<void>>
+  apply: (threadId: string, action: WritebackAction) => Promise<GhResult<void>>,
+  concurrency = 8
 ): Promise<DrainResult> {
   const rows = await db.select().from(writebackQueue).orderBy(asc(writebackQueue.id));
+  // Remote calls run concurrently so a large deferred batch drains in
+  // seconds, not minutes. DB writes stay sequential afterwards because
+  // SQLite handles one writer at a time.
+  const results: GhResult<void>[] = new Array(rows.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < rows.length) {
+      const idx = next++;
+      const row = rows[idx]!;
+      results[idx] = await apply(row.threadId, row.action as WritebackAction);
+    }
+  }
+  const workerCount = Math.max(1, Math.min(concurrency, rows.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
   let succeeded = 0;
   let failed = 0;
   const succeededItems: { threadId: string; action: WritebackAction }[] = [];
-  for (const row of rows) {
-    const result = await apply(row.threadId, row.action);
+  for (const [idx, row] of rows.entries()) {
+    const result = results[idx]!;
     if (result.ok) {
       await db.delete(writebackQueue).where(eq(writebackQueue.id, row.id));
       succeeded += 1;
-      succeededItems.push({ threadId: row.threadId, action: row.action });
+      succeededItems.push({ threadId: row.threadId, action: row.action as WritebackAction });
     } else {
       await db
         .update(writebackQueue)

@@ -104,22 +104,39 @@ function InboxView() {
       return current;
     });
   }
-  // Busy state derives from the in-flight mutations, so overlapping triage
-  // and sync operations keep the controls disabled until all settle.
+  // Per-repo pending set so one large repo never blocks triage of another.
+  // The bulk id-list mutation keeps its own pending flag for the BulkBar;
+  // repo-wide done/read track ids here to allow parallel actions.
+  const [pendingRepoIds, setPendingRepoIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
+  function addPendingRepo(id: string) {
+    setPendingRepoIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }
+  function removePendingRepo(id: string) {
+    setPendingRepoIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
   const bulkMutation = useBulkAction(filters);
   const markRepoDoneMutation = useMarkRepoDone(filters);
   const markRepoReadMutation = useMarkRepoRead(filters);
   const {
     syncOne: syncThread,
     syncingIds,
-    isPending: threadBusy,
   } = useThreadSync(filters);
   const updateRepo = useUpdateRepository();
-  const busy =
-    bulkMutation.isPending ||
-    markRepoDoneMutation.isPending ||
-    markRepoReadMutation.isPending ||
-    threadBusy;
+  // BulkBar disables only while its own mutation is in flight. Repo menus
+  // disable per repo via pendingRepoIds, so repos triage independently.
+  const bulkBusy = bulkMutation.isPending;
   // Central sync flow: manual refresh, poll window, and the truthful header
   // state derived from the shared notifications and connection entries.
   const sync = useSyncFlow(filters);
@@ -393,7 +410,8 @@ function InboxView() {
 
   /** Marks every pending item of one repo done, with rollback on failure. */
   async function markRepoDone(repositoryId: string) {
-    if (markRepoDoneMutation.isPending) return;
+    if (pendingRepoIds.has(repositoryId)) return;
+    addPendingRepo(repositoryId);
     setNotice(null);
     const repoName =
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
@@ -469,14 +487,18 @@ function InboxView() {
       setNotice("Mark all as done failed. Restored previous state.");
     } finally {
       pendingRef.current = pendingRef.current.filter((i) => i !== intent);
+      removePendingRepo(repositoryId);
     }
   }
 
-  const markAllDoneBusy = busy || filters.state === "done";
+  // The done view disables repo-wide done/read for every repo; otherwise only
+  // repos with an in-flight request disable their own menu entry.
+  const repoActionsDisabled = filters.state === "done";
 
   /** Marks every pending item of one repo read, with rollback on failure. */
   async function markRepoRead(repositoryId: string) {
-    if (markRepoReadMutation.isPending) return;
+    if (pendingRepoIds.has(repositoryId)) return;
+    addPendingRepo(repositoryId);
     setNotice(null);
     const repoName =
       repoFacets.find((r) => r.id === repositoryId)?.fullName ??
@@ -509,6 +531,7 @@ function InboxView() {
       setNotice("Mark all as read failed. Restored previous state.");
     } finally {
       pendingRef.current = pendingRef.current.filter((i) => i !== intent);
+      removePendingRepo(repositoryId);
     }
   }
 
@@ -822,9 +845,10 @@ function InboxView() {
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}
-            markAllDoneBusy={markAllDoneBusy}
+            markAllDoneBusy={repoActionsDisabled}
+            busyRepoIds={pendingRepoIds}
             onMarkAllRead={markRepoRead}
-            markAllReadBusy={markAllDoneBusy}
+            markAllReadBusy={repoActionsDisabled}
             onCopied={handleRepoCopied}
             quietGroups={collapsed}
             quietActive={quietView}
@@ -889,7 +913,7 @@ function InboxView() {
           <div className="sticky top-2 z-10 flex flex-col gap-2 bg-background pb-2">
             <BulkBar
               selectedCount={selected.size}
-              busy={busy}
+              busy={bulkBusy}
               showHints={showHints}
               onAction={apply}
               onClear={() => setSelected(new Set())}
@@ -1019,9 +1043,10 @@ function InboxView() {
               onSnooze={snoozeRepo}
               snoozeDisabled={updateRepo.isPending}
               onMarkAllDone={markRepoDone}
-              markAllDoneBusy={markAllDoneBusy}
+              markAllDoneBusy={repoActionsDisabled}
+              busyRepoIds={pendingRepoIds}
               onMarkAllRead={markRepoRead}
-              markAllReadBusy={markAllDoneBusy}
+              markAllReadBusy={repoActionsDisabled}
               onCopied={handleRepoCopied}
             />
           ) : null}

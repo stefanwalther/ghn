@@ -63,6 +63,7 @@ function RepoFilterRow({
   snoozedSection,
   onMarkAllDone,
   markAllDoneBusy,
+  isBusy,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -75,6 +76,8 @@ function RepoFilterRow({
   snoozedSection?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** True while this specific repo has an in-flight done/read request. */
+  isBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -101,6 +104,7 @@ function RepoFilterRow({
         <span className="min-w-0 flex-1 truncate" title={r.fullName}>
           {r.fullName}
           {r.isSnoozed && !snoozedSection ? " · snoozed" : ""}
+          {isBusy ? " · working" : ""}
         </span>
         <span className="flex items-center gap-1">
           {r.quiet > 0 ? (
@@ -117,10 +121,10 @@ function RepoFilterRow({
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
           onMarkAllDone={onMarkAllDone}
-          markAllDoneDisabled={markAllDoneBusy || pendingTotal === 0}
+          markAllDoneDisabled={markAllDoneBusy || isBusy || pendingTotal === 0}
           markAllDoneCount={pendingTotal}
           onMarkAllRead={onMarkAllRead}
-          markAllReadDisabled={markAllReadBusy || pendingTotal === 0}
+          markAllReadDisabled={markAllReadBusy || isBusy || pendingTotal === 0}
           markAllReadCount={pendingTotal}
           onCopied={onCopied}
           visible={visible}
@@ -151,6 +155,7 @@ export function FilterSidebar({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -170,6 +175,8 @@ export function FilterSidebar({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  /** Repos with an in-flight done/read request; only those rows disable. */
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -392,6 +399,7 @@ export function FilterSidebar({
               snoozeDisabled={snoozeDisabled}
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
+              isBusy={busyRepoIds?.has(r.id)}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}
@@ -443,6 +451,7 @@ export function FilterSidebar({
               snoozedSection
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
+              isBusy={busyRepoIds?.has(r.id)}
               onMarkAllRead={onMarkAllRead}
               markAllReadBusy={markAllReadBusy}
               onCopied={onCopied}

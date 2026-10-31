@@ -10,7 +10,6 @@ import {
   setSubscriptionIgnored,
   type GhResult,
 } from "@/lib/github";
-import { enqueueWriteback } from "@/lib/queue";
 import { mapWithLimit } from "@/lib/sync";
 import type { Db } from "@/db/client";
 
@@ -20,6 +19,35 @@ export const dynamic = "force-dynamic";
 // fan out one GitHub call at a time, holding the request (and the UI's busy
 // state) for minutes, with one stalled call hanging it forever.
 const REMOTE_CONCURRENCY = 8;
+
+// Bulk requests used to await one GitHub call per row before responding. A
+// repo with hundreds of pending rows held the request (and the UI busy
+// state) for tens of seconds, blocking triage of every other repo. Only the
+// first REMOTE_SYNC_LIMIT rows attempt the remote write inline; the rest are
+// queued for the background sync drain and reported as deferred so the
+// response stays fast regardless of repo size.
+const REMOTE_SYNC_LIMIT = 25;
+
+/** Batch-enqueue write-backs in chunks so a large repo does not pay per-row latency. */
+async function enqueueMany(
+  db: Db,
+  items: { threadId: string; action: "done" | "read" | "unsubscribe"; lastError: string | null }[],
+  now: number
+): Promise<void> {
+  const CHUNK = 100;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const chunk = items.slice(i, i + CHUNK);
+    await db.insert(writebackQueue).values(
+      chunk.map((item) => ({
+        threadId: item.threadId,
+        action: item.action,
+        attempts: 0,
+        lastError: item.lastError,
+        createdAt: now,
+      }))
+    );
+  }
+}
 
 /** Shared local-first done path for id lists and repo-wide done. */
 async function applyDone(
@@ -33,21 +61,41 @@ async function applyDone(
     .update(notifications)
     .set({ isDone: 1, localUnread: 0 })
     .where(inArray(notifications.id, cleanIds));
-  const remotes = await mapWithLimit(cleanIds, REMOTE_CONCURRENCY, (id) =>
+  // Bound the synchronous remote fan-out: only the first slice is attempted
+  // inline so the response stays fast. The remainder is queued for the sync
+  // drain with a "deferred" marker (not a failure) and reported the same way.
+  const syncIds = cleanIds.slice(0, REMOTE_SYNC_LIMIT);
+  const deferredIds = cleanIds.slice(REMOTE_SYNC_LIMIT);
+  const remotes = await mapWithLimit(syncIds, REMOTE_CONCURRENCY, (id) =>
     token
       ? markThreadDone(token, id)
       : Promise.resolve({ ok: false, reason: "auth" } as GhResult<void>)
   );
-  let queued = 0;
-  let firstError: GhResult<void> | null = null;
+  const failures: { threadId: string; lastError: string }[] = [];
+  let firstErrorReason: string | null = null;
   for (const [idx, remote] of remotes.entries()) {
-    const id = cleanIds[idx] as string;
+    const id = syncIds[idx] as string;
     if (!remote.ok) {
-      firstError ??= remote;
-      await enqueueWriteback(db, id, "done", remote.reason ?? "unknown", now);
-      queued += 1;
+      firstErrorReason ??= remote.reason ?? "unknown";
+      failures.push({ threadId: id, lastError: remote.reason ?? "unknown" });
     }
   }
+  if (failures.length > 0) {
+    await enqueueMany(
+      db,
+      failures.map((f) => ({ ...f, action: "done" as const })),
+      now
+    );
+  }
+  if (deferredIds.length > 0) {
+    await enqueueMany(
+      db,
+      deferredIds.map((id) => ({ threadId: id, action: "done" as const, lastError: "deferred" })),
+      now
+    );
+    firstErrorReason ??= "deferred";
+  }
+  const queued = failures.length + deferredIds.length;
   const base = { updated: cleanIds.length, action: "done" as const };
   const extra =
     repositoryId !== undefined ? { repositoryId } : {};
@@ -57,7 +105,7 @@ async function applyDone(
       ...extra,
       remote: "partial",
       queued,
-      error: firstError?.reason ?? "unknown",
+      error: firstErrorReason ?? "unknown",
     });
   }
   return NextResponse.json({ ...base, ...extra });
@@ -75,21 +123,38 @@ async function applyRead(
     .update(notifications)
     .set({ isRead: 1, localUnread: 0 })
     .where(inArray(notifications.id, cleanIds));
-  const remotes = await mapWithLimit(cleanIds, REMOTE_CONCURRENCY, (id) =>
+  const syncIds = cleanIds.slice(0, REMOTE_SYNC_LIMIT);
+  const deferredIds = cleanIds.slice(REMOTE_SYNC_LIMIT);
+  const remotes = await mapWithLimit(syncIds, REMOTE_CONCURRENCY, (id) =>
     token
       ? markThreadRead(token, id)
       : Promise.resolve({ ok: false, reason: "auth" } as GhResult<void>)
   );
-  let queued = 0;
-  let firstError: GhResult<void> | null = null;
+  const failures: { threadId: string; lastError: string }[] = [];
+  let firstErrorReason: string | null = null;
   for (const [idx, remote] of remotes.entries()) {
-    const id = cleanIds[idx] as string;
+    const id = syncIds[idx] as string;
     if (!remote.ok) {
-      firstError ??= remote;
-      await enqueueWriteback(db, id, "read", remote.reason ?? "unknown", now);
-      queued += 1;
+      firstErrorReason ??= remote.reason ?? "unknown";
+      failures.push({ threadId: id, lastError: remote.reason ?? "unknown" });
     }
   }
+  if (failures.length > 0) {
+    await enqueueMany(
+      db,
+      failures.map((f) => ({ ...f, action: "read" as const })),
+      now
+    );
+  }
+  if (deferredIds.length > 0) {
+    await enqueueMany(
+      db,
+      deferredIds.map((id) => ({ threadId: id, action: "read" as const, lastError: "deferred" })),
+      now
+    );
+    firstErrorReason ??= "deferred";
+  }
+  const queued = failures.length + deferredIds.length;
   const base = { updated: cleanIds.length, action: "read" as const };
   const extra =
     repositoryId !== undefined ? { repositoryId } : {};
@@ -99,7 +164,7 @@ async function applyRead(
       ...extra,
       remote: "partial",
       queued,
-      error: firstError?.reason ?? "unknown",
+      error: firstErrorReason ?? "unknown",
     });
   }
   return NextResponse.json({ ...base, ...extra });
@@ -194,25 +259,64 @@ export async function POST(request: Request) {
         .onConflictDoNothing();
     }
     const token = await getStoredToken();
+    // Same bound as done/read: only the first slice hits GitHub inline.
+    const syncExisting = existing.slice(0, REMOTE_SYNC_LIMIT);
+    const deferredExisting = existing.slice(REMOTE_SYNC_LIMIT);
     let queued = 0;
+    let firstError: string | null = null;
     if (token) {
-      const remotes = await mapWithLimit(existing, REMOTE_CONCURRENCY, (n) =>
+      const remotes = await mapWithLimit(syncExisting, REMOTE_CONCURRENCY, (n) =>
         setSubscriptionIgnored(token, n.id, true)
       );
+      const failures: { threadId: string; lastError: string }[] = [];
       for (const [idx, remote] of remotes.entries()) {
         if (remote.ok) continue;
-        const n = existing[idx] as (typeof existing)[number];
-        await enqueueWriteback(db, n.id, "unsubscribe", remote.reason ?? "unknown", now);
-        queued += 1;
+        const n = syncExisting[idx] as (typeof syncExisting)[number];
+        firstError ??= remote.reason ?? "unknown";
+        failures.push({ threadId: n.id, lastError: remote.reason ?? "unknown" });
+      }
+      if (failures.length > 0) {
+        await enqueueMany(
+          db,
+          failures.map((f) => ({ ...f, action: "unsubscribe" as const })),
+          now
+        );
+        queued += failures.length;
       }
     } else {
-      for (const n of existing) {
-        await enqueueWriteback(db, n.id, "unsubscribe", "auth", now);
-        queued += 1;
-      }
+      await enqueueMany(
+        db,
+        syncExisting.map((n) => ({
+          threadId: n.id,
+          action: "unsubscribe" as const,
+          lastError: "auth",
+        })),
+        now
+      );
+      queued += syncExisting.length;
+      firstError ??= "auth";
+    }
+    if (deferredExisting.length > 0) {
+      await enqueueMany(
+        db,
+        deferredExisting.map((n) => ({
+          threadId: n.id,
+          action: "unsubscribe" as const,
+          lastError: "deferred",
+        })),
+        now
+      );
+      queued += deferredExisting.length;
+      firstError ??= "deferred";
     }
     if (queued > 0) {
-      return NextResponse.json({ updated: cleanIds.length, action, remote: "partial", queued });
+      return NextResponse.json({
+        updated: cleanIds.length,
+        action,
+        remote: "partial",
+        queued,
+        error: firstError ?? "unknown",
+      });
     }
     return NextResponse.json({ updated: cleanIds.length, action });
   }

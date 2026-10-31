@@ -23,6 +23,7 @@ export function DigestSection({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  busyRepoIds,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -32,6 +33,7 @@ export function DigestSection({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  busyRepoIds?: Set<string>;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -51,6 +53,7 @@ export function DigestSection({
           snoozeDisabled={snoozeDisabled}
           onMarkAllDone={onMarkAllDone}
           markAllDoneBusy={markAllDoneBusy}
+          isBusy={busyRepoIds?.has(g.repositoryId)}
           onMarkAllRead={onMarkAllRead}
           markAllReadBusy={markAllReadBusy}
           onCopied={onCopied}
@@ -67,6 +70,7 @@ function DigestRow({
   snoozeDisabled,
   onMarkAllDone,
   markAllDoneBusy,
+  isBusy,
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
@@ -76,6 +80,7 @@ function DigestRow({
   snoozeDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
+  isBusy?: boolean;
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
@@ -121,10 +126,10 @@ function DigestRow({
             disabled={snoozeDisabled}
             onSnooze={onSnooze}
             onMarkAllDone={onMarkAllDone}
-            markAllDoneDisabled={markAllDoneBusy || g.pendingCount === 0}
+            markAllDoneDisabled={markAllDoneBusy || isBusy || g.pendingCount === 0}
             markAllDoneCount={g.pendingCount}
             onMarkAllRead={onMarkAllRead}
-            markAllReadDisabled={markAllReadBusy || g.pendingCount === 0}
+            markAllReadDisabled={markAllReadBusy || isBusy || g.pendingCount === 0}
             markAllReadCount={g.pendingCount}
             onCopied={onCopied}
             visible={visible}

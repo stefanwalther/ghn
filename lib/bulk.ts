@@ -42,6 +42,7 @@ function bulkReasonText(reason: string | null | undefined): string {
   if (reason === "auth") return "GitHub access missing";
   if (reason === "rate_limited") return "GitHub rate limit reached";
   if (reason === "network") return "GitHub unreachable";
+  if (reason === "deferred") return "syncing in background";
   return "GitHub reported an error";
 }
 
@@ -57,6 +58,14 @@ function bulkActionLabel(action: string): string {
 // Returns null when everything applied remotely and no notice is needed.
 export function describeBulkResult(action: string, outcome: BulkOutcome): string | null {
   if (outcome.queued <= 0) return null;
+  // Deferred-only means the request was capped for speed, not a failure:
+  // rows are hidden locally and the remote push continues in the background.
+  if (outcome.error === "deferred") {
+    return (
+      `${outcome.updated} ${bulkActionLabel(action)}, ` +
+      `${outcome.queued} syncing in background.`
+    );
+  }
   const reason = bulkReasonText(outcome.error);
   if (outcome.updated > 0) {
     return (
@@ -107,5 +116,8 @@ export function describeRepoDoneResult(
       : `${outcome.hiddenPending} hidden pending items`;
   const done = `${repoName} marked done, including ${cleared}.`;
   if (outcome.queued <= 0) return done;
+  if (outcome.error === "deferred") {
+    return `${done} ${outcome.queued} syncing in background.`;
+  }
   return `${done} ${outcome.queued} queued for retry (${bulkReasonText(outcome.error)}).`;
 }
