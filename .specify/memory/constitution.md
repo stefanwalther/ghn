@@ -47,7 +47,8 @@ after design; a vacuous PASS is a defect to report, not a silent pass.
 
 Stack is Bun, Next.js 15, React 19, Tailwind 4, Drizzle over SQLite. Port
 defaults to `21120`. Config precedence is `GHN_DB_PATH` over config file
-`databasePath` over `./data/ghn.db`, with `~`, `$VAR`, `${VAR}` expansion
+`databasePath` over `~/.local/share/ghn/ghn.db` (`$XDG_DATA_HOME/ghn/ghn.db`
+when set), with `~`, `$VAR`, `${VAR}` expansion
 and auto-created parents. Overrides `GHN_API_BASE`, `GHN_NOW`,
 `GHN_RELEASES_API_BASE`, `GHN_DISABLE_UPDATE_CHECK` exist for Enterprise,
 deterministic tests, and mocks. Seed endpoint is disabled in production
