@@ -90,8 +90,8 @@ export function getDefaultDatabasePath(
   homeDir: string = os.homedir()
 ): string {
   const xdg = env.XDG_DATA_HOME?.trim();
-  if (xdg) {
-    return path.join(expandPath(xdg, env, homeDir), APP_NAME, DB_FILENAME);
+  if (xdg && path.isAbsolute(xdg)) {
+    return path.join(xdg, APP_NAME, DB_FILENAME);
   }
   return path.join(homeDir, ".local", "share", APP_NAME, DB_FILENAME);
 }

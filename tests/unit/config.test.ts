@@ -72,6 +72,18 @@ describe("resolveDatabasePath", () => {
     );
   });
 
+  test("getDefaultDatabasePath ignores relative XDG_DATA_HOME", () => {
+    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "data" }, HOME)).toBe(
+      path.join(HOME, ".local", "share", "ghn", "ghn.db")
+    );
+  });
+
+  test("getDefaultDatabasePath treats XDG_DATA_HOME literally", () => {
+    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "/xdg/$LITERAL" }, HOME)).toBe(
+      path.join("/xdg/$LITERAL", "ghn", "ghn.db")
+    );
+  });
+
   test("GHN_DB_PATH wins over config file", () => {
     expect(
       resolveDatabasePath({
