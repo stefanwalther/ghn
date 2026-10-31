@@ -109,6 +109,8 @@ make web-open    # ensure the server is running and fresh (restart when stale), 
 
 The database path also reads `databasePath` (or `dbPath`) from the config file, which supports `~`, `$VAR`, and `${VAR}` expansion. Parent directories are created automatically. When `$XDG_DATA_HOME` is unset, the default lives outside the repo at `~/.local/share/ghn/ghn.db`. If the selected path is in Dropbox, whether through `$XDG_DATA_HOME`, `GHN_DB_PATH`, or `databasePath`/`dbPath`, SQLite allows one writer at a time, so let Dropbox finish syncing before opening the app on another machine. Auth prefers `GH_TOKEN` (fallback `GITHUB_TOKEN`) and otherwise shells out to `gh auth token` on each sync, so there are no secret files.
 
+Upgrading from the old `./data/ghn.db` default needs no manual step: on first boot with the new default and no override configured, the app copies the legacy file once and never overwrites the destination. Linked git worktrees resolve to an isolated `worktrees/<slug>/ghn.db` database, so `bun run db:seed` in one checkout cannot wipe another. Explicit `GHN_DB_PATH` and config file paths are honored unchanged in every checkout.
+
 `GHN_TOKEN` and `GHN_NOW` exist for the test suite. `GHN_TOKEN` is what
 guarantees that no check can reach a real account on a machine where `gh` is
 authenticated, and `GHN_NOW` is what makes the dataset and the age filters

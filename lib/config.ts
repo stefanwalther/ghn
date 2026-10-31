@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -5,6 +7,8 @@ import path from "node:path";
 export const APP_NAME = "ghn";
 export const CONFIG_FILENAME = "config.json";
 export const DB_FILENAME = "ghn.db";
+/** Predecessor default, kept for one-time upgrade migration. */
+export const LEGACY_DB_RELATIVE = "./data/ghn.db";
 
 export interface FileConfig {
   databasePath?: string;
@@ -85,15 +89,128 @@ function pickDatabaseRaw(fileConfig: FileConfig): string | undefined {
   return undefined;
 }
 
-export function getDefaultDatabasePath(
-  env: Env = process.env,
-  homeDir: string = os.homedir()
-): string {
+function getDataBaseDir(env: Env, homeDir: string): string {
   const xdg = env.XDG_DATA_HOME?.trim();
   if (xdg && path.isAbsolute(xdg)) {
-    return path.join(xdg, APP_NAME, DB_FILENAME);
+    return path.join(xdg, APP_NAME);
   }
-  return path.join(homeDir, ".local", "share", APP_NAME, DB_FILENAME);
+  return path.join(homeDir, ".local", "share", APP_NAME);
+}
+
+/**
+ * Worktree slug for per-checkout database isolation, or null outside a
+ * linked worktree. The main checkout shares the user-level database;
+ * linked worktrees get `worktrees/<slug>/ghn.db` so `db:seed` in one
+ * checkout cannot wipe another.
+ */
+export function getWorktreeSlug(
+  cwd: string = process.cwd(),
+  env: Env = process.env
+): string | null {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete childEnv[key];
+    else childEnv[key] = value;
+  }
+  let top: string;
+  try {
+    top = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      env: childEnv,
+    }).trim();
+  } catch {
+    return null;
+  }
+  let gitEntry: fs.Stats;
+  try {
+    gitEntry = fs.statSync(path.join(top, ".git"));
+  } catch {
+    return null;
+  }
+  if (!gitEntry.isFile()) return null;
+  const digest = createHash("sha256").update(top).digest("hex").slice(0, 12);
+  return `${path.basename(top)}-${digest}`;
+}
+
+export function getWorktreeDatabasePath(
+  homeDir: string,
+  slug: string,
+  env: Env = process.env
+): string {
+  const base = getDataBaseDir(env, homeDir);
+  return path.join(base, "worktrees", slug, DB_FILENAME);
+}
+
+export function getDefaultDatabasePath(
+  env: Env = process.env,
+  homeDir: string = os.homedir(),
+  cwd: string = process.cwd()
+): string {
+  const slug = getWorktreeSlug(cwd, env);
+  if (slug) return getWorktreeDatabasePath(homeDir, slug, env);
+  const base = getDataBaseDir(env, homeDir);
+  return path.join(base, DB_FILENAME);
+}
+
+/** Absolute path of the predecessor per-checkout default. */
+export function getLegacyDatabasePath(cwd: string = process.cwd()): string {
+  return path.resolve(cwd, LEGACY_DB_RELATIVE);
+}
+
+/** True when the database path comes from GHN_DB_PATH or the config file. */
+export function isExplicitDatabasePath(
+  opts: {
+    env?: Env;
+    homeDir?: string;
+    configPath?: string;
+    fileConfig?: FileConfig;
+  } = {}
+): boolean {
+  const env = opts.env ?? process.env;
+  if (env.GHN_DB_PATH?.trim()) return true;
+  const homeDir = opts.homeDir ?? os.homedir();
+  const configPath = opts.configPath ?? getConfigPath(env, homeDir);
+  const fileConfig = opts.fileConfig ?? loadFileConfig(configPath);
+  return pickDatabaseRaw(fileConfig) !== undefined;
+}
+
+/**
+ * One-time upgrade copy from the legacy per-checkout database. Copies only
+ * when the destination is missing and a legacy file exists; never
+ * overwrites. Returns true when a copy happened.
+ */
+export function migrateLegacyDatabase(
+  destination: string,
+  cwd: string = process.cwd()
+): boolean {
+  const legacy = getLegacyDatabasePath(cwd);
+  if (destination === legacy) return false;
+  try {
+    if (fs.statSync(destination).isFile()) return false;
+  } catch {
+    // Destination missing; fall through to the legacy check.
+  }
+  let legacyStat: fs.Stats;
+  try {
+    legacyStat = fs.statSync(legacy);
+  } catch {
+    return false;
+  }
+  if (!legacyStat.isFile()) return false;
+  ensureParentDir(destination);
+  fs.copyFileSync(legacy, destination);
+  for (const suffix of ["-wal", "-shm"]) {
+    try {
+      if (fs.statSync(legacy + suffix).isFile()) {
+        fs.copyFileSync(legacy + suffix, destination + suffix);
+      }
+    } catch {
+      // Companion file absent; nothing to copy.
+    }
+  }
+  return true;
 }
 
 export function resolveDatabasePath(
@@ -123,7 +240,7 @@ export function resolveDatabasePath(
     return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
   }
 
-  return getDefaultDatabasePath(env, homeDir);
+  return getDefaultDatabasePath(env, homeDir, cwd);
 }
 
 export function getDatabasePath(): string {

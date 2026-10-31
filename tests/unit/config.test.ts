@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,12 @@ import {
   expandPath,
   getConfigPath,
   getDefaultDatabasePath,
+  getLegacyDatabasePath,
+  getWorktreeDatabasePath,
+  getWorktreeSlug,
+  isExplicitDatabasePath,
   loadFileConfig,
+  migrateLegacyDatabase,
   resolveDatabasePath,
 } from "@/lib/config";
 
@@ -67,21 +73,93 @@ describe("resolveDatabasePath", () => {
   });
 
   test("getDefaultDatabasePath respects XDG_DATA_HOME", () => {
-    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "/xdg-data" }, HOME)).toBe(
+    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "/xdg-data" }, HOME, CWD)).toBe(
       path.join("/xdg-data", "ghn", "ghn.db")
     );
   });
 
   test("getDefaultDatabasePath ignores relative XDG_DATA_HOME", () => {
-    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "data" }, HOME)).toBe(
+    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "data" }, HOME, CWD)).toBe(
       path.join(HOME, ".local", "share", "ghn", "ghn.db")
     );
   });
 
   test("getDefaultDatabasePath treats XDG_DATA_HOME literally", () => {
-    expect(getDefaultDatabasePath({ XDG_DATA_HOME: "/xdg/$LITERAL" }, HOME)).toBe(
-      path.join("/xdg/$LITERAL", "ghn", "ghn.db")
+    expect(
+      getDefaultDatabasePath({ XDG_DATA_HOME: "/xdg/$LITERAL" }, HOME, CWD)
+    ).toBe(path.join("/xdg/$LITERAL", "ghn", "ghn.db"));
+  });
+
+  test("getDefaultDatabasePath isolates linked worktrees", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ghn-wt-"));
+    const main = path.join(dir, "main");
+    fs.mkdirSync(main);
+    execFileSync("git", ["init"], { cwd: main, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email"], {
+      cwd: main,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["config", "user.name"], { cwd: main, stdio: "ignore" });
+    execFileSync("git", ["commit", "--allow-empty", "-m", "init"], {
+      cwd: main,
+      stdio: "ignore",
+    });
+    const wt = path.join(dir, "wt");
+    execFileSync("git", ["worktree", "add", wt], { cwd: main, stdio: "ignore" });
+    const env = { GIT_CEILING_DIRECTORIES: dir };
+    const slug = getWorktreeSlug(wt, env);
+    expect(slug).toMatch(/^wt-[0-9a-f]{12}$/);
+    expect(getWorktreeSlug(main, env)).toBeNull();
+    expect(getDefaultDatabasePath({}, HOME, wt)).toContain(
+      path.join(".local", "share", "ghn", "worktrees")
     );
+    expect(getWorktreeDatabasePath(HOME, slug as string, {})).toBe(
+      path.join(HOME, ".local", "share", "ghn", "worktrees", slug as string, "ghn.db")
+    );
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("getWorktreeSlug is null outside a repository", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ghn-plain-"));
+    expect(getWorktreeSlug(dir, { GIT_CEILING_DIRECTORIES: dir })).toBeNull();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("isExplicitDatabasePath reports overrides", () => {
+    expect(isExplicitDatabasePath({ env: { GHN_DB_PATH: "/env.db" } })).toBe(true);
+    expect(
+      isExplicitDatabasePath({
+        env: {},
+        fileConfig: { databasePath: "/cfg.db" },
+        configPath: "/cfg/config.json",
+      })
+    ).toBe(true);
+    expect(
+      isExplicitDatabasePath({
+        env: {},
+        fileConfig: {},
+        configPath: "/cfg/config.json",
+      })
+    ).toBe(false);
+  });
+
+  test("migrateLegacyDatabase copies once and never overwrites", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ghn-mig-"));
+    const home = path.join(dir, "home");
+    const dest = path.join(home, ".local", "share", "ghn", "ghn.db");
+    const legacy = path.join(dir, "checkout", "data", "ghn.db");
+    fs.mkdirSync(path.dirname(legacy), { recursive: true });
+    fs.writeFileSync(legacy, "legacy-bytes");
+    const cwd = path.join(dir, "checkout");
+    expect(getLegacyDatabasePath(cwd)).toBe(legacy);
+    expect(migrateLegacyDatabase(dest, cwd)).toBe(true);
+    expect(fs.readFileSync(dest, "utf-8")).toBe("legacy-bytes");
+    fs.writeFileSync(legacy, "changed-bytes");
+    expect(migrateLegacyDatabase(dest, cwd)).toBe(false);
+    expect(fs.readFileSync(dest, "utf-8")).toBe("legacy-bytes");
+    expect(migrateLegacyDatabase(dest, path.join(dir, "empty"))).toBe(false);
+    expect(migrateLegacyDatabase(legacy, cwd)).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test("GHN_DB_PATH wins over config file", () => {
