@@ -1,12 +1,20 @@
 import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { ensureParentDir, getDatabasePath } from "@/lib/config";
+import {
+  ensureParentDir,
+  getDatabasePath,
+  isExplicitDatabasePath,
+  migrateLegacyDatabase,
+} from "@/lib/config";
 import { PathCache } from "@/lib/db-cache";
 import * as schema from "./schema";
 import { ensureSchema } from "./ensure-schema";
 
 const url = getDatabasePath();
 ensureParentDir(url);
+if (!isExplicitDatabasePath()) {
+  migrateLegacyDatabase(url);
+}
 
 declare global {
   var __ghnDb: BunSQLiteDatabase<typeof schema> | undefined;

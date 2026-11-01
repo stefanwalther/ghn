@@ -12,6 +12,9 @@ services:
       # cannot break the container's listen port. environment wins over
       # env_file here on purpose.
       - PORT=21120
+      # Pinned: local default is ~/.local/share/ghn/ghn.db, container
+      # persists via the ghn-data volume instead.
+      - GHN_DB_PATH=/app/data/ghn.db
     volumes:
       - ghn-data:/app/data
 

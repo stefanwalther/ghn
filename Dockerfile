@@ -25,6 +25,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=21120
+ENV GHN_DB_PATH=/app/data/ghn.db
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
