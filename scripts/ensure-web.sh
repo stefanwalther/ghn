@@ -318,10 +318,14 @@ if [ "${REBUILD}" -eq 0 ]; then
   fi
 fi
 
-# The port answers nothing, but something else may hold it. Only listeners
-# count here: an open browser tab to a dead server is not a holder. Only
-# bun/node processes are ours; anything else aborts so we never take down
-# an unrelated service.
+# The port answers nothing healthy, but something may still hold it.
+# Only listeners count here: an open browser tab to a dead server is not
+# a holder. When the holders are our own server processes for this
+# checkout, stop them so the fresh server below can bind (a 500-returning
+# server reads as "down" to is_up, so without this the new server would
+# die with EADDRINUSE). Anything else aborts so we never take down an
+# unrelated service; stop_server re-verifies cwd ownership and refuses
+# another workspace's server.
 if command -v lsof >/dev/null 2>&1; then
   PIDS="$(listener_pids)"
   if [ -n "${PIDS}" ]; then
@@ -335,6 +339,12 @@ if command -v lsof >/dev/null 2>&1; then
         exit 1
       fi
     done
+    echo "ensure-web.sh: port ${PORT} held by a previous server; stopping it for a clean start" >&2
+    if ! stop_server; then
+      [ "${OPEN}" -eq 1 ] && open_url
+      exit 1
+    fi
+    REBUILD=1
   fi
 fi
 
