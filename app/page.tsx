@@ -927,7 +927,6 @@ function InboxView() {
             markAllDoneBusy={markAllDoneBusy}
             busyRepoIds={pendingRepos}
             onMarkAllRead={markRepoRead}
-            markAllReadBusy={markAllDoneBusy}
             onCopied={handleRepoCopied}
             quietGroups={collapsed}
             quietActive={quietView}
@@ -1132,7 +1131,6 @@ function InboxView() {
               markAllDoneBusy={markAllDoneBusy}
               busyRepoIds={pendingRepos}
               onMarkAllRead={markRepoRead}
-              markAllReadBusy={markAllDoneBusy}
               onCopied={handleRepoCopied}
             />
           ) : null}

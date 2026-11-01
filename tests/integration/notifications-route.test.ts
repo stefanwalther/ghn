@@ -52,6 +52,7 @@ interface RepoFacet {
   quiet: number;
   pending?: number;
   unread?: number;
+  readable?: number;
   isSnoozed: boolean;
 }
 
@@ -385,22 +386,43 @@ describe("the facet counts", () => {
     expect(repoFacet(body.facets, "acme--web")).toMatchObject({
       pending: 10,
       unread: 0,
+      readable: 0,
     });
     // acme/api is seeded fully unread: 10 pending and 10 unread.
     expect(repoFacet(body.facets, "acme--api")).toMatchObject({
       pending: 10,
       unread: 10,
+      readable: 10,
     });
     // A quiet repo reports both totals: 25 pending, 16 unread.
     expect(repoFacet(body.facets, "vendor--slow-dep")).toMatchObject({
       pending: 25,
       unread: 16,
+      readable: 16,
     });
     const group = body.collapsedSection.find(
       (g) => g.repositoryId === "vendor--slow-dep"
     );
     expect(group?.pendingCount).toBe(25);
     expect(group?.unreadCount).toBe(16);
+  });
+
+  test("the repo-wide readable count ignores the current filter", async () => {
+    // After marking acme/api done, the unread view reports nothing
+    // actionable for it, but the repo-wide read scope still holds every
+    // unread row (all 10 are done-but-unread now).
+    await db
+      .update(notifications)
+      .set({ isDone: 1 })
+      .where(eq(notifications.repositoryId, "acme--api"));
+    const body = await load();
+    expect(repoFacet(body.facets, "acme--api")).toMatchObject({
+      main: 0,
+      quiet: 0,
+      pending: 0,
+      unread: 0,
+      readable: 10,
+    });
   });
 
   test("the all-state facets keep done rows visible but report zero pending", async () => {

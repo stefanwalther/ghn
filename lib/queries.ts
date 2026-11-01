@@ -381,7 +381,7 @@ export function useMarkRepoRead(filters: InboxFilters) {
         facets: {
           ...previous.facets,
           repos: previous.facets.repos.map((repo) =>
-            repo.id === vars.repositoryId ? { ...repo, unread: 0 } : repo
+            repo.id === vars.repositoryId ? { ...repo, unread: 0, readable: 0 } : repo
           ),
         },
       };

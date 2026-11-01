@@ -24,6 +24,9 @@ export interface RepoFacet {
   pending?: number;
   /** Unread rows among the current filter; drives the read button. */
   unread?: number;
+  /** All unread rows in the repository, ignoring the current filter;
+   * matches the repo-wide read action so done-only repos stay actionable. */
+  readable?: number;
   isSnoozed: boolean;
 }
 
@@ -91,8 +94,10 @@ function RepoFilterRow({
   const pendingTotal = r.main + r.quiet;
   // Actionable counts fall back to the visible total for payloads that
   // predate the pending/unread facet fields (tests, cached responses).
+  // Readable is repo-wide (ignores the current filter) so it stays correct
+  // for done-only repos; pending/unread describe the current view.
   const doneable = r.pending ?? pendingTotal;
-  const readable = r.unread ?? pendingTotal;
+  const readable = r.readable ?? r.unread ?? pendingTotal;
   const repoBusy = busyRepoIds?.has(r.id) ?? false;
   const doneBusy = repoBusy || (markAllDoneBusy ?? false);
   const readBusy = repoBusy || (markAllReadBusy ?? false);
@@ -244,7 +249,7 @@ export function FilterSidebar({
   const activeTypeLabel = types.find((t) => t.value === activeType)?.label;
   const activeRepoName = repos.find((r) => r.id === activeRepo)?.fullName;
   const visibleRepos = repos.filter(
-    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
+    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0 || (r.readable ?? 0) > 0
   );
   // Same fuzzy engine as the command palette, so a palette query handed
   // off here behaves identically. Scope qualifiers (`repo:`, `type:`…)
