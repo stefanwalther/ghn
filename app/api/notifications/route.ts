@@ -104,14 +104,18 @@ export async function GET(request: Request) {
     string,
     { main: number; quiet: number; pending: number; unread: number }
   >();
-  // Repo-wide read acts on every unread row of the repository, ignoring the
-  // current view filter. Track that total separately so repos holding only
-  // done-but-unread rows stay actionable even when the filtered counts are
+  // Repo-wide actions ignore the current view filter: read targets every
+  // unread row and done targets every not-done row. Track both totals
+  // separately so repos stay actionable even when the filtered counts are
   // zero and the repo would otherwise vanish from the sidebar.
   const repoReadable = new Map<string, number>();
+  const repoPendingAll = new Map<string, number>();
   for (const n of rows) {
     if (n.isRead === 0) {
       repoReadable.set(n.repositoryId, (repoReadable.get(n.repositoryId) ?? 0) + 1);
+    }
+    if (n.isDone === 0) {
+      repoPendingAll.set(n.repositoryId, (repoPendingAll.get(n.repositoryId) ?? 0) + 1);
     }
   }
   for (const n of rows) {
@@ -151,6 +155,7 @@ export async function GET(request: Request) {
       pending: repoFacets.get(r.id)?.pending ?? 0,
       unread: repoFacets.get(r.id)?.unread ?? 0,
       readable: repoReadable.get(r.id) ?? 0,
+      pendingAll: repoPendingAll.get(r.id) ?? 0,
       isSnoozed: isSnoozed(r.snoozedUntil, now),
     })),
   };

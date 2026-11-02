@@ -53,6 +53,7 @@ interface RepoFacet {
   pending?: number;
   unread?: number;
   readable?: number;
+  pendingAll?: number;
   isSnoozed: boolean;
 }
 
@@ -387,18 +388,21 @@ describe("the facet counts", () => {
       pending: 10,
       unread: 0,
       readable: 0,
+      pendingAll: 10,
     });
     // acme/api is seeded fully unread: 10 pending and 10 unread.
     expect(repoFacet(body.facets, "acme--api")).toMatchObject({
       pending: 10,
       unread: 10,
       readable: 10,
+      pendingAll: 10,
     });
     // A quiet repo reports both totals: 25 pending, 16 unread.
     expect(repoFacet(body.facets, "vendor--slow-dep")).toMatchObject({
       pending: 25,
       unread: 16,
       readable: 16,
+      pendingAll: 25,
     });
     const group = body.collapsedSection.find(
       (g) => g.repositoryId === "vendor--slow-dep"
@@ -422,6 +426,19 @@ describe("the facet counts", () => {
       pending: 0,
       unread: 0,
       readable: 10,
+      pendingAll: 0,
+    });
+  });
+
+  test("the repo-wide pendingAll count ignores the current filter", async () => {
+    // In the done view every filtered count is zero for a repo with nothing
+    // done, but the repo-wide done scope still holds all 10 pending rows.
+    const body = await load("?state=done");
+    expect(repoFacet(body.facets, "acme--api")).toMatchObject({
+      main: 0,
+      quiet: 0,
+      pending: 0,
+      pendingAll: 10,
     });
   });
 

@@ -698,6 +698,22 @@ describe("FilterSidebar", () => {
     ).toBeInTheDocument();
   });
 
+  test("prefers the repo-wide pending total for Mark all as done", () => {
+    renderSidebar({
+      onSnooze: vi.fn(),
+      onMarkAllDone: vi.fn(),
+      repos: repoFacets.map((r) =>
+        r.id === "acme--web" ? { ...r, pending: 0, pendingAll: 9 } : r
+      ),
+    });
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Mark all as done (9)" })
+    ).toBeInTheDocument();
+  });
+
   test("reports the repo when Mark all as done is chosen", () => {
     const onMarkAllDone = vi.fn();
     renderSidebar({ onSnooze: vi.fn(), onMarkAllDone });

@@ -315,8 +315,8 @@ export function useMarkRepoDone(filters: InboxFilters) {
       const nextRepos = previous.facets.repos.map((repo) =>
         repo.id === vars.repositoryId
           ? leavesView
-            ? { ...repo, main: 0, quiet: 0, pending: 0 }
-            : { ...repo, pending: 0 }
+            ? { ...repo, main: 0, quiet: 0, pending: 0, pendingAll: 0 }
+            : { ...repo, pending: 0, pendingAll: 0 }
           : repo
       );
       const nextCollapsed = leavesView

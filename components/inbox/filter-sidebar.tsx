@@ -27,6 +27,9 @@ export interface RepoFacet {
   /** All unread rows in the repository, ignoring the current filter;
    * matches the repo-wide read action so done-only repos stay actionable. */
   readable?: number;
+  /** All not-done rows in the repository, ignoring the current filter;
+   * matches the repo-wide done action. */
+  pendingAll?: number;
   isSnoozed: boolean;
 }
 
@@ -93,10 +96,11 @@ function RepoFilterRow({
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
   // Actionable counts fall back to the visible total for payloads that
-  // predate the pending/unread facet fields (tests, cached responses).
-  // Readable is repo-wide (ignores the current filter) so it stays correct
-  // for done-only repos; pending/unread describe the current view.
-  const doneable = r.pending ?? pendingTotal;
+  // predate the facet fields (tests, cached responses).
+  // Readable and pendingAll are repo-wide (ignore the current filter) so
+  // they stay correct for repos hidden by it; pending/unread describe the
+  // current view and come next in the fallback chain.
+  const doneable = r.pendingAll ?? r.pending ?? pendingTotal;
   const readable = r.readable ?? r.unread ?? pendingTotal;
   const repoBusy = busyRepoIds?.has(r.id) ?? false;
   const doneBusy = repoBusy || (markAllDoneBusy ?? false);
