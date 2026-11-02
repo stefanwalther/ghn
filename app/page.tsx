@@ -539,7 +539,7 @@ function InboxView() {
   // empty pending set swallow the done-view disable.
   const markAllDoneBusy = filters.state === "done";
 
-  /** Marks every pending item of one repo read, with rollback on failure. */
+  /** Marks every unread item of one repo read, with rollback on failure. */
   async function markRepoRead(repositoryId: string) {
     if (pendingRepos.has(repositoryId)) return;
     setNotice(null);
@@ -564,7 +564,7 @@ function InboxView() {
       const queued = typeof body?.queued === "number" ? body.queued : 0;
       const remote = typeof body?.remote === "string" ? body.remote : null;
       if (updated === 0 && queued === 0) {
-        say(`No pending items for ${repoName}.`, "info");
+        say(`All items for ${repoName} are already read.`, "info");
       } else if (remote === "background") {
         const quiet = Math.max(0, updated - visibleCount);
         say(
@@ -920,7 +920,6 @@ function InboxView() {
             markAllDoneBusy={markAllDoneBusy}
             busyRepoIds={pendingRepos}
             onMarkAllRead={markRepoRead}
-            markAllReadBusy={markAllDoneBusy}
             onCopied={handleRepoCopied}
             quietGroups={collapsed}
             quietActive={quietView}
@@ -1125,7 +1124,6 @@ function InboxView() {
               markAllDoneBusy={markAllDoneBusy}
               busyRepoIds={pendingRepos}
               onMarkAllRead={markRepoRead}
-              markAllReadBusy={markAllDoneBusy}
               onCopied={handleRepoCopied}
             />
           ) : null}

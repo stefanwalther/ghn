@@ -389,7 +389,7 @@ describe("applyRepoAction", () => {
     }
   });
 
-  test("read leaves done rows untouched, matching the repo-wide endpoint", () => {
+  test("read marks done rows too, matching the repo-wide endpoint", () => {
     const mixed: RepoRow[] = [
       { id: "p", repositoryId: "web", isRead: 0, isDone: 0, localUnread: true },
       { id: "d", repositoryId: "web", isRead: 0, isDone: 1, localUnread: false },
@@ -397,7 +397,7 @@ describe("applyRepoAction", () => {
     for (const state of ["unread", "all", "done"]) {
       const next = applyRepoAction(mixed, "web", "read", state);
       expect(next[0]).toMatchObject({ isRead: 1, localUnread: false });
-      expect(next[1]).toMatchObject({ isRead: 0, isDone: 1 });
+      expect(next[1]).toMatchObject({ isRead: 1, isDone: 1, localUnread: false });
     }
   });
 });

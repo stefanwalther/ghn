@@ -20,6 +20,16 @@ export interface RepoFacet {
   fullName: string;
   main: number;
   quiet: number;
+  /** Not-done rows among the current filter; drives the done button. */
+  pending?: number;
+  /** Unread rows among the current filter; drives the read button. */
+  unread?: number;
+  /** All unread rows in the repository, ignoring the current filter;
+   * matches the repo-wide read action so done-only repos stay actionable. */
+  readable?: number;
+  /** All not-done rows in the repository, ignoring the current filter;
+   * matches the repo-wide done action. */
+  pendingAll?: number;
   isSnoozed: boolean;
 }
 
@@ -85,6 +95,13 @@ function RepoFilterRow({
   const { visible, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
+  // Actionable counts fall back to the visible total for payloads that
+  // predate the facet fields (tests, cached responses).
+  // Readable and pendingAll are repo-wide (ignore the current filter) so
+  // they stay correct for repos hidden by it; pending/unread describe the
+  // current view and come next in the fallback chain.
+  const doneable = r.pendingAll ?? r.pending ?? pendingTotal;
+  const readable = r.readable ?? r.unread ?? pendingTotal;
   const repoBusy = busyRepoIds?.has(r.id) ?? false;
   const doneBusy = repoBusy || (markAllDoneBusy ?? false);
   const readBusy = repoBusy || (markAllReadBusy ?? false);
@@ -123,13 +140,13 @@ function RepoFilterRow({
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
           onMarkAllDone={onMarkAllDone}
-          markAllDoneDisabled={doneBusy || pendingTotal === 0}
-          markAllDoneCount={pendingTotal}
+          markAllDoneDisabled={doneBusy || doneable === 0}
+          markAllDoneCount={doneable}
           markAllDoneMain={r.main}
           markAllDoneQuiet={r.quiet}
           onMarkAllRead={onMarkAllRead}
-          markAllReadDisabled={readBusy || pendingTotal === 0}
-          markAllReadCount={pendingTotal}
+          markAllReadDisabled={readBusy || readable === 0}
+          markAllReadCount={readable}
           onCopied={onCopied}
           visible={visible}
           contextAnchor={contextAnchor}
@@ -236,7 +253,7 @@ export function FilterSidebar({
   const activeTypeLabel = types.find((t) => t.value === activeType)?.label;
   const activeRepoName = repos.find((r) => r.id === activeRepo)?.fullName;
   const visibleRepos = repos.filter(
-    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
+    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0 || (r.readable ?? 0) > 0
   );
   // Same fuzzy engine as the command palette, so a palette query handed
   // off here behaves identically. Scope qualifiers (`repo:`, `type:`…)

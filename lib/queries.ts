@@ -313,7 +313,11 @@ export function useMarkRepoDone(filters: InboxFilters) {
         return { ...facet, count: Math.max(0, facet.count - dec) };
       });
       const nextRepos = previous.facets.repos.map((repo) =>
-        repo.id === vars.repositoryId && leavesView ? { ...repo, main: 0, quiet: 0 } : repo
+        repo.id === vars.repositoryId
+          ? leavesView
+            ? { ...repo, main: 0, quiet: 0, pending: 0, pendingAll: 0 }
+            : { ...repo, pending: 0, pendingAll: 0 }
+          : repo
       );
       const nextCollapsed = leavesView
         ? (previous.collapsedSection ?? []).filter(
@@ -343,9 +347,9 @@ export function useMarkRepoDone(filters: InboxFilters) {
 }
 
 /**
- * Repo-wide read mutation: marks every pending notification of one
- * repository read, including quiet digests and rows hidden by the current
- * filter. Rows stay visible; only their read state changes.
+ * Repo-wide read mutation: marks every unread notification of one
+ * repository read, including done-but-unread rows and quiet digests hidden
+ * by the current filter. Rows stay visible; only their read state changes.
  */
 export function useMarkRepoRead(filters: InboxFilters) {
   const client = useQueryClient();
@@ -369,6 +373,17 @@ export function useMarkRepoRead(filters: InboxFilters) {
       const next: NotificationsResponse = {
         ...previous,
         mainFlow: applyRepoAction(previous.mainFlow, vars.repositoryId, "read", filters.state),
+        collapsedSection: (previous.collapsedSection ?? []).map((group) =>
+          group.repositoryId === vars.repositoryId
+            ? { ...group, unreadCount: 0 }
+            : group
+        ),
+        facets: {
+          ...previous.facets,
+          repos: previous.facets.repos.map((repo) =>
+            repo.id === vars.repositoryId ? { ...repo, unread: 0, readable: 0 } : repo
+          ),
+        },
       };
       client.setQueryData<NotificationsResponse>(key, next);
       return { previous };

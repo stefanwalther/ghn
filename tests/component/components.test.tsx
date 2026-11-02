@@ -635,6 +635,18 @@ describe("FilterSidebar", () => {
     expect(screen.queryByRole("button", { name: "Filter by acme/empty" })).not.toBeInTheDocument();
   });
 
+  test("keeps a done-only repository that still has unread rows", () => {
+    renderSidebar({
+      repos: repoFacets.map((r) =>
+        r.id === "acme--empty" ? { ...r, readable: 5 } : r
+      ),
+    });
+
+    // Nothing visible in the current filter, but the repo-wide read action
+    // would still mark 5 rows, so the row stays available.
+    expect(screen.getByRole("button", { name: "Filter by acme/empty" })).toBeInTheDocument();
+  });
+
   test("lists snoozed repositories in their own section", () => {
     renderSidebar();
 
@@ -683,6 +695,22 @@ describe("FilterSidebar", () => {
 
     expect(
       screen.getByRole("menuitem", { name: "Mark all as done (4)" })
+    ).toBeInTheDocument();
+  });
+
+  test("prefers the repo-wide pending total for Mark all as done", () => {
+    renderSidebar({
+      onSnooze: vi.fn(),
+      onMarkAllDone: vi.fn(),
+      repos: repoFacets.map((r) =>
+        r.id === "acme--web" ? { ...r, pending: 0, pendingAll: 9 } : r
+      ),
+    });
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Mark all as done (9)" })
     ).toBeInTheDocument();
   });
 
