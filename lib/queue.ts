@@ -175,25 +175,60 @@ export interface DrainResult {
 
 export async function drainQueue(
   db: Db,
-  apply: (threadId: string, action: WritebackAction) => Promise<GhResult<void>>
+  apply: (threadId: string, action: WritebackAction) => Promise<GhResult<void>>,
+  concurrency = 8
 ): Promise<DrainResult> {
   const rows = await db.select().from(writebackQueue).orderBy(asc(writebackQueue.id));
+  // Remote calls run concurrently so a large queued batch drains in
+  // seconds, not minutes. DB writes stay sequential afterwards because
+  // SQLite handles one writer at a time. Workers stop claiming new rows
+  // after the first rate-limited result: further writes would fail too,
+  // so unclaimed rows stay queued untouched for the next drain.
+  const results: (GhResult<void> | undefined)[] = new Array(rows.length);
+  let next = 0;
+  let rateLimited = false;
+  async function worker(): Promise<void> {
+    while (!rateLimited && next < rows.length) {
+      const idx = next++;
+      const row = rows[idx]!;
+      const result = await apply(row.threadId, row.action as WritebackAction);
+      results[idx] = result;
+      if (!result.ok && result.reason === "rate_limited") {
+        rateLimited = true;
+      }
+    }
+  }
+  const workerCount = Math.max(1, Math.min(concurrency, rows.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  let processed = 0;
   let succeeded = 0;
   let failed = 0;
   const succeededItems: { threadId: string; action: WritebackAction }[] = [];
-  for (const row of rows) {
-    const result = await apply(row.threadId, row.action);
+  for (const [idx, row] of rows.entries()) {
+    const result = results[idx];
+    if (result === undefined) continue;
     if (result.ok) {
+      // The intent may have been withdrawn mid-drain: mark-unread deletes
+      // the queue row and clears isDone locally. Reporting this stale
+      // success would let the sync heal set isDone back to 1, reversing
+      // the newer user action.
+      const stillQueued = await db
+        .select({ id: writebackQueue.id })
+        .from(writebackQueue)
+        .where(eq(writebackQueue.id, row.id));
+      if (stillQueued.length === 0) continue;
       await db.delete(writebackQueue).where(eq(writebackQueue.id, row.id));
+      processed += 1;
       succeeded += 1;
-      succeededItems.push({ threadId: row.threadId, action: row.action });
+      succeededItems.push({ threadId: row.threadId, action: row.action as WritebackAction });
     } else {
       await db
         .update(writebackQueue)
         .set({ attempts: row.attempts + 1, lastError: result.reason ?? "unknown" })
         .where(eq(writebackQueue.id, row.id));
+      processed += 1;
       failed += 1;
     }
   }
-  return { processed: rows.length, succeeded, failed, succeededItems };
+  return { processed, succeeded, failed, succeededItems };
 }

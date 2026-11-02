@@ -134,22 +134,15 @@ function InboxView() {
       return current;
     });
   }
-  // Busy state derives from the in-flight mutations, so overlapping triage
-  // and sync operations keep the controls disabled until all settle.
   const bulkMutation = useBulkAction(filters);
   const markRepoDoneMutation = useMarkRepoDone(filters);
   const markRepoReadMutation = useMarkRepoRead(filters);
   const {
     syncOne: syncThread,
     syncingIds,
-    isPending: threadBusy,
   } = useThreadSync(filters);
   const updateRepo = useUpdateRepository();
-  const busy =
-    bulkMutation.isPending ||
-    markRepoDoneMutation.isPending ||
-    markRepoReadMutation.isPending ||
-    threadBusy;
+  const bulkBusy = bulkMutation.isPending;
   // Central sync flow: manual refresh, poll window, and the truthful header
   // state derived from the shared notifications and connection entries.
   const sync = useSyncFlow(filters);
@@ -992,7 +985,7 @@ function InboxView() {
           <div className="sticky top-2 z-10 flex flex-col gap-2 bg-background pb-2">
             <BulkBar
               selectedCount={selected.size}
-              busy={busy}
+              busy={bulkBusy}
               showHints={showHints}
               onAction={apply}
               onClear={() => setSelected(new Set())}
