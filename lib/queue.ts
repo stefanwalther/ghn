@@ -207,9 +207,18 @@ export async function drainQueue(
   for (const [idx, row] of rows.entries()) {
     const result = results[idx];
     if (result === undefined) continue;
-    processed += 1;
     if (result.ok) {
+      // The intent may have been withdrawn mid-drain: mark-unread deletes
+      // the queue row and clears isDone locally. Reporting this stale
+      // success would let the sync heal set isDone back to 1, reversing
+      // the newer user action.
+      const stillQueued = await db
+        .select({ id: writebackQueue.id })
+        .from(writebackQueue)
+        .where(eq(writebackQueue.id, row.id));
+      if (stillQueued.length === 0) continue;
       await db.delete(writebackQueue).where(eq(writebackQueue.id, row.id));
+      processed += 1;
       succeeded += 1;
       succeededItems.push({ threadId: row.threadId, action: row.action as WritebackAction });
     } else {
@@ -217,6 +226,7 @@ export async function drainQueue(
         .update(writebackQueue)
         .set({ attempts: row.attempts + 1, lastError: result.reason ?? "unknown" })
         .where(eq(writebackQueue.id, row.id));
+      processed += 1;
       failed += 1;
     }
   }
