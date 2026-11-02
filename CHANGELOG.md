@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.7.0...ghn-v0.8.0) (2026-11-02)
+
+
+### Features
+
+* **config:** use local data dir for default database path ([#127](https://github.com/stefanwalther/ghn/issues/127)) ([2dfad91](https://github.com/stefanwalther/ghn/commit/2dfad9145e9c59c2e069b5edd781ff202de12be0))
+* **inbox:** local-first bulk triage, background sync ([#124](https://github.com/stefanwalther/ghn/issues/124)) ([2a315f0](https://github.com/stefanwalther/ghn/commit/2a315f097ef4ec62f6863585c2d6dc66ab74f182))
+
+
+### Bug Fixes
+
+* **inbox:** keep repo triage responsive for large repos ([#125](https://github.com/stefanwalther/ghn/issues/125)) ([872c8f5](https://github.com/stefanwalther/ghn/commit/872c8f53ac7c86678c57a7275f48703e06a11cc9))
+* **inbox:** resolve repo-wide read against unread rows ([#121](https://github.com/stefanwalther/ghn/issues/121)) ([993e4ae](https://github.com/stefanwalther/ghn/commit/993e4aea828154e519227c49edfa89e520270646))
+* **scripts:** reclaim port from stale dev server ([#128](https://github.com/stefanwalther/ghn/issues/128)) ([f578193](https://github.com/stefanwalther/ghn/commit/f57819314f04fbb9f3ec48ec64fcd317619ca7c1))
+
 ## [0.7.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.6.0...ghn-v0.7.0) (2026-10-31)
 
 
