@@ -312,4 +312,44 @@ test.describe("palette search scopes", () => {
     await expect(hit).toContainText("Open");
     await expect(hit).toContainText("Filter");
   });
+
+  test("filter input and rows stay inside the sidebar", async ({ page }) => {
+    // The input and rows once ran edge-to-edge, so the input's right
+    // border and focus ring were clipped by the scrollable aside.
+    await page.goto("/");
+    const input = page.getByRole("searchbox", { name: "Filter repositories" });
+    await expect(input).toBeVisible();
+    // Focus the way the report did: the ring must fit inside, not just the box.
+    await input.click();
+    const box = await page.evaluate(() => {
+      const asideEl = document.querySelector("aside.filter-aside");
+      const inputEl = document.querySelector('input[aria-label="Filter repositories"]');
+      if (!asideEl || !inputEl) throw new Error("sidebar filter not rendered");
+      const rows = [
+        ...asideEl.querySelectorAll("section[aria-label='Repository filters'] button"),
+      ];
+      const ar = asideEl.getBoundingClientRect();
+      const ir = inputEl.getBoundingClientRect();
+      return {
+        aside: { left: ar.left, right: ar.right },
+        input: { left: ir.left, right: ir.right },
+        rowLefts: rows.map((el) => el.getBoundingClientRect().left),
+        rowRights: rows.map((el) => el.getBoundingClientRect().right),
+        overflowX: getComputedStyle(asideEl).overflowX,
+      };
+    });
+    // Border plus the 2px focus-visible ring need room on both sides.
+    expect(box.input.left - box.aside.left).toBeGreaterThanOrEqual(2);
+    expect(box.aside.right - box.input.right).toBeGreaterThanOrEqual(2);
+    // Rows are full-bleed by design but must never cross the aside edge.
+    for (const left of box.rowLefts) {
+      expect(left).toBeGreaterThanOrEqual(box.aside.left - 0.5);
+    }
+    for (const right of box.rowRights) {
+      expect(right).toBeLessThanOrEqual(box.aside.right + 0.5);
+    }
+    // The resize handle protrudes past the edge; it must be clipped, never
+    // a horizontal scroll region.
+    expect(box.overflowX).toBe("hidden");
+  });
 });

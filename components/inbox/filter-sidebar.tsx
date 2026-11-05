@@ -364,7 +364,10 @@ export function FilterSidebar({
         </button>
         {collapsed.repos ? null : (
         <div className="flex flex-col gap-0.5">
-          <div className="relative px-0 pb-1">
+          {/* px-1 keeps the input visually full-width while leaving room
+          for its border and focus ring: at px-0 both are flush with the
+          scrollable aside edge and the right side is clipped. */}
+          <div className="relative px-1 pb-1">
             <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-[calc(50%+2px)] text-muted-foreground">⌕</span>
             <input
               type="search"
