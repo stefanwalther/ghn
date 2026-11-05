@@ -835,6 +835,80 @@ describe("FilterSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand type filters" }));
     expect(screen.getByRole("button", { name: "Filter by Mention" })).toBeInTheDocument();
   });
+
+  test("selects every type from the show-all entry", () => {
+    const props = renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+
+    expect(props.onType).toHaveBeenCalledWith("all");
+  });
+
+  test("selects every repository from the show-all entry", () => {
+    const props = renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all repositories" }));
+
+    expect(props.onRepo).toHaveBeenCalledWith("all");
+  });
+
+  test("collapses and expands the repositories section", () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse repository filters" }));
+    expect(screen.queryByRole("button", { name: "Filter by acme/web" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand repository filters" }));
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+  });
+
+  test("collapses and expands the quiet digests section", () => {
+    renderSidebar({
+      quietGroups: [
+        {
+          repositoryId: "acme--api",
+          repositoryName: "acme/api",
+          rhythm: "weekly",
+          nextDueAt: null,
+          nextDueLabel: "in 7 days",
+          pendingCount: 2,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("button", { name: "Show all quiet repositories" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse quiet digests" }));
+    expect(screen.queryByRole("button", { name: "Show all quiet repositories" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand quiet digests" }));
+    expect(screen.getByRole("button", { name: "Show all quiet repositories" })).toBeInTheDocument();
+  });
+
+  test("restores the collapsed sections from saved prefs", () => {
+    localStorage.setItem(
+      "ghn:filter-sections",
+      JSON.stringify({ types: true, repos: false, snoozed: false, quiet: false })
+    );
+    renderSidebar();
+
+    expect(screen.queryByRole("button", { name: "Filter by Mention" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+  });
+
+  test("hides the trigger when the pointer leaves the row", () => {
+    renderSidebar({
+      repos: [{ id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false }],
+      onSnooze: vi.fn(),
+    });
+
+    const trigger = screen.getByRole("button", { name: "Actions for acme/web" });
+    fireEvent.mouseEnter(screen.getByText("acme/web"));
+    expect(trigger).toHaveStyle({ opacity: "1" });
+
+    fireEvent.mouseLeave(screen.getByText("acme/web"));
+    expect(trigger).toHaveStyle({ opacity: "0" });
+  });
 });
 
 describe("BulkBar", () => {
@@ -1420,6 +1494,113 @@ describe("RepoSnoozeMenu", () => {
     expect(presets[1]).toHaveFocus();
     fireEvent.keyDown(presets[1]!, { key: "ArrowLeft" });
     expect(screen.queryByRole("menu", { name: "Snooze acme/web" })).not.toBeInTheDocument();
+  });
+
+  test("arrow keys move between menu and the rhythm submenu", async () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: /^Rhythm/ }), { key: "ArrowRight" });
+
+    const submenu = screen.getByRole("menu", { name: "Rhythm acme/web" });
+    const options = within(submenu).getAllByRole("menuitem");
+    await waitFor(() => expect(options[0]).toHaveFocus());
+    fireEvent.keyDown(options[0]!, { key: "ArrowDown" });
+    // The current rhythm is disabled, so arrow navigation skips it.
+    expect(options[2]).toHaveFocus();
+    fireEvent.keyDown(options[2]!, { key: "ArrowLeft" });
+    expect(screen.queryByRole("menu", { name: "Rhythm acme/web" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /^Rhythm/ })).toHaveFocus();
+  });
+
+  test("Escape steps out of the rhythm submenu then the menu", () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Rhythm/ }));
+    expect(screen.getByRole("menu", { name: "Rhythm acme/web" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Rhythm acme/web" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menu", { name: "Actions for acme/web" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /^Rhythm/ })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("opening the Rhythm submenu does not steal focus from Rhythm", () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    const rhythm = screen.getByRole("menuitem", { name: /^Rhythm/ });
+    rhythm.focus();
+    fireEvent.mouseEnter(rhythm);
+
+    expect(screen.getByRole("menu", { name: "Rhythm acme/web" })).toBeInTheDocument();
+    expect(rhythm).toHaveFocus();
+  });
+
+  test("Enter opens the rhythm submenu from the keyboard", async () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: /^Rhythm/ }), { key: "Enter" });
+
+    const submenu = screen.getByRole("menu", { name: "Rhythm acme/web" });
+    const options = within(submenu).getAllByRole("menuitem");
+    await waitFor(() => expect(options[0]).toHaveFocus());
+  });
+
+  test("opens the rhythm submenu on the left when space is short", () => {
+    const width = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 200, configurable: true });
+    try {
+      renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Rhythm/ }));
+      expect(screen.getByRole("menu", { name: "Rhythm acme/web" })).toHaveStyle({ left: "8px" });
+
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Snooze/ }));
+      expect(screen.getByRole("menu", { name: "Snooze acme/web" })).toHaveStyle({ left: "8px" });
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+    }
+  });
+
+  test("closes the menu when the user clicks outside it", () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("closes the menu on scroll", () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    fireEvent.scroll(window);
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("Enter opens the snooze submenu from the keyboard", async () => {
+    renderSnoozeMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: /^Snooze/ }), { key: "Enter" });
+
+    const submenu = screen.getByRole("menu", { name: "Snooze acme/web" });
+    await waitFor(() =>
+      expect(within(submenu).getAllByRole("menuitem")[0]).toHaveFocus()
+    );
   });
 
   test("clicking the trigger again closes the menu", () => {
