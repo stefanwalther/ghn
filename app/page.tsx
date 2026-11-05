@@ -56,6 +56,7 @@ import {
 } from "@/lib/view-state";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { formatRelativeTime } from "@/lib/format-relative";
 
 // Runs before paint on the client (no-op on the server) so the stored
 // width is applied before anything is shown.
@@ -155,6 +156,7 @@ function InboxView() {
     pollSecs,
     inPollWindow,
     countdownSecs,
+    nowMs,
   } = sync;
 
   const notifQuery = useNotifications(filters);
@@ -879,10 +881,10 @@ function InboxView() {
           {lastSyncAt !== null ? (
             <span
               className="inline-flex items-baseline gap-1 text-xs tabular-nums text-muted-foreground"
-              title={`Poll interval ${pollSecs}s`}
+              title={`Last synced ${formatSyncTime(lastSyncAt)} · poll interval ${pollSecs}s`}
             >
               {stale ? <span>Stale ·</span> : null}
-              <span>Synced {formatSyncTime(lastSyncAt)}</span>
+              <span>Synced {formatRelativeTime(lastSyncAt, nowMs)}</span>
               <span
                 aria-hidden="true"
                 className="inline-block min-w-[5ch] text-left"
@@ -1038,7 +1040,7 @@ function InboxView() {
                 <span className="font-medium">GitHub disconnected.</span>{" "}
                 <span className="text-muted-foreground">
                   Cached inbox below
-                  {lastSyncAt !== null ? ` · last synced ${formatSyncTime(lastSyncAt)}` : ""}.
+                  {lastSyncAt !== null ? ` · last synced ${formatRelativeTime(lastSyncAt, nowMs)}` : ""}.
                   Set GH_TOKEN or run `gh auth login` on the server, then retry.
                 </span>
               </p>
@@ -1059,7 +1061,7 @@ function InboxView() {
             >
               <p className="flex-1 text-sm text-muted-foreground">
                 {syncError ?? "Data may be stale."}
-                {lastSyncAt !== null ? ` Last synced ${formatSyncTime(lastSyncAt)}.` : ""}
+                {lastSyncAt !== null ? ` Last synced ${formatRelativeTime(lastSyncAt, nowMs)}.` : ""}
               </p>
               <Button
                 variant="secondary"
