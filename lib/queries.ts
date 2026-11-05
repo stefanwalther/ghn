@@ -619,6 +619,34 @@ export function useSettings() {
   });
 }
 
+export interface SettingsDatabaseResponse {
+  database: SettingsResponse["database"];
+}
+
+export interface SettingsGithubResponse {
+  github: SettingsResponse["github"];
+}
+
+export function useSettingsDatabase() {
+  return useQuery({
+    queryKey: queryKeys.settingsDatabase(),
+    queryFn: () =>
+      fetchJson<SettingsDatabaseResponse>("/api/settings/database", {
+        cache: "no-store",
+      }),
+  });
+}
+
+export function useSettingsGithub() {
+  return useQuery({
+    queryKey: queryKeys.settingsGithub(),
+    queryFn: () =>
+      fetchJson<SettingsGithubResponse>("/api/settings/github", {
+        cache: "no-store",
+      }),
+  });
+}
+
 export function useRateLimits() {
   return useQuery({
     queryKey: queryKeys.rateLimits(),
