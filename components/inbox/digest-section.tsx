@@ -88,7 +88,7 @@ function DigestRow({
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
 }) {
-  const { visible, rowHandlers } = useRowVisibility();
+  const { visible, reset, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   // Quiet rows are all not-done, so done targets the full pending count.
   // Read targets only the unread subset once the server reports it.
@@ -141,6 +141,7 @@ function DigestRow({
             visible={visible}
             contextAnchor={contextAnchor}
             onContextClose={() => setContextAnchor(null)}
+            onVisibilityReset={reset}
           />
         </span>
       ) : null}

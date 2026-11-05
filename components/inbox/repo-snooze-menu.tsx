@@ -31,8 +31,17 @@ function inboxPresets(now: number) {
 export function useRowVisibility() {
   const [hovered, setHovered] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
+  // Clears hover and keyboard focus so the hover trigger hides after an
+  // action runs. Called before the menu closes: a keyboard close refocuses
+  // the trigger afterwards (restoring visibility via :focus-visible), while
+  // a pointer close leaves it hidden until the next hover.
+  const reset = React.useCallback(() => {
+    setHovered(false);
+    setFocused(false);
+  }, []);
   return {
     visible: hovered || focused,
+    reset,
     rowHandlers: {
       onMouseEnter: () => setHovered(true),
       onMouseLeave: () => setHovered(false),
@@ -84,6 +93,7 @@ export function RepoSnoozeMenu({
   visible = true,
   contextAnchor,
   onContextClose,
+  onVisibilityReset,
 }: {
   repoId: string;
   fullName: string;
@@ -129,6 +139,13 @@ export function RepoSnoozeMenu({
    */
   contextAnchor?: { x: number; y: number } | null;
   onContextClose?: () => void;
+  /**
+   * Clears the parent row hover/focus so the "..." trigger hides after an
+   * action runs. Called before the menu closes: keyboard closes refocus the
+   * trigger afterwards and become visible again via :focus-visible, pointer
+   * closes stay hidden until the next hover.
+   */
+  onVisibilityReset?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [snoozeOpen, setSnoozeOpen] = React.useState(false);
@@ -158,6 +175,13 @@ export function RepoSnoozeMenu({
   onMarkAllReadRef.current = onMarkAllRead;
   const onCopiedRef = React.useRef(onCopied);
   onCopiedRef.current = onCopied;
+  const onVisibilityResetRef = React.useRef(onVisibilityReset);
+  onVisibilityResetRef.current = onVisibilityReset;
+
+  /** Hides the parent "..." trigger before the menu closes. */
+  function resetVisibility() {
+    onVisibilityResetRef.current?.();
+  }
 
   /** Opens the menu below the trigger, flipping above when space is short. */
   function openMenu() {
@@ -245,6 +269,7 @@ export function RepoSnoozeMenu({
 
   /** Applies one snooze preset choice and closes the menu. */
   function choose(at: number | null, e: React.SyntheticEvent) {
+    resetVisibility();
     closeAll(refocusForClick(e));
     onSnooze(repoId, at);
   }
@@ -252,6 +277,7 @@ export function RepoSnoozeMenu({
   /** Reports the repo-wide done action unless the entry is disabled. */
   function chooseMarkAllDone(e: React.SyntheticEvent) {
     if (markAllDoneDisabled) return;
+    resetVisibility();
     closeAll(refocusForClick(e));
     onMarkAllDone?.(repoId);
   }
@@ -259,6 +285,7 @@ export function RepoSnoozeMenu({
   /** Reports the repo-wide read action unless the entry is disabled. */
   function chooseMarkAllRead(e: React.SyntheticEvent) {
     if (markAllReadDisabled) return;
+    resetVisibility();
     closeAll(refocusForClick(e));
     onMarkAllRead?.(repoId);
   }
@@ -284,14 +311,17 @@ export function RepoSnoozeMenu({
 
   /** Opens the repository root in a new window and closes the menu. */
   function openRepo(e: React.SyntheticEvent) {
+    resetVisibility();
     closeAll(refocusForClick(e));
     window.open(rootUrl, "_blank", "noopener");
   }
 
   /** Copies the repository link and reports the clipboard result. */
   async function copyRepoLink(e: React.SyntheticEvent) {
+    const keyboard = refocusForClick(e);
+    resetVisibility();
     const ok = await copyText(rootUrl);
-    closeAll(refocusForClick(e));
+    closeAll(keyboard);
     onCopiedRef.current?.(repoId, ok);
   }
 
