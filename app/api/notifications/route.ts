@@ -157,6 +157,7 @@ export async function GET(request: Request) {
       readable: repoReadable.get(r.id) ?? 0,
       pendingAll: repoPendingAll.get(r.id) ?? 0,
       isSnoozed: isSnoozed(r.snoozedUntil, now),
+      rhythm: r.rhythm,
     })),
   };
 

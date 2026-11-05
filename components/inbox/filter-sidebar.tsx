@@ -31,6 +31,7 @@ export interface RepoFacet {
    * matches the repo-wide done action. */
   pendingAll?: number;
   isSnoozed: boolean;
+  rhythm?: string;
 }
 
 function SidebarButton({
@@ -70,6 +71,8 @@ function RepoFilterRow({
   onRepo,
   onSnooze,
   snoozeDisabled,
+  onRhythm,
+  rhythmDisabled,
   snoozedSection,
   onMarkAllDone,
   markAllDoneBusy,
@@ -83,6 +86,8 @@ function RepoFilterRow({
   onRepo: (repo: string) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onRhythm?: (id: string, rhythm: string) => void;
+  rhythmDisabled?: boolean;
   snoozedSection?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
@@ -132,13 +137,16 @@ function RepoFilterRow({
           <Badge variant="muted">{r.main}</Badge>
         </span>
       </SidebarButton>
-      {onSnooze ? (
+      {(onSnooze || onRhythm) ? (
         <RepoSnoozeMenu
           repoId={r.id}
           fullName={r.fullName}
           isSnoozed={r.isSnoozed}
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
+          currentRhythm={r.rhythm}
+          onRhythm={onRhythm}
+          rhythmDisabled={rhythmDisabled ?? snoozeDisabled}
           onMarkAllDone={onMarkAllDone}
           markAllDoneDisabled={doneBusy || doneable === 0}
           markAllDoneCount={doneable}
@@ -174,6 +182,8 @@ export function FilterSidebar({
   onRepo,
   onSnooze,
   snoozeDisabled,
+  onRhythm,
+  rhythmDisabled,
   onMarkAllDone,
   markAllDoneBusy,
   busyRepoIds,
@@ -194,6 +204,8 @@ export function FilterSidebar({
   onRepo: (repo: string) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onRhythm?: (id: string, rhythm: string) => void;
+  rhythmDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
   /** Per-repo pending set; when provided it replaces the global busy flag. */
@@ -418,6 +430,8 @@ export function FilterSidebar({
               onRepo={onRepo}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
+              onRhythm={onRhythm}
+              rhythmDisabled={rhythmDisabled}
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
               busyRepoIds={busyRepoIds}
@@ -469,6 +483,8 @@ export function FilterSidebar({
               onRepo={onRepo}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
+              onRhythm={onRhythm}
+              rhythmDisabled={rhythmDisabled}
               snoozedSection
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}

@@ -806,6 +806,26 @@ describe("FilterSidebar", () => {
     expect(props.onRepo).toHaveBeenCalledWith("acme--web");
   });
 
+  test("a rhythm choice reports the repo and rhythm from the sidebar menu", () => {
+    const onRhythm = vi.fn();
+    renderSidebar({
+      repos: [
+        { id: "acme--web", fullName: "acme/web", main: 3, quiet: 1, isSnoozed: false, rhythm: "weekly" },
+      ],
+      onSnooze: vi.fn(),
+      onRhythm,
+    });
+
+    fireEvent.contextMenu(screen.getByText("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rhythm · Weekly" }));
+
+    const submenu = screen.getByRole("menu", { name: "Rhythm acme/web" });
+    fireEvent.click(within(submenu).getByRole("menuitem", { name: "Immediate" }));
+
+    expect(onRhythm).toHaveBeenCalledWith("acme--web", "immediate");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   test("collapses and expands the type section", () => {
     renderSidebar();
 
@@ -972,6 +992,25 @@ describe("DigestSection", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Mark all as read/ }));
     expect(onMarkAllRead).toHaveBeenCalledWith("acme--api");
   });
+
+  test("offers the Rhythm submenu for the quiet repository", () => {
+    const onRhythm = vi.fn();
+    render(
+      <DigestSection
+        groups={groups}
+        onSnooze={vi.fn()}
+        onRhythm={onRhythm}
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByText("acme/api"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rhythm · Weekly" }));
+
+    const submenu = screen.getByRole("menu", { name: "Rhythm acme/api" });
+    fireEvent.click(within(submenu).getByRole("menuitem", { name: "Immediate" }));
+
+    expect(onRhythm).toHaveBeenCalledWith("acme--api", "immediate");
+  });
 });
 
 describe("RepoSnoozeMenu", () => {
@@ -994,6 +1033,69 @@ describe("RepoSnoozeMenu", () => {
 
     expect(screen.getByRole("menu", { name: "Actions for acme/web" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /^Snooze/ })).toBeInTheDocument();
+  });
+
+  test("hides the Rhythm row without the rhythm handler", () => {
+    renderSnoozeMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+
+    expect(
+      screen.queryByRole("menuitem", { name: /^Rhythm/ })
+    ).not.toBeInTheDocument();
+  });
+
+  test("shows the current rhythm in the Rhythm row", () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Rhythm · Weekly" })
+    ).toBeInTheDocument();
+  });
+
+  test("lists every rhythm with the current one marked and disabled", () => {
+    renderSnoozeMenu({ onRhythm: vi.fn(), currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Rhythm/ }));
+
+    const submenu = screen.getByRole("menu", { name: "Rhythm acme/web" });
+    const entries = within(submenu).getAllByRole("menuitem");
+    expect(entries.map((el) => el.textContent)).toEqual([
+      "Immediate",
+      "Weekly (current)",
+      "Every 2 weeks",
+      "Monthly",
+    ]);
+    expect(
+      within(submenu).getByRole("menuitem", { name: "Weekly (current)" })
+    ).toBeDisabled();
+  });
+
+  test("reports the repo and rhythm when a submenu option is chosen", () => {
+    const onRhythm = vi.fn();
+    renderSnoozeMenu({ onRhythm, currentRhythm: "weekly" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Rhythm/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Immediate" }));
+
+    expect(onRhythm).toHaveBeenCalledWith("acme--web", "immediate");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("disables the Rhythm row while a rhythm update is in flight", () => {
+    renderSnoozeMenu({
+      onRhythm: vi.fn(),
+      currentRhythm: "weekly",
+      rhythmDisabled: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+
+    expect(screen.getByRole("menuitem", { name: /^Rhythm/ })).toBeDisabled();
   });
 
   test("lists Mark all as done when the handler is given", () => {
