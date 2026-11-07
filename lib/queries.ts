@@ -547,6 +547,7 @@ export function useSyncFlow(filters: InboxFilters) {
     stale,
     syncError,
     conn,
+    nowMs,
   };
 }
 

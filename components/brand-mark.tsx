@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useConnection } from "@/lib/queries";
+import { formatRelativeTime } from "@/lib/format-relative";
 
 interface ConnStatus {
   connected: boolean;
@@ -81,26 +82,33 @@ export function BrandMark() {
     nowMs - conn.lastSyncAt > 2 * conn.pollIntervalSecs * 1000;
   const waiting = conn !== null && (!conn.connected || stale);
   const state = syncing ? "syncing" : waiting ? "waiting" : "ready";
-  const lastSynced =
+  const lastSyncedAbsolute =
     conn?.lastSyncAt != null ? formatSyncTime(conn.lastSyncAt) : null;
+  const lastSyncedRelative =
+    conn?.lastSyncAt != null
+      ? formatRelativeTime(conn.lastSyncAt, nowMs)
+      : null;
   const label = syncing
-    ? `ghn home — syncing${lastSynced ? ` (last synced ${lastSynced})` : "…"}`
+    ? `ghn home — syncing${lastSyncedRelative ? ` (last synced ${lastSyncedRelative})` : "…"}`
     : conn === null
       ? "ghn home"
       : !conn.connected
         ? "ghn home — disconnected, run gh auth login on the server"
         : stale
-          ? `ghn home — stale, last synced ${lastSynced ?? "unknown"}`
-          : lastSynced
-            ? `ghn home — synced ${lastSynced}, all clear`
+          ? `ghn home — stale, last synced ${lastSyncedRelative ?? "unknown"}`
+          : lastSyncedRelative
+            ? `ghn home — synced ${lastSyncedRelative}, all clear`
             : "ghn home — not synced yet";
+  // Tooltip keeps the exact clock time; the accessible label stays relative.
+  const title =
+    lastSyncedAbsolute != null ? `${label} (${lastSyncedAbsolute})` : label;
 
   return (
     <div className="mb-4 px-2">
       <Link
         href="/"
         aria-label={label}
-        title={label}
+        title={title}
         className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <svg
