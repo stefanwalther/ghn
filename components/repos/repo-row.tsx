@@ -4,6 +4,7 @@ import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { snoozePresets } from "@/lib/snooze";
 
 export interface RepoRowData {
@@ -76,12 +77,13 @@ export function RepoRow({
           {repo.pinned ? <Badge variant="accent">Pinned</Badge> : null}
           {repo.isSnoozed ? <Badge variant="accent">Snoozed until {repo.snoozeLabel}</Badge> : null}
           {repo.unreachable ? (
-            <Badge
-              variant="destructive"
-              title="GitHub no longer returns this repository (renamed, deleted, or access lost). Cached items stay readable."
-            >
-              Unreachable
-            </Badge>
+            <HintTooltip label="GitHub no longer returns this repository (renamed, deleted, or access lost). Cached items stay readable.">
+              <span className="inline-flex">
+                <Badge variant="destructive">
+                  Unreachable
+                </Badge>
+              </span>
+            </HintTooltip>
           ) : null}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -97,7 +99,6 @@ export function RepoRow({
           disabled={busy}
           onClick={() => onPin(repo.id, !repo.pinned)}
           aria-label={`${repo.pinned ? "Unpin" : "Pin"} ${repo.fullName}`}
-          title={repo.pinned ? "Unpin this repository" : "Pin this repository"}
         >
           {repo.pinned ? "Unpin" : "Pin"}
         </Button>

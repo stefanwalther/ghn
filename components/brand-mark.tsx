@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useConnection } from "@/lib/queries";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { formatRelativeTime } from "@/lib/format-relative";
 
 interface ConnStatus {
@@ -105,12 +106,12 @@ export function BrandMark() {
 
   return (
     <div className="mb-4 px-2">
-      <Link
-        href="/"
-        aria-label={label}
-        title={title}
-        className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
+      <HintTooltip label={title}>
+        <Link
+          href="/"
+          aria-label={label}
+          className="inline-flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 55 40"
@@ -150,7 +151,8 @@ export function BrandMark() {
             <rect x="5.00" y="7.16" width="7.00" height="24.08" rx="1.5" />
           </svg>
         )}
-      </Link>
+        </Link>
+      </HintTooltip>
     </div>
   );
 }

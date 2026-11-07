@@ -12,6 +12,7 @@ import { useUIStore } from "@/lib/ui-store";
 import { cn } from "@/lib/utils";
 import { saveLastOpened } from "@/lib/view-state";
 import { ItemMenu, type ItemMenuAction } from "@/components/inbox/item-menu";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 export interface InboxItem {
   id: string;
@@ -255,7 +256,6 @@ function NotificationRow({
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
-                title={`Select ${item.subject}`}
                 className="flex items-start gap-3 self-stretch py-0.5 pr-3"
               >
                 <Checkbox
@@ -288,12 +288,11 @@ function NotificationRow({
                   </Badge>
                   {item.dueLabel ? <Badge variant="accent">{item.dueLabel}</Badge> : null}
                   {item.localUnread ? (
-                    <span
-                      className="text-xs text-muted-foreground"
-                      title="Unread is local only; GitHub has no mark-unread endpoint"
-                    >
-                      local only
-                    </span>
+                    <HintTooltip label="Unread is local only; GitHub has no mark-unread endpoint">
+                      <span className="cursor-help text-xs text-muted-foreground underline decoration-dotted underline-offset-2">
+                        local only
+                      </span>
+                    </HintTooltip>
                   ) : null}
                   <span className="font-mono text-xs text-muted-foreground">
                     {ageLabel(item.createdAt)}
@@ -306,7 +305,6 @@ function NotificationRow({
                   <span
                     role="status"
                     aria-label={`Syncing ${item.subject}`}
-                    title={`Syncing ${item.subject}`}
                     className="p-2 text-muted-foreground"
                   >
                     <SyncSpinner />
@@ -321,19 +319,21 @@ function NotificationRow({
                   contextAnchor={contextAnchor}
                   onContextClose={() => setContextAnchor(null)}
                 />
-                <a
-                  href={item.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Open source for ${item.subject}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    saveLastOpened(item.id);
-                  }}
-                  className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <ExternalLink className="h-4 w-4" aria-hidden />
-                </a>
+                <HintTooltip label={`Open source for ${item.subject}`}>
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Open source for ${item.subject}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      saveLastOpened(item.id);
+                    }}
+                    className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden />
+                  </a>
+                </HintTooltip>
               </div>
             </li>
   );

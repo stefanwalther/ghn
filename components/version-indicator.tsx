@@ -4,6 +4,7 @@ import * as React from "react";
 import { APP_VERSION } from "@/lib/app-meta";
 import type { UpdateInfo } from "@/lib/update-check";
 import { UpdatePopover } from "@/components/update-popover";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 /**
  * Sidebar footer version. Shows the running version, and when the release
@@ -46,14 +47,16 @@ export function VersionIndicator() {
 
   return (
     <>
-      <button
-        ref={badgeRef}
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={`New ghn version ${info.latest} available, running ${info.current}. Open the update dialog.`}
-        title={`New version v${info.latest} available (running v${info.current}). Open the update dialog.`}
-        className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      <HintTooltip
+        label={`New version v${info.latest} available (running v${info.current}). Open the update dialog.`}
       >
+        <button
+          ref={badgeRef}
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={`New ghn version ${info.latest} available, running ${info.current}. Open the update dialog.`}
+          className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
         <span>v{info.current}</span>
         <span className="relative flex h-2 w-2" aria-hidden>
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
@@ -62,7 +65,8 @@ export function VersionIndicator() {
         <span className="font-medium text-amber-600 dark:text-amber-400">
           v{info.latest} available
         </span>
-      </button>
+        </button>
+      </HintTooltip>
       {open ? (
         <UpdatePopover
           current={info.current}

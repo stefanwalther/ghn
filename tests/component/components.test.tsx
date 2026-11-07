@@ -318,19 +318,22 @@ describe("ItemMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actions for Fix flaky login redirect" }));
 
     const menu = screen.getByRole("menu", { name: "Actions for Fix flaky login redirect" });
-    const titles = within(menu)
-      .getAllByRole("menuitem")
-      .map((el) => el.getAttribute("title"));
-    expect(titles).toEqual([
-      "Mark as done (d)",
-      "Mark as read (r)",
-      "Unsubscribe and mute (⇧U)",
-      "Open details (⇧D)",
-      "Open source (o)",
-      "Copy link (c)",
-      "Sync this item (s)",
-      "Select this repository",
+    const entries = within(menu).getAllByRole("menuitem");
+    // Shortcut chips stay visible in the row; hover hints use the styled
+    // tooltip instead of the native title box.
+    expect(entries.map((el) => el.querySelector("kbd")?.textContent ?? null)).toEqual([
+      "d",
+      "r",
+      "⇧U",
+      "⇧D",
+      "o",
+      "c",
+      "s",
+      null,
     ]);
+    for (const entry of entries) {
+      expect(entry).not.toHaveAttribute("title");
+    }
   });
 
   test("reports the action that was chosen", () => {

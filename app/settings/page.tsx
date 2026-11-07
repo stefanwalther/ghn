@@ -55,7 +55,6 @@ export default function SettingsPage() {
           size="sm"
           onClick={handleRefresh}
           disabled={refreshing || initialLoading}
-          title="Refresh settings status"
           aria-label="Refresh settings status"
         >
           <SyncSpinner spinning={refreshing && !initialLoading} />

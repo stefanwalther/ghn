@@ -71,7 +71,6 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
           type="button"
           onClick={onClose}
           aria-label="Close update dialog"
-          title="Close"
           data-autofocus
           className="absolute top-3 right-3 cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >

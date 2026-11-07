@@ -233,10 +233,12 @@ test.describe("inbox load", () => {
     });
 
     // The header shows a relative age; the exact clock time stays in the
-    // tooltip. The browser clock is real time while the fixture instant is
-    // frozen, so only the tooltip text is exact.
-    await expect(page.getByText(/Synced (.+ ago|just now)/)).toBeVisible();
-    await expect(page.locator('span[title*="Last synced 12:00 PM"]')).toBeVisible();
+    // styled tooltip. The browser clock is real time while the fixture
+    // instant is frozen, so only the tooltip text is exact.
+    const synced = page.getByText(/Synced (.+ ago|just now)/);
+    await expect(synced).toBeVisible();
+    await synced.hover();
+    await expect(page.getByRole("tooltip")).toContainText("Last synced 12:00 PM");
     await expect(page.getByRole("button", { name: "Reseed demo data" })).toHaveCount(0);
 
     // The sync leaves the seeded dataset alone. The stand-in serves the same

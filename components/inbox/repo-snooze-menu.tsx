@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { CalendarClock, Check, CheckCheck, ChevronRight, Clock, ExternalLink, Link2, MailOpen, MoreHorizontal } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { snoozePresets } from "@/lib/snooze";
 import { cn } from "@/lib/utils";
 
@@ -471,31 +472,32 @@ export function RepoSnoozeMenu({
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={`Actions for ${fullName}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`Actions for ${fullName}`}
-        disabled={disabled}
-        style={{
-          ...triggerStyle,
-          opacity: shown ? 1 : 0,
-          pointerEvents: shown ? "auto" : "none",
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (open) closeAll();
-          else openMenu();
-        }}
-        className={cn(
-          "shrink-0 cursor-pointer rounded-md p-1.5 text-muted-foreground transition-opacity duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-          triggerClassName
-        )}
-      >
-        <MoreHorizontal className="h-4 w-4" aria-hidden />
-      </button>
+      <HintTooltip label={`Actions for ${fullName}`}>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Actions for ${fullName}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={disabled}
+          style={{
+            ...triggerStyle,
+            opacity: shown ? 1 : 0,
+            pointerEvents: shown ? "auto" : "none",
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (open) closeAll();
+            else openMenu();
+          }}
+          className={cn(
+            "shrink-0 cursor-pointer rounded-md p-1.5 text-muted-foreground transition-opacity duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+            triggerClassName
+          )}
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
+        </button>
+      </HintTooltip>
       {open
         ? createPortal(
             <div
@@ -595,7 +597,6 @@ export function RepoSnoozeMenu({
                 role="menuitem"
                 aria-haspopup="menu"
                 aria-expanded={snoozeOpen}
-                title={`Snooze ${fullName}`}
                 onClick={() => {
                   if (snoozeOpen) setSnoozeOpen(false);
                   else openSubmenu(false);
@@ -641,7 +642,6 @@ export function RepoSnoozeMenu({
               <button
                 type="button"
                 role="menuitem"
-                title={`Open ${fullName} in a new window`}
                 onClick={openRepo}
                 className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
@@ -651,7 +651,6 @@ export function RepoSnoozeMenu({
               <button
                 type="button"
                 role="menuitem"
-                title={`Copy link to ${fullName}`}
                 onClick={copyRepoLink}
                 className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
@@ -691,7 +690,6 @@ export function RepoSnoozeMenu({
                   key={p.value}
                   type="button"
                   role="menuitem"
-                  title={p.label}
                   onClick={(e) => choose(p.at, e)}
                   className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
@@ -702,7 +700,6 @@ export function RepoSnoozeMenu({
                 <button
                   type="button"
                   role="menuitem"
-                  title={`Unsnooze ${fullName}`}
                   onClick={(e) => choose(null, e)}
                   className="flex w-full cursor-pointer items-center gap-2 border-t border-border/40 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >

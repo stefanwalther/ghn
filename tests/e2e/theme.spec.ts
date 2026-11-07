@@ -9,7 +9,11 @@ test.describe("theme switcher", () => {
     await page.goto("/");
     const trigger = page.getByRole("button", { name: "Theme", exact: true });
     await expect(trigger).toBeVisible();
-    await expect(trigger).toHaveAttribute("title", "Theme (Cmd+F12)");
+    // Hover hint is a styled Radix tooltip, not a native title box.
+    await expect(trigger).not.toHaveAttribute("title");
+    await trigger.hover();
+    await expect(page.getByRole("tooltip")).toContainText("Theme");
+    await expect(page.getByRole("tooltip")).toContainText("⌘F12");
     await trigger.click();
     const menu = page.getByRole("menu", { name: "Theme" });
     await expect(menu).toBeVisible();
