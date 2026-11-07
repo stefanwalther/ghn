@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/stefanwalther/ghn/compare/ghn-v0.9.0...ghn-v0.9.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **inbox:** hide zero-count repos in filter list ([#136](https://github.com/stefanwalther/ghn/issues/136)) ([66cf584](https://github.com/stefanwalther/ghn/commit/66cf584b9a6435d65c2ca7649ea341eeef29c7e7))
+
 ## [0.9.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.8.0...ghn-v0.9.0) (2026-11-07)
 
 
