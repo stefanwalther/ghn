@@ -294,6 +294,16 @@ describe("the state filter", () => {
     expect(body.collapsedSection).toHaveLength(0);
   });
 
+  test("a done filter with a repository keeps that repository's done items", async () => {
+    await db
+      .update(notifications)
+      .set({ isDone: 1 })
+      .where(inArray(notifications.id, ["n_001", "n_002"]));
+    const body = await load("?state=done&repo=acme--web");
+    expect(body.mainFlow.map((item) => item.id)).toEqual(["n_001"]);
+    expect(body.mainFlow.every((item) => item.repositoryId === "acme--web")).toBe(true);
+  });
+
   test("the all filter counts the done items too", async () => {
     await db
       .update(notifications)

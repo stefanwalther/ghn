@@ -19,4 +19,6 @@ export const queryKeys = {
   thread: (id: string) => ["thread", id] as const,
   rateLimits: () => ["rate-limits"] as const,
   settings: () => ["settings"] as const,
+  settingsDatabase: () => ["settings", "database"] as const,
+  settingsGithub: () => ["settings", "github"] as const,
 };

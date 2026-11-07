@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { CheckCheck, ChevronRight, Clock, ExternalLink, Link2, MailOpen, MoreHorizontal } from "lucide-react";
+import { CalendarClock, Check, CheckCheck, ChevronRight, Clock, ExternalLink, Link2, MailOpen, MoreHorizontal } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { snoozePresets } from "@/lib/snooze";
@@ -13,6 +13,19 @@ const SUBMENU_WIDTH = 260;
 const MENU_GAP = 8;
 const MENU_ITEM_HEIGHT = 44;
 const MENU_LIST_PADDING = 8;
+
+/** Digest rhythms in the same order as the Repositories page select. */
+const RHYTHM_OPTIONS = [
+  { value: "immediate", label: "Immediate" },
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Every 2 weeks" },
+  { value: "monthly", label: "Monthly" },
+] as const;
+
+function rhythmLabel(value: string | undefined): string | null {
+  if (!value) return null;
+  return RHYTHM_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
 
 /** The five inbox presets from the request, in order. */
 function inboxPresets(now: number) {
@@ -32,8 +45,17 @@ function inboxPresets(now: number) {
 export function useRowVisibility() {
   const [hovered, setHovered] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
+  // Clears hover and keyboard focus so the hover trigger hides after an
+  // action runs. Called before the menu closes: a keyboard close refocuses
+  // the trigger afterwards (restoring visibility via :focus-visible), while
+  // a pointer close leaves it hidden until the next hover.
+  const reset = React.useCallback(() => {
+    setHovered(false);
+    setFocused(false);
+  }, []);
   return {
     visible: hovered || focused,
+    reset,
     rowHandlers: {
       onMouseEnter: () => setHovered(true),
       onMouseLeave: () => setHovered(false),
@@ -61,8 +83,10 @@ export function useRowVisibility() {
 export type RepoRowAction = "snooze" | "mark-all-done";
 
 /**
- * "..." button revealed on row hover/focus. Opens a menu with Snooze (plus
- * its presets submenu) and Mark all as done for the repository.
+ * "..." button revealed on row hover/focus. Opens a menu with Mark all as
+ * done/read for the repository, a digest rhythm submenu, a Snooze submenu,
+ * and repo link actions. Rhythm and snooze rows only appear when their
+ * handler is provided.
  */
 export function RepoSnoozeMenu({
   repoId,
@@ -70,6 +94,9 @@ export function RepoSnoozeMenu({
   isSnoozed,
   disabled,
   onSnooze,
+  currentRhythm,
+  onRhythm,
+  rhythmDisabled,
   onMarkAllDone,
   markAllDoneDisabled,
   markAllDoneCount,
@@ -85,12 +112,19 @@ export function RepoSnoozeMenu({
   visible = true,
   contextAnchor,
   onContextClose,
+  onVisibilityReset,
 }: {
   repoId: string;
   fullName: string;
   isSnoozed: boolean;
   disabled?: boolean;
-  onSnooze: (id: string, snoozedUntil: number | null) => void;
+  onSnooze?: (id: string, snoozedUntil: number | null) => void;
+  /** Current digest rhythm, shown in the Rhythm row. Omit when unknown. */
+  currentRhythm?: string;
+  /** Sets the digest rhythm. Omit to hide the Rhythm row. */
+  onRhythm?: (id: string, rhythm: string) => void;
+  /** Disables the rhythm entries, e.g. while a rhythm update is in flight. */
+  rhythmDisabled?: boolean;
   /** Marks every pending notification of this repo done. Omit to hide. */
   onMarkAllDone?: (id: string) => void;
   /** Disables the done entry, e.g. while busy or with nothing pending. */
@@ -130,15 +164,26 @@ export function RepoSnoozeMenu({
    */
   contextAnchor?: { x: number; y: number } | null;
   onContextClose?: () => void;
+  /**
+   * Clears the parent row hover/focus so the "..." trigger hides after an
+   * action runs. Called before the menu closes: keyboard closes refocus the
+   * trigger afterwards and become visible again via :focus-visible, pointer
+   * closes stay hidden until the next hover.
+   */
+  onVisibilityReset?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [snoozeOpen, setSnoozeOpen] = React.useState(false);
+  const [rhythmOpen, setRhythmOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
   const [subPos, setSubPos] = React.useState({ top: 0, left: 0 });
+  const [rhythmPos, setRhythmPos] = React.useState({ top: 0, left: 0 });
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
   const snoozeRowRef = React.useRef<HTMLButtonElement>(null);
   const subRef = React.useRef<HTMLDivElement>(null);
+  const rhythmRowRef = React.useRef<HTMLButtonElement>(null);
+  const rhythmSubRef = React.useRef<HTMLDivElement>(null);
 
   // Fresh timestamps at open time so "1 hr" never goes stale on a long-lived page.
   const [presets, setPresets] = React.useState(() => inboxPresets(Date.now()));
@@ -157,8 +202,19 @@ export function RepoSnoozeMenu({
   onMarkAllDoneRef.current = onMarkAllDone;
   const onMarkAllReadRef = React.useRef(onMarkAllRead);
   onMarkAllReadRef.current = onMarkAllRead;
+  const onSnoozeRef = React.useRef(onSnooze);
+  onSnoozeRef.current = onSnooze;
+  const onRhythmRef = React.useRef(onRhythm);
+  onRhythmRef.current = onRhythm;
   const onCopiedRef = React.useRef(onCopied);
   onCopiedRef.current = onCopied;
+  const onVisibilityResetRef = React.useRef(onVisibilityReset);
+  onVisibilityResetRef.current = onVisibilityReset;
+
+  /** Hides the parent "..." trigger before the menu closes. */
+  function resetVisibility() {
+    onVisibilityResetRef.current?.();
+  }
 
   /** Opens the menu below the trigger, flipping above when space is short. */
   function openMenu() {
@@ -166,7 +222,12 @@ export function RepoSnoozeMenu({
     setPresets(fresh);
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
-      const rows = 3 + (onMarkAllDone ? 1 : 0) + (onMarkAllRead ? 1 : 0);
+      const rows =
+        2 +
+        (onSnooze ? 1 : 0) +
+        (onRhythm ? 1 : 0) +
+        (onMarkAllDone ? 1 : 0) +
+        (onMarkAllRead ? 1 : 0);
       const height = rows * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
       const below = rect.bottom + MENU_GAP;
       const top =
@@ -182,12 +243,14 @@ export function RepoSnoozeMenu({
       });
     }
     setSnoozeOpen(false);
+    setRhythmOpen(false);
     setOpen(true);
   }
 
   /** Closes menus and the context anchor, refocusing the trigger on request. */
   function closeAll(focusTrigger = false) {
     setSnoozeOpen(false);
+    setRhythmOpen(false);
     setOpen(false);
     contextCloseRef.current?.();
     if (focusTrigger) triggerRef.current?.focus();
@@ -199,7 +262,11 @@ export function RepoSnoozeMenu({
     if (!contextAnchor) return;
     setPresets(inboxPresets(Date.now()));
     const rows =
-      3 + (onMarkAllDoneRef.current ? 1 : 0) + (onMarkAllReadRef.current ? 1 : 0);
+      2 +
+      (onSnoozeRef.current ? 1 : 0) +
+      (onRhythmRef.current ? 1 : 0) +
+      (onMarkAllDoneRef.current ? 1 : 0) +
+      (onMarkAllReadRef.current ? 1 : 0);
     const height = rows * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
     setPos({
       top: Math.max(MENU_GAP, Math.min(contextAnchor.y, window.innerHeight - height - MENU_GAP)),
@@ -209,6 +276,7 @@ export function RepoSnoozeMenu({
       ),
     });
     setSnoozeOpen(false);
+    setRhythmOpen(false);
     setOpen(true);
   }, [contextAnchor]);
 
@@ -225,6 +293,7 @@ export function RepoSnoozeMenu({
       }
       setSubPos({ top, left });
     }
+    setRhythmOpen(false);
     setSnoozeOpen(true);
     if (focusFirst) {
       requestAnimationFrame(() => {
@@ -246,13 +315,44 @@ export function RepoSnoozeMenu({
 
   /** Applies one snooze preset choice and closes the menu. */
   function choose(at: number | null, e: React.SyntheticEvent) {
+    resetVisibility();
     closeAll(refocusForClick(e));
-    onSnooze(repoId, at);
+    onSnooze?.(repoId, at);
+  }
+
+  /** Opens the rhythm options next to the Rhythm row, flipping sides as needed. */
+  function openRhythmSubmenu(focusFirst: boolean) {
+    const rowRect = rhythmRowRef.current?.getBoundingClientRect();
+    if (rowRect) {
+      const height = RHYTHM_OPTIONS.length * 37 + 8;
+      let top = Math.min(rowRect.top, window.innerHeight - height - MENU_GAP);
+      top = Math.max(MENU_GAP, top);
+      let left = rowRect.right + 4;
+      if (left + SUBMENU_WIDTH + MENU_GAP > window.innerWidth) {
+        left = Math.max(MENU_GAP, rowRect.left - SUBMENU_WIDTH - 4);
+      }
+      setRhythmPos({ top, left });
+    }
+    setSnoozeOpen(false);
+    setRhythmOpen(true);
+    if (focusFirst) {
+      requestAnimationFrame(() => {
+        rhythmSubRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      });
+    }
+  }
+
+  /** Applies one rhythm choice unless it is disabled or already active. */
+  function chooseRhythm(value: string, e: React.SyntheticEvent) {
+    if (rhythmDisabled || value === currentRhythm) return;
+    closeAll(refocusForClick(e));
+    onRhythm?.(repoId, value);
   }
 
   /** Reports the repo-wide done action unless the entry is disabled. */
   function chooseMarkAllDone(e: React.SyntheticEvent) {
     if (markAllDoneDisabled) return;
+    resetVisibility();
     closeAll(refocusForClick(e));
     onMarkAllDone?.(repoId);
   }
@@ -260,6 +360,7 @@ export function RepoSnoozeMenu({
   /** Reports the repo-wide read action unless the entry is disabled. */
   function chooseMarkAllRead(e: React.SyntheticEvent) {
     if (markAllReadDisabled) return;
+    resetVisibility();
     closeAll(refocusForClick(e));
     onMarkAllRead?.(repoId);
   }
@@ -285,14 +386,17 @@ export function RepoSnoozeMenu({
 
   /** Opens the repository root in a new window and closes the menu. */
   function openRepo(e: React.SyntheticEvent) {
+    resetVisibility();
     closeAll(refocusForClick(e));
     window.open(rootUrl, "_blank", "noopener");
   }
 
   /** Copies the repository link and reports the clipboard result. */
   async function copyRepoLink(e: React.SyntheticEvent) {
+    const keyboard = refocusForClick(e);
+    resetVisibility();
     const ok = await copyText(rootUrl);
-    closeAll(refocusForClick(e));
+    closeAll(keyboard);
     onCopiedRef.current?.(repoId, ok);
   }
 
@@ -312,16 +416,21 @@ export function RepoSnoozeMenu({
         target &&
         !menuRef.current?.contains(target) &&
         !subRef.current?.contains(target) &&
+        !rhythmSubRef.current?.contains(target) &&
         !triggerRef.current?.contains(target)
       ) {
         setSnoozeOpen(false);
+        setRhythmOpen(false);
         setOpen(false);
         contextCloseRef.current?.();
       }
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        if (snoozeOpen) {
+        if (rhythmOpen) {
+          setRhythmOpen(false);
+          rhythmRowRef.current?.focus();
+        } else if (snoozeOpen) {
           setSnoozeOpen(false);
           snoozeRowRef.current?.focus();
         } else {
@@ -331,6 +440,7 @@ export function RepoSnoozeMenu({
     }
     function onScroll() {
       setSnoozeOpen(false);
+      setRhythmOpen(false);
       setOpen(false);
     }
     document.addEventListener("mousedown", onPointerDown);
@@ -343,7 +453,7 @@ export function RepoSnoozeMenu({
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
     };
-  }, [open, snoozeOpen]);
+  }, [open, snoozeOpen, rhythmOpen]);
 
   /** Moves keyboard focus between enabled menu entries, wrapping at the ends. */
   function moveFocus(container: React.RefObject<HTMLDivElement | null>, target: HTMLElement, delta: 1 | -1) {
@@ -358,6 +468,7 @@ export function RepoSnoozeMenu({
   }
 
   const shown = open || visible;
+  const currentRhythmLabel = rhythmLabel(currentRhythm);
 
   return (
     <>
@@ -403,6 +514,9 @@ export function RepoSnoozeMenu({
                   if (e.target === snoozeRowRef.current) {
                     e.preventDefault();
                     openSubmenu(true);
+                  } else if (e.target === rhythmRowRef.current) {
+                    e.preventDefault();
+                    openRhythmSubmenu(true);
                   }
                 }
               }}
@@ -442,6 +556,41 @@ export function RepoSnoozeMenu({
               >
                 Manage
               </p>
+              {onRhythm ? (
+              <button
+                ref={rhythmRowRef}
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={rhythmOpen}
+                title={`Digest rhythm for ${fullName}`}
+                disabled={rhythmDisabled}
+                onClick={() => {
+                  if (rhythmDisabled) return;
+                  if (rhythmOpen) setRhythmOpen(false);
+                  else openRhythmSubmenu(false);
+                }}
+                onMouseEnter={() => {
+                  if (!rhythmOpen && !rhythmDisabled) openRhythmSubmenu(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    if (rhythmDisabled) return;
+                    if (rhythmOpen) setRhythmOpen(false);
+                    else openRhythmSubmenu(true);
+                  }
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">
+                  Rhythm{currentRhythmLabel ? ` · ${currentRhythmLabel}` : ""}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              </button>
+              ) : null}
+              {onSnooze ? (
               <button
                 ref={snoozeRowRef}
                 type="button"
@@ -470,6 +619,7 @@ export function RepoSnoozeMenu({
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               </button>
+              ) : null}
               {onMarkAllRead ? (
                 <button
                   type="button"
@@ -556,6 +706,53 @@ export function RepoSnoozeMenu({
                   <span className="min-w-0 flex-1 truncate">Unsnooze</span>
                 </button>
               ) : null}
+            </div>,
+            document.body
+          )
+        : null}
+      {open && rhythmOpen && onRhythm
+        ? createPortal(
+            <div
+              ref={rhythmSubRef}
+              role="menu"
+              aria-label={`Rhythm ${fullName}`}
+              onKeyDown={(e) => {
+                const down = e.key === "ArrowDown" || e.key === "j";
+                const up = e.key === "ArrowUp" || e.key === "k";
+                if (down || up) {
+                  e.preventDefault();
+                  moveFocus(rhythmSubRef, e.target as HTMLElement, down ? 1 : -1);
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  setRhythmOpen(false);
+                  rhythmRowRef.current?.focus();
+                }
+              }}
+              className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-md"
+              style={{ top: rhythmPos.top, left: rhythmPos.left, width: SUBMENU_WIDTH }}
+            >
+              <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                Digest rhythm for {fullName}
+              </p>
+              {RHYTHM_OPTIONS.map((o) => {
+                const active = o.value === currentRhythm;
+                return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="menuitem"
+                  title={active ? `${o.label} (current)` : `Switch ${fullName} to ${o.label}`}
+                  disabled={rhythmDisabled || active}
+                  onClick={(e) => chooseRhythm(o.value, e)}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+                    {active ? <Check className="h-4 w-4" /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{o.label}{active ? " (current)" : ""}</span>
+                </button>
+                );
+              })}
             </div>,
             document.body
           )

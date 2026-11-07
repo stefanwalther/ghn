@@ -31,6 +31,7 @@ export interface RepoFacet {
    * matches the repo-wide done action. */
   pendingAll?: number;
   isSnoozed: boolean;
+  rhythm?: string;
 }
 
 function SidebarButton({
@@ -70,6 +71,8 @@ function RepoFilterRow({
   onRepo,
   onSnooze,
   snoozeDisabled,
+  onRhythm,
+  rhythmDisabled,
   snoozedSection,
   onMarkAllDone,
   markAllDoneBusy,
@@ -83,6 +86,8 @@ function RepoFilterRow({
   onRepo: (repo: string) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onRhythm?: (id: string, rhythm: string) => void;
+  rhythmDisabled?: boolean;
   snoozedSection?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
@@ -92,7 +97,7 @@ function RepoFilterRow({
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
 }) {
-  const { visible, rowHandlers } = useRowVisibility();
+  const { visible, reset, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
   // Actionable counts fall back to the visible total for payloads that
@@ -132,13 +137,16 @@ function RepoFilterRow({
           <Badge variant="muted">{r.main}</Badge>
         </span>
       </SidebarButton>
-      {onSnooze ? (
+      {(onSnooze || onRhythm) ? (
         <RepoSnoozeMenu
           repoId={r.id}
           fullName={r.fullName}
           isSnoozed={r.isSnoozed}
           disabled={snoozeDisabled}
           onSnooze={onSnooze}
+          currentRhythm={r.rhythm}
+          onRhythm={onRhythm}
+          rhythmDisabled={rhythmDisabled ?? snoozeDisabled}
           onMarkAllDone={onMarkAllDone}
           markAllDoneDisabled={doneBusy || doneable === 0}
           markAllDoneCount={doneable}
@@ -151,6 +159,7 @@ function RepoFilterRow({
           visible={visible}
           contextAnchor={contextAnchor}
           onContextClose={() => setContextAnchor(null)}
+          onVisibilityReset={reset}
           triggerClassName="bg-background"
           triggerStyle={{
             position: "absolute",
@@ -174,6 +183,8 @@ export function FilterSidebar({
   onRepo,
   onSnooze,
   snoozeDisabled,
+  onRhythm,
+  rhythmDisabled,
   onMarkAllDone,
   markAllDoneBusy,
   busyRepoIds,
@@ -194,6 +205,8 @@ export function FilterSidebar({
   onRepo: (repo: string) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onRhythm?: (id: string, rhythm: string) => void;
+  rhythmDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
   /** Per-repo pending set; when provided it replaces the global busy flag. */
@@ -364,7 +377,10 @@ export function FilterSidebar({
         </button>
         {collapsed.repos ? null : (
         <div className="flex flex-col gap-0.5">
-          <div className="relative px-0 pb-1">
+          {/* px-1 keeps the input visually full-width while leaving room
+          for its border and focus ring: at px-0 both are flush with the
+          scrollable aside edge and the right side is clipped. */}
+          <div className="relative px-1 pb-1">
             <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-[calc(50%+2px)] text-muted-foreground">⌕</span>
             <input
               type="search"
@@ -418,6 +434,8 @@ export function FilterSidebar({
               onRepo={onRepo}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
+              onRhythm={onRhythm}
+              rhythmDisabled={rhythmDisabled}
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}
               busyRepoIds={busyRepoIds}
@@ -469,6 +487,8 @@ export function FilterSidebar({
               onRepo={onRepo}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
+              onRhythm={onRhythm}
+              rhythmDisabled={rhythmDisabled}
               snoozedSection
               onMarkAllDone={onMarkAllDone}
               markAllDoneBusy={markAllDoneBusy}

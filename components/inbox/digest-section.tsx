@@ -23,6 +23,8 @@ export function DigestSection({
   groups,
   onSnooze,
   snoozeDisabled,
+  onRhythm,
+  rhythmDisabled,
   onMarkAllDone,
   markAllDoneBusy,
   busyRepoIds,
@@ -33,6 +35,8 @@ export function DigestSection({
   groups: DigestGroup[];
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onRhythm?: (id: string, rhythm: string) => void;
+  rhythmDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
   /** Per-repo pending set; when provided it replaces the global busy flag. */
@@ -54,6 +58,8 @@ export function DigestSection({
           group={g}
           onSnooze={onSnooze}
           snoozeDisabled={snoozeDisabled}
+          onRhythm={onRhythm}
+          rhythmDisabled={rhythmDisabled}
           onMarkAllDone={onMarkAllDone}
           markAllDoneBusy={markAllDoneBusy}
           busyRepoIds={busyRepoIds}
@@ -71,6 +77,8 @@ function DigestRow({
   group: g,
   onSnooze,
   snoozeDisabled,
+  onRhythm,
+  rhythmDisabled,
   onMarkAllDone,
   markAllDoneBusy,
   busyRepoIds,
@@ -81,6 +89,8 @@ function DigestRow({
   group: DigestGroup;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
+  onRhythm?: (id: string, rhythm: string) => void;
+  rhythmDisabled?: boolean;
   onMarkAllDone?: (id: string) => void;
   markAllDoneBusy?: boolean;
   busyRepoIds?: Set<string>;
@@ -88,7 +98,7 @@ function DigestRow({
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
 }) {
-  const { visible, rowHandlers } = useRowVisibility();
+  const { visible, reset, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   // Quiet rows are all not-done, so done targets the full pending count.
   // Read targets only the unread subset once the server reports it.
@@ -123,7 +133,7 @@ function DigestRow({
           </p>
         </Collapsible>
       </div>
-      {onSnooze ? (
+      {(onSnooze || onRhythm) ? (
         <span className="pt-2">
           <RepoSnoozeMenu
             repoId={g.repositoryId}
@@ -131,6 +141,9 @@ function DigestRow({
             isSnoozed={g.isSnoozed ?? false}
             disabled={snoozeDisabled}
             onSnooze={onSnooze}
+            currentRhythm={g.rhythm}
+            onRhythm={onRhythm}
+            rhythmDisabled={rhythmDisabled ?? snoozeDisabled}
             onMarkAllDone={onMarkAllDone}
             markAllDoneDisabled={((busyRepoIds?.has(g.repositoryId) ?? false) || (markAllDoneBusy ?? false)) || g.pendingCount === 0}
             markAllDoneCount={g.pendingCount}
@@ -141,6 +154,7 @@ function DigestRow({
             visible={visible}
             contextAnchor={contextAnchor}
             onContextClose={() => setContextAnchor(null)}
+            onVisibilityReset={reset}
           />
         </span>
       ) : null}

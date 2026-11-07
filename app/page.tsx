@@ -57,6 +57,7 @@ import {
 } from "@/lib/view-state";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { formatRelativeTime } from "@/lib/format-relative";
 
 // Runs before paint on the client (no-op on the server) so the stored
 // width is applied before anything is shown.
@@ -156,6 +157,7 @@ function InboxView() {
     pollSecs,
     inPollWindow,
     countdownSecs,
+    nowMs,
   } = sync;
 
   const notifQuery = useNotifications(filters);
@@ -410,6 +412,21 @@ function InboxView() {
       await notifQuery.refetch();
     } catch {
       say("Snooze failed. Previous setting restored.");
+    }
+  }
+
+  /**
+   * Sets a repo rhythm from any repo menu. The server recomputes
+   * nextDueAt/lastPromotedAt and the inbox placement, so the refetch
+   * moves items between the main flow and Quiet until due immediately.
+   */
+  async function setRhythm(id: string, rhythm: string) {
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { rhythm } });
+      await notifQuery.refetch();
+    } catch {
+      setNotice("Rhythm update failed. Previous setting restored.");
     }
   }
 
@@ -879,10 +896,10 @@ function InboxView() {
             </Button>
           </HintTooltip>
           {lastSyncAt !== null ? (
-            <HintTooltip label={`Poll interval ${pollSecs}s`}>
+            <HintTooltip label={`Last synced ${formatSyncTime(lastSyncAt)} · poll interval ${pollSecs}s`}>
               <span className="inline-flex cursor-help items-baseline gap-1 text-xs tabular-nums text-muted-foreground">
                 {stale ? <span>Stale ·</span> : null}
-                <span>Synced {formatSyncTime(lastSyncAt)}</span>
+                <span>Synced {formatRelativeTime(lastSyncAt, nowMs)}</span>
                 <span
                   aria-hidden="true"
                   className="inline-block min-w-[5ch] text-left"
@@ -898,7 +915,7 @@ function InboxView() {
         <aside
           ref={sidebarRef}
           aria-label="Inbox filters"
-          className="filter-aside relative w-full shrink-0 lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:w-[var(--filter-w)] lg:self-start lg:overflow-y-auto"
+          className="filter-aside relative w-full shrink-0 overflow-x-hidden lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:w-[var(--filter-w)] lg:self-start lg:overflow-y-auto"
           style={
             {
               "--filter-w": `${sidebarWidth}px`,
@@ -917,6 +934,8 @@ function InboxView() {
             onRepoFilterChange={setRepoListFilter}
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
+            onRhythm={setRhythm}
+            rhythmDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}
             markAllDoneBusy={markAllDoneBusy}
             busyRepoIds={pendingRepos}
@@ -1040,7 +1059,7 @@ function InboxView() {
                 <span className="font-medium">GitHub disconnected.</span>{" "}
                 <span className="text-muted-foreground">
                   Cached inbox below
-                  {lastSyncAt !== null ? ` · last synced ${formatSyncTime(lastSyncAt)}` : ""}.
+                  {lastSyncAt !== null ? ` · last synced ${formatRelativeTime(lastSyncAt, nowMs)}` : ""}.
                   Set GH_TOKEN or run `gh auth login` on the server, then retry.
                 </span>
               </p>
@@ -1061,7 +1080,7 @@ function InboxView() {
             >
               <p className="flex-1 text-sm text-muted-foreground">
                 {syncError ?? "Data may be stale."}
-                {lastSyncAt !== null ? ` Last synced ${formatSyncTime(lastSyncAt)}.` : ""}
+                {lastSyncAt !== null ? ` Last synced ${formatRelativeTime(lastSyncAt, nowMs)}.` : ""}
               </p>
               <Button
                 variant="secondary"
@@ -1122,6 +1141,8 @@ function InboxView() {
               groups={collapsed}
               onSnooze={snoozeRepo}
               snoozeDisabled={updateRepo.isPending}
+              onRhythm={setRhythm}
+              rhythmDisabled={updateRepo.isPending}
               onMarkAllDone={markRepoDone}
               markAllDoneBusy={markAllDoneBusy}
               busyRepoIds={pendingRepos}

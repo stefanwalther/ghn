@@ -315,6 +315,24 @@ describe("inbox screen", () => {
     expect(body.snoozedUntil as number).toBeGreaterThan(Date.now());
   });
 
+  test("changing a repo rhythm from the sidebar patches the repository", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Rhythm/ }));
+    const submenu = screen.getByRole("menu", { name: "Rhythm acme/web" });
+    fireEvent.click(within(submenu).getByRole("menuitem", { name: "Immediate" }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/repositories/acme--web")).toHaveLength(1);
+    });
+    const [, init] = callsTo(fetchMock, "/api/repositories/acme--web")[0]!;
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ rhythm: "immediate" });
+  });
+
   test("Escape closes the drawer", async () => {
     installFetch();
     renderWithQuery(<InboxPage />);

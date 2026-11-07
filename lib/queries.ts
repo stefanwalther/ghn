@@ -547,6 +547,7 @@ export function useSyncFlow(filters: InboxFilters) {
     stale,
     syncError,
     conn,
+    nowMs,
   };
 }
 
@@ -616,6 +617,34 @@ export function useSettings() {
     queryKey: queryKeys.settings(),
     queryFn: () =>
       fetchJson<SettingsResponse>("/api/settings", { cache: "no-store" }),
+  });
+}
+
+export interface SettingsDatabaseResponse {
+  database: SettingsResponse["database"];
+}
+
+export interface SettingsGithubResponse {
+  github: SettingsResponse["github"];
+}
+
+export function useSettingsDatabase() {
+  return useQuery({
+    queryKey: queryKeys.settingsDatabase(),
+    queryFn: () =>
+      fetchJson<SettingsDatabaseResponse>("/api/settings/database", {
+        cache: "no-store",
+      }),
+  });
+}
+
+export function useSettingsGithub() {
+  return useQuery({
+    queryKey: queryKeys.settingsGithub(),
+    queryFn: () =>
+      fetchJson<SettingsGithubResponse>("/api/settings/github", {
+        cache: "no-store",
+      }),
   });
 }
 
