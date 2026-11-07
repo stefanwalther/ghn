@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.8.0...ghn-v0.9.0) (2026-11-07)
+
+
+### Features
+
+* **inbox:** change digest rhythm from the repo context menu ([#133](https://github.com/stefanwalther/ghn/issues/133)) ([8ff97ec](https://github.com/stefanwalther/ghn/commit/8ff97ec1485770892bd17d7d1db99a304dc45930))
+* **inbox:** show relative sync age in header ([#129](https://github.com/stefanwalther/ghn/issues/129)) ([f2f4d31](https://github.com/stefanwalther/ghn/commit/f2f4d311762852c50dd616c5c54a73ee3a1acb25))
+* **settings:** load sections independently ([#130](https://github.com/stefanwalther/ghn/issues/130)) ([a5c5d25](https://github.com/stefanwalther/ghn/commit/a5c5d25d48213fd060db933505a91c3c136c3041))
+
+
+### Bug Fixes
+
+* **inbox:** hide hover trigger after choosing a row action ([#131](https://github.com/stefanwalther/ghn/issues/131)) ([76bee5a](https://github.com/stefanwalther/ghn/commit/76bee5a80646743338d559e044022a6a9cb47680))
+* **inbox:** keep repo filter input and rows inside the sidebar ([#132](https://github.com/stefanwalther/ghn/issues/132)) ([79a24ba](https://github.com/stefanwalther/ghn/commit/79a24ba423319aa4b7216c2380cdd51af911883f))
+
 ## [0.8.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.7.0...ghn-v0.8.0) (2026-11-02)
 
 
