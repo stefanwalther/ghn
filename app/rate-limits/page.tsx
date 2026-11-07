@@ -60,7 +60,6 @@ export default function RateLimitsPage() {
           size="sm"
           onClick={() => void rateQuery.refetch()}
           disabled={refreshing || status === "loading"}
-          title="Refresh rate limits from GitHub"
           aria-label="Refresh rate limits from GitHub"
         >
           <SyncSpinner spinning={refreshing} />

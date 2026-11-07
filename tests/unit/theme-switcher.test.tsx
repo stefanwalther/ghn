@@ -18,7 +18,9 @@ describe("ThemeSwitcher", () => {
   test("server render shows the theme trigger with its key hint", () => {
     const html = renderSwitcher();
     expect(html).toContain('aria-label="Theme"');
-    expect(html).toContain('title="Theme (Cmd+F12)"');
+    // Hover hint is a Radix tooltip (portaled, so absent from static markup),
+    // not a native title attribute.
+    expect(html).not.toContain("title=");
     expect(html).toContain("aria-expanded");
   });
 

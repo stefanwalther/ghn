@@ -28,17 +28,18 @@ import {
 } from "@/lib/view-state";
 import { reasonTone, type InboxItem } from "@/components/inbox/notification-list";
 import type { ItemMenuAction } from "@/components/inbox/item-menu";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 function TitleLink({ item }: { item: InboxItem }) {
   const [active, setActive] = React.useState(false);
   return (
-    <a
-      href={item.sourceUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Open source for ${item.subject}`}
-      title={`Open source for ${item.subject} in a new window`}
-      onClick={() => saveLastOpened(item.id)}
+    <HintTooltip label={`Open source for ${item.subject} in a new window`}>
+      <a
+        href={item.sourceUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open source for ${item.subject}`}
+        onClick={() => saveLastOpened(item.id)}
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
       onFocus={() => setActive(true)}
@@ -51,7 +52,8 @@ function TitleLink({ item }: { item: InboxItem }) {
         aria-hidden
         style={{ display: "inline-block", verticalAlign: "middle", width: "1rem", height: "1rem" }}
       />
-    </a>
+      </a>
+    </HintTooltip>
   );
 }
 
@@ -222,36 +224,39 @@ export function ItemDrawer({
             ) : null}
           </div>
           <div className="flex shrink-0 items-start gap-1">
-            <button
-              type="button"
-              aria-label="Previous thread"
-              title="Previous thread (k / [)"
-              onClick={onPrev}
-              disabled={!hasPrev || !onPrev}
-              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
-            >
-              <ChevronUp className="h-4 w-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label="Next thread"
-              title="Next thread (j / ])"
-              onClick={onNext}
-              disabled={!hasNext || !onNext}
-              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
-            >
-              <ChevronDown className="h-4 w-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              autoFocus
-              aria-label="Close details"
-              title="Close details (Esc)"
-              onClick={onClose}
-              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <X className="h-4 w-4" aria-hidden />
-            </button>
+            <HintTooltip label="Previous thread" shortcut="k / [">
+              <button
+                type="button"
+                aria-label="Previous thread"
+                onClick={onPrev}
+                disabled={!hasPrev || !onPrev}
+                className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
+              >
+                <ChevronUp className="h-4 w-4" aria-hidden />
+              </button>
+            </HintTooltip>
+            <HintTooltip label="Next thread" shortcut="j / ]">
+              <button
+                type="button"
+                aria-label="Next thread"
+                onClick={onNext}
+                disabled={!hasNext || !onNext}
+                className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current"
+              >
+                <ChevronDown className="h-4 w-4" aria-hidden />
+              </button>
+            </HintTooltip>
+            <HintTooltip label="Close details" shortcut="Esc">
+              <button
+                type="button"
+                autoFocus
+                aria-label="Close details"
+                onClick={onClose}
+                className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </HintTooltip>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

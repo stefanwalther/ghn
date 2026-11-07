@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import * as React from "react";
 import { Search } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import {
   ageEntries,
   dimensionEntries,
@@ -108,18 +109,19 @@ function ScopeTab({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onSelect}
-      title={title}
-      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        pressed ? "bg-accent text-accent-foreground" : "text-muted-foreground"
-      }`}
-    >
-      {children}
-    </button>
+    <HintTooltip label={title}>
+      <button
+        type="button"
+        aria-pressed={pressed}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onSelect}
+        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs transition-colors duration-100 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          pressed ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+        }`}
+      >
+        {children}
+      </button>
+    </HintTooltip>
   );
 }
 

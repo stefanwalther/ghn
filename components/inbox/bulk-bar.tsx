@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { Kbd } from "@/components/ui/kbd";
 
 export type BulkAction = "done" | "unsubscribe" | "read" | "unread";
@@ -33,15 +34,16 @@ export function BulkBar({
       <Button onClick={() => onAction("done")} disabled={busy} size="sm">
         {showHints ? <Kbd>D</Kbd> : null} Done
       </Button>
-      <Button
-        onClick={() => onAction("unsubscribe")}
-        disabled={busy}
-        size="sm"
-        variant="secondary"
-        title="Mark done and mute this thread so it stays gone"
-      >
-        {showHints ? <Kbd>⇧U</Kbd> : null} Unsubscribe
-      </Button>
+      <HintTooltip label="Mark done and mute this thread so it stays gone">
+        <Button
+          onClick={() => onAction("unsubscribe")}
+          disabled={busy}
+          size="sm"
+          variant="secondary"
+        >
+          {showHints ? <Kbd>⇧U</Kbd> : null} Unsubscribe
+        </Button>
+      </HintTooltip>
       <Button
         onClick={() => onAction("read")}
         disabled={busy}

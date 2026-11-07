@@ -61,7 +61,6 @@ export default function SettingsPage() {
           size="sm"
           onClick={() => void settingsQuery.refetch()}
           disabled={refreshing || status === "loading"}
-          title="Refresh settings status"
           aria-label="Refresh settings status"
         >
           <SyncSpinner spinning={refreshing} />

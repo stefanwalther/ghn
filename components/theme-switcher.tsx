@@ -5,6 +5,7 @@ import { Check, Monitor, Moon, Sun } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { isCycleThemeEvent, isEditableTarget } from "@/lib/shortcuts";
 
 type ThemeMode = "light" | "dark" | "system";
@@ -138,26 +139,27 @@ export function ThemeSwitcher() {
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label="Theme"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Theme (Cmd+F12)"
-        onClick={() => {
-          if (open) closeMenu(false);
-          else openMenu();
-        }}
-        className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
+      <HintTooltip label="Theme" shortcut="⌘F12">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label="Theme"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => {
+            if (open) closeMenu(false);
+            else openMenu();
+          }}
+          className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
         {/* Before hydration always show Monitor to match the server render. */}
         {!mounted ? (
           <Monitor className="h-4 w-4" aria-hidden />
         ) : (
           <ActiveIcon className="h-4 w-4" aria-hidden />
         )}
-      </button>
+        </button>
+      </HintTooltip>
       {open
         ? createPortal(
             <div

@@ -11,6 +11,7 @@ import { ItemDrawer } from "@/components/inbox/item-drawer";
 import type { ItemMenuAction } from "@/components/inbox/item-menu";
 import { ListToolbar, NotificationList, type InboxItem } from "@/components/inbox/notification-list";
 import { Button } from "@/components/ui/button";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { isAltHintKey, isEditableTarget } from "@/lib/shortcuts";
 import { useDialogFocus } from "@/lib/dialog-focus";
@@ -866,30 +867,30 @@ function InboxView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            title="Refresh from GitHub"
-            aria-label="Refresh inbox from GitHub"
-            onClick={() => void refresh()}
-            disabled={syncing || refreshing || inPollWindow}
-          >
-            <SyncSpinner spinning={syncing || refreshing} />
-          </Button>
-          {lastSyncAt !== null ? (
-            <span
-              className="inline-flex items-baseline gap-1 text-xs tabular-nums text-muted-foreground"
-              title={`Poll interval ${pollSecs}s`}
+          <HintTooltip label="Refresh from GitHub">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Refresh inbox from GitHub"
+              onClick={() => void refresh()}
+              disabled={syncing || refreshing || inPollWindow}
             >
-              {stale ? <span>Stale ·</span> : null}
-              <span>Synced {formatSyncTime(lastSyncAt)}</span>
-              <span
-                aria-hidden="true"
-                className="inline-block min-w-[5ch] text-left"
-              >
-                {inPollWindow ? `· ${countdownSecs}s` : ""}
+              <SyncSpinner spinning={syncing || refreshing} />
+            </Button>
+          </HintTooltip>
+          {lastSyncAt !== null ? (
+            <HintTooltip label={`Poll interval ${pollSecs}s`}>
+              <span className="inline-flex cursor-help items-baseline gap-1 text-xs tabular-nums text-muted-foreground">
+                {stale ? <span>Stale ·</span> : null}
+                <span>Synced {formatSyncTime(lastSyncAt)}</span>
+                <span
+                  aria-hidden="true"
+                  className="inline-block min-w-[5ch] text-left"
+                >
+                  {inPollWindow ? `· ${countdownSecs}s` : ""}
+                </span>
               </span>
-            </span>
+            </HintTooltip>
           ) : null}
         </div>
       </div>
@@ -925,17 +926,17 @@ function InboxView() {
             quietActive={quietView}
             onQuietView={showQuietDigests}
           />
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize filters sidebar"
-            aria-valuenow={Math.round(sidebarWidth)}
-            aria-valuemin={FILTER_MIN_WIDTH}
-            aria-valuemax={FILTER_MAX_WIDTH}
-            tabIndex={0}
-            className="absolute top-0 bottom-0 -right-2 hidden w-4 cursor-ew-resize touch-none focus-visible:outline-none lg:block"
-            title="Drag to resize filters sidebar (double-click to reset)"
-            onMouseEnter={() => setHandleVisible(true)}
+          <HintTooltip label="Drag to resize filters sidebar (double-click to reset)" side="right">
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize filters sidebar"
+              aria-valuenow={Math.round(sidebarWidth)}
+              aria-valuemin={FILTER_MIN_WIDTH}
+              aria-valuemax={FILTER_MAX_WIDTH}
+              tabIndex={0}
+              className="absolute top-0 bottom-0 -right-2 hidden w-4 cursor-ew-resize touch-none focus-visible:outline-none lg:block"
+              onMouseEnter={() => setHandleVisible(true)}
             onMouseLeave={() => {
               if (!sidebarDraggingRef.current) setHandleVisible(false);
             }}
@@ -977,7 +978,8 @@ function InboxView() {
               }}
               className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-ring"
             />
-          </div>
+            </div>
+          </HintTooltip>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <InboxFilters filters={filters} onChange={setFilters} />

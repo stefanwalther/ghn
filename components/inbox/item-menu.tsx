@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { BellOff, Check, ExternalLink, Link2, Mail, MailOpen, MoreHorizontal, MousePointerClick, PanelRight } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { SyncSpinner } from "@/components/ui/sync-spinner";
 import type { BulkAction } from "@/components/inbox/bulk-bar";
 import type { InboxItem } from "@/components/inbox/notification-list";
@@ -201,22 +202,23 @@ export function ItemMenu({
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={`Actions for ${item.subject}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`Actions for ${item.subject} (m)`}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (open) closeAll();
-          else openMenu();
-        }}
-        className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <MoreHorizontal className="h-4 w-4" aria-hidden />
-      </button>
+      <HintTooltip label={`Actions for ${item.subject}`} shortcut="m">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Actions for ${item.subject}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (open) closeAll();
+            else openMenu();
+          }}
+          className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
+        </button>
+      </HintTooltip>
       {open
         ? createPortal(
             <div
@@ -249,7 +251,6 @@ export function ItemMenu({
                   key={entry.value}
                   type="button"
                   role="menuitem"
-                  title={entry.hint ? `${entry.label} (${entry.hint})` : entry.label}
                   onClick={() => choose(entry.value)}
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"

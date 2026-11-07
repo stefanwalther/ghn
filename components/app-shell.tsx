@@ -12,6 +12,7 @@ import { ShortcutsHelp } from "@/components/inbox/shortcuts-help";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { VersionIndicator } from "@/components/version-indicator";
 import { Kbd } from "@/components/ui/kbd";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { GITHUB_REPO_URL } from "@/lib/app-meta";
 import { cn } from "@/lib/utils";
 import { isAltHintKey, isEditableTarget, isToggleSidebarEvent } from "@/lib/shortcuts";
@@ -161,16 +162,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center justify-between gap-2 px-3 pt-4 text-xs text-muted-foreground">
             <VersionIndicator />
-            <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="GitHub repository"
-              title="GitHub repository"
-              className="flex cursor-pointer items-center gap-1 rounded-md p-1 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Github className="h-4 w-4" aria-hidden />
-            </a>
+            <HintTooltip label="GitHub repository">
+              <a
+                href={GITHUB_REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub repository"
+                className="flex cursor-pointer items-center gap-1 rounded-md p-1 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Github className="h-4 w-4" aria-hidden />
+              </a>
+            </HintTooltip>
           </div>
           </aside>
         </>
@@ -180,16 +182,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="px-4 py-3">
           <div className="flex w-full max-w-6xl items-center gap-2">
           <span className="relative inline-flex">
-            <button
-              type="button"
-              aria-expanded={open}
-              aria-label="Toggle sidebar"
-              title="Toggle sidebar (Cmd+B)"
-              onClick={() => useUIStore.getState().toggleSidebar()}
-              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span aria-hidden="true">☰</span>
-            </button>
+            <HintTooltip label="Toggle sidebar" shortcut="⌘B">
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-label="Toggle sidebar"
+                onClick={() => useUIStore.getState().toggleSidebar()}
+                className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span aria-hidden="true">☰</span>
+              </button>
+            </HintTooltip>
             {showHints ? (
               <Kbd
                 className="pointer-events-none absolute -top-2 -right-3 shadow-sm"
@@ -199,36 +202,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </span>
           <div className="min-w-0 flex-1" />
-          <button
-            type="button"
-            aria-label="Search and commands"
-            title="Search and commands (Cmd+K)"
-            onClick={() => useUIStore.getState().openPalette()}
-            className="hidden cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
-          >
-            <Search className="h-4 w-4" aria-hidden />
-            <span className="hidden lg:inline">Search or command…</span>
-            <Kbd>⌘K</Kbd>
-          </button>
-          <button
-            type="button"
-            aria-label="Search and commands"
-            title="Search and commands (Cmd+K)"
-            onClick={() => useUIStore.getState().openPalette()}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
-          >
-            <Search className="h-4 w-4" aria-hidden />
-          </button>
+          <HintTooltip label="Search and commands" shortcut="⌘K">
+            <button
+              type="button"
+              aria-label="Search and commands"
+              onClick={() => useUIStore.getState().openPalette()}
+              className="hidden cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+              <span className="hidden lg:inline">Search or command…</span>
+              <Kbd>⌘K</Kbd>
+            </button>
+          </HintTooltip>
+          <HintTooltip label="Search and commands" shortcut="⌘K">
+            <button
+              type="button"
+              aria-label="Search and commands"
+              onClick={() => useUIStore.getState().openPalette()}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+            </button>
+          </HintTooltip>
           <ContributionsChip />
-          <button
-            type="button"
-            aria-label="Show keyboard shortcuts"
-            title="Keyboard shortcuts (?)"
-            onClick={() => useUIStore.getState().openHelp()}
-            className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center text-sm font-medium">?</span>
-          </button>
+          <HintTooltip label="Show keyboard shortcuts" shortcut="?">
+            <button
+              type="button"
+              aria-label="Show keyboard shortcuts"
+              onClick={() => useUIStore.getState().openHelp()}
+              className="cursor-pointer rounded-md p-2 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center text-sm font-medium">?</span>
+            </button>
+          </HintTooltip>
           <ThemeSwitcher />
           </div>
         </header>
