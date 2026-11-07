@@ -106,8 +106,9 @@ export async function GET(request: Request) {
   >();
   // Repo-wide actions ignore the current view filter: read targets every
   // unread row and done targets every not-done row. Track both totals
-  // separately so repos stay actionable even when the filtered counts are
-  // zero and the repo would otherwise vanish from the sidebar.
+  // separately so the row actions stay enabled even when the filtered
+  // counts are zero. They drive buttons only, never sidebar visibility:
+  // visibility follows main/quiet so 0-badge rows stay hidden.
   const repoReadable = new Map<string, number>();
   const repoPendingAll = new Map<string, number>();
   for (const n of rows) {

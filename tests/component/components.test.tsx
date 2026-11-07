@@ -638,15 +638,27 @@ describe("FilterSidebar", () => {
     expect(screen.queryByRole("button", { name: "Filter by acme/empty" })).not.toBeInTheDocument();
   });
 
-  test("keeps a done-only repository that still has unread rows", () => {
+  test("hides a done-only repository even when it still has unread rows", () => {
     renderSidebar({
+      repos: repoFacets.map((r) =>
+        r.id === "acme--empty" ? { ...r, readable: 5, pendingAll: 0 } : r
+      ),
+    });
+
+    // Badge shows main (0 here). readable stays for the row action, but
+    // must not keep a 0-badge row in the list. The repo stays reachable
+    // via the done/all views and via the active-repo pin.
+    expect(screen.queryByRole("button", { name: "Filter by acme/empty" })).not.toBeInTheDocument();
+  });
+
+  test("pins the active repo even when its visible counts are zero", () => {
+    renderSidebar({
+      activeRepo: "acme--empty",
       repos: repoFacets.map((r) =>
         r.id === "acme--empty" ? { ...r, readable: 5 } : r
       ),
     });
 
-    // Nothing visible in the current filter, but the repo-wide read action
-    // would still mark 5 rows, so the row stays available.
     expect(screen.getByRole("button", { name: "Filter by acme/empty" })).toBeInTheDocument();
   });
 
