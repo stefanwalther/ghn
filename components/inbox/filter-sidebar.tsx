@@ -252,8 +252,12 @@ export function FilterSidebar({
 
   const activeTypeLabel = types.find((t) => t.value === activeType)?.label;
   const activeRepoName = repos.find((r) => r.id === activeRepo)?.fullName;
+  // Badge shows main, so visibility follows main/quiet only. readable and
+  // pendingAll stay for the row actions (Mark all read/done) but must not
+  // keep a 0-badge row in the list. The active repo stays pinned so the
+  // current filter never vanishes from under the user.
   const visibleRepos = repos.filter(
-    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0 || (r.readable ?? 0) > 0
+    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
   );
   // Same fuzzy engine as the command palette, so a palette query handed
   // off here behaves identically. Scope qualifiers (`repo:`, `type:`…)
