@@ -187,6 +187,23 @@ export function LoadingSettings() {
   );
 }
 
+export function LoadingSettingsSection({ label }: { label: string }) {
+  return (
+    <div
+      className="rounded-lg bg-card p-4 shadow-sm"
+      role="status"
+      aria-label={label}
+    >
+      <div aria-hidden>
+        <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-muted" />
+        <div className="mt-4 h-4 w-full animate-pulse rounded bg-muted" />
+      </div>
+      <p className="sr-only">{label}</p>
+    </div>
+  );
+}
+
 export function ErrorRateLimits({ onRetry, detail }: { onRetry: () => void; detail?: string | null }) {
   return (
     <div className="rounded-lg bg-card p-10 text-center shadow-sm" role="alert">
