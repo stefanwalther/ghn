@@ -1633,6 +1633,33 @@ describe("RepoSnoozeMenu", () => {
     fireEvent.mouseEnter(screen.getByText("acme/web"));
     expect(trigger).toHaveStyle({ opacity: "1" });
   });
+
+  test("hides the trigger after choosing a row action", () => {
+    const onMarkAllDone = vi.fn();
+    render(
+      <FilterSidebar
+        types={[{ value: "all", label: "All", count: 1 }]}
+        activeType="all"
+        repos={[{ id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false }]}
+        activeRepo="all"
+        onType={vi.fn()}
+        onRepo={vi.fn()}
+        onSnooze={vi.fn()}
+        onMarkAllDone={onMarkAllDone}
+        onMarkAllRead={vi.fn()}
+      />
+    );
+
+    fireEvent.mouseEnter(screen.getByText("acme/web"));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Mark all as done/ }), { detail: 1 });
+
+    expect(onMarkAllDone).toHaveBeenCalledWith("acme--web");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions for acme/web" })).toHaveStyle({
+      opacity: "0",
+    });
+  });
 });
 
 describe("RepoRow", () => {

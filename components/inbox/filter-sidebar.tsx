@@ -97,7 +97,7 @@ function RepoFilterRow({
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
 }) {
-  const { visible, rowHandlers } = useRowVisibility();
+  const { visible, reset, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
   const pendingTotal = r.main + r.quiet;
   // Actionable counts fall back to the visible total for payloads that
@@ -159,6 +159,7 @@ function RepoFilterRow({
           visible={visible}
           contextAnchor={contextAnchor}
           onContextClose={() => setContextAnchor(null)}
+          onVisibilityReset={reset}
           triggerClassName="bg-background"
           triggerStyle={{
             position: "absolute",
