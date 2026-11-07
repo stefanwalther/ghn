@@ -914,7 +914,7 @@ function InboxView() {
         <aside
           ref={sidebarRef}
           aria-label="Inbox filters"
-          className="filter-aside relative w-full shrink-0 lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:w-[var(--filter-w)] lg:self-start lg:overflow-y-auto"
+          className="filter-aside relative w-full shrink-0 overflow-x-hidden lg:sticky lg:top-2 lg:max-h-[calc(100vh-1rem)] lg:w-[var(--filter-w)] lg:self-start lg:overflow-y-auto"
           style={
             {
               "--filter-w": `${sidebarWidth}px`,
