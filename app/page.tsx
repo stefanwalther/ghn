@@ -412,6 +412,21 @@ function InboxView() {
     }
   }
 
+  /**
+   * Sets a repo rhythm from any repo menu. The server recomputes
+   * nextDueAt/lastPromotedAt and the inbox placement, so the refetch
+   * moves items between the main flow and Quiet until due immediately.
+   */
+  async function setRhythm(id: string, rhythm: string) {
+    setNotice(null);
+    try {
+      await updateRepo.mutateAsync({ id, patch: { rhythm } });
+      await notifQuery.refetch();
+    } catch {
+      setNotice("Rhythm update failed. Previous setting restored.");
+    }
+  }
+
   /** Promotes one repo to the immediate rhythm so its quiet items surface now. */
   async function promoteRepo(id: string) {
     setNotice(null);
@@ -916,6 +931,8 @@ function InboxView() {
             onRepoFilterChange={setRepoListFilter}
             onSnooze={snoozeRepo}
             snoozeDisabled={updateRepo.isPending}
+            onRhythm={setRhythm}
+            rhythmDisabled={updateRepo.isPending}
             onMarkAllDone={markRepoDone}
             markAllDoneBusy={markAllDoneBusy}
             busyRepoIds={pendingRepos}
@@ -1120,6 +1137,8 @@ function InboxView() {
               groups={collapsed}
               onSnooze={snoozeRepo}
               snoozeDisabled={updateRepo.isPending}
+              onRhythm={setRhythm}
+              rhythmDisabled={updateRepo.isPending}
               onMarkAllDone={markRepoDone}
               markAllDoneBusy={markAllDoneBusy}
               busyRepoIds={pendingRepos}
