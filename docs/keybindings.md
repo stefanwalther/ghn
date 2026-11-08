@@ -17,6 +17,7 @@ means `Ctrl` on Linux.
 | `[` / `]` | Jump to the previous / next thread while details are open |
 | `o` | Open the focused thread in a new tab |
 | `Shift+D` | Open the focused thread details in the side panel |
+| `Ctrl / Cmd + click` | Toggle repository rows in the filter sidebar; `Shift+click` extends a range, right-click acts on the whole selection |
 
 ## Triage
 
