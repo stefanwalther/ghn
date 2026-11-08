@@ -4,6 +4,7 @@ import * as React from "react";
 import type {
   CheckSummary,
   DependabotAlertDetails,
+  ReleaseDetails,
   SubjectContent,
   ThreadComment,
   WorkflowRun,
@@ -113,6 +114,7 @@ export type ThreadDetailsResponse = ThreadDetails & {
   content?: SubjectContent | null;
   runs?: WorkflowRun[];
   alert?: DependabotAlertDetails | null;
+  release?: ReleaseDetails | null;
 };
 
 /** Same URL shape as the hand-rolled loader, so routes and caches line up. */

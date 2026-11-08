@@ -8,8 +8,9 @@ import { SyncSpinner } from "@/components/ui/sync-spinner";
 import { Markdown } from "@/components/inbox/markdown";
 import { isClosedItem, isMergedItem } from "@/lib/filters";
 import { LoadingThread } from "@/components/inbox/empty-states";
-import type { DependabotAlertDetails, WorkflowRun } from "@/lib/github";
+import type { DependabotAlertDetails, ReleaseDetails, WorkflowRun } from "@/lib/github";
 import { SecurityAlertPreview } from "@/components/inbox/security-alert-preview";
+import { ReleasePreview } from "@/components/inbox/release-preview";
 import {
   findPinnedRun,
   formatRunAge,
@@ -109,24 +110,30 @@ export function ItemDrawer({
     content: ThreadDetails | null;
     runs: WorkflowRun[];
     alert: DependabotAlertDetails | null;
+    release: ReleaseDetails | null;
   }>(() => {
     const data = detailsQuery.data;
-    if (!data) return { content: null, runs: [], alert: null };
+    if (!data) return { content: null, runs: [], alert: null, release: null };
     if (data.alert) {
       return {
         content: null,
         runs: Array.isArray(data.runs) ? data.runs : [],
         alert: data.alert,
+        release: null,
       };
+    }
+    if (data.release) {
+      return { content: null, runs: [], alert: null, release: data.release };
     }
     if ("content" in data && data.content === null) {
       return {
         content: null,
         runs: Array.isArray(data.runs) ? data.runs : [],
         alert: null,
+        release: null,
       };
     }
-    return { content: data as ThreadDetails, runs: [], alert: null };
+    return { content: data as ThreadDetails, runs: [], alert: null, release: null };
   }, [detailsQuery.data]);
   const raw = derived;
   // While the new thread loads, ignore placeholder (previous thread) data so
@@ -134,6 +141,7 @@ export function ItemDrawer({
   const content = loadingThread ? null : raw.content;
   const runs = loadingThread ? [] : raw.runs;
   const alert = loadingThread ? null : raw.alert;
+  const release = loadingThread ? null : raw.release;
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
   const scrollRef = React.useRef<HTMLElement>(null);
@@ -327,8 +335,11 @@ export function ItemDrawer({
           {contentState === "ready" && alert ? (
             <SecurityAlertPreview alert={alert} repositoryUrl={repositoryUrl} />
           ) : null}
+          {contentState === "ready" && release ? (
+            <ReleasePreview release={release} repositoryUrl={repositoryUrl} />
+          ) : null}
           {contentState === "unavailable" ||
-          (contentState === "ready" && !content && !alert) ? (
+          (contentState === "ready" && !content && !alert && !release) ? (
             runs.length > 0 ? (
               <>
                 <div className="flex w-full flex-col gap-1 text-left">
@@ -400,6 +411,25 @@ export function ItemDrawer({
                   Open in new window
                 </a>
               </>
+            ) : item.subjectType === "Release" ? (
+              <div className="flex flex-col items-center gap-2 rounded-lg bg-muted/40 px-6 py-10 text-center">
+                <EyeOff className="h-8 w-8 text-muted-foreground" aria-hidden />
+                <p className="font-semibold">Release unavailable</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  This release could not be loaded. It may have been deleted, or
+                  you may no longer have access.
+                </p>
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => saveLastOpened(item.id)}
+                  className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md bg-secondary px-4 py-2 text-sm text-secondary-foreground transition-colors duration-150 hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                  Open in new window
+                </a>
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-2 rounded-lg bg-muted/40 px-6 py-10 text-center">
                 <EyeOff className="h-8 w-8 text-muted-foreground" aria-hidden />
@@ -407,8 +437,8 @@ export function ItemDrawer({
                   No preview for {previewFallbackKind(item.subjectType)}
                 </p>
                 <p className="max-w-sm text-sm text-muted-foreground">
-                  The preview drawer renders issues, pull requests, and security alerts. For
-                  everything else, continue on GitHub.
+                  The preview drawer renders issues, pull requests, releases, and
+                  security alerts. For everything else, continue on GitHub.
                 </p>
                 <a
                   href={item.sourceUrl}

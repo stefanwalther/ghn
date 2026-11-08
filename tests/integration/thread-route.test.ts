@@ -265,6 +265,225 @@ describe("GET /api/thread", () => {
   });
 });
 
+describe("GET /api/thread for releases", () => {
+  const RELEASE_PAYLOAD = {
+    tag_name: "v9.9.9",
+    name: "Release v9.9.9",
+    body: "The redirect races the session load.",
+    draft: false,
+    prerelease: true,
+    author: { login: "github-actions" },
+    html_url: "https://github.com/acme/web/releases/tag/v9.9.9",
+    published_at: "2026-01-14T12:00:00Z",
+    created_at: "2026-01-14T11:00:00Z",
+    target_commitish: "4cb6945",
+    assets: [
+      {
+        name: "nightly-mac.yml",
+        size: 786,
+        browser_download_url:
+          "https://github.com/acme/web/releases/download/v9.9.9/nightly-mac.yml",
+      },
+    ],
+  };
+
+  async function insertReleaseRow(
+    id: string,
+    sourceUrl: string,
+    subject = "Release v9.9.9"
+  ) {
+    await db.insert(notifications).values({
+      id,
+      repositoryId: "acme--web",
+      subject,
+      subjectType: "Release",
+      subjectState: null,
+      reason: "subscribed",
+      createdAt: NOW - 3600 * 1000,
+      githubUpdatedAt: null,
+      isRead: 0,
+      isDone: 0,
+      localUnread: 0,
+      sourceUrl,
+    });
+  }
+
+  test("a release resolves through the stored tag url", async () => {
+    await insertReleaseRow("rel_001", "https://github.com/acme/web/releases/tag/v9.9.9");
+    standIn.setSubject("/repos/acme/web/releases/tags/v9.9.9", RELEASE_PAYLOAD);
+    const { GET } = await import("@/app/api/thread/route");
+    const res = await GET(new Request("http://localhost/api/thread?id=rel_001"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      content: null;
+      comments: unknown[];
+      checks: null;
+      runs: unknown[];
+      release: Record<string, unknown>;
+    };
+    expect(body.content).toBeNull();
+    expect(body.comments).toEqual([]);
+    expect(body.checks).toBeNull();
+    expect(body.runs).toEqual([]);
+    expect(body.release).toEqual({
+      name: "Release v9.9.9",
+      tagName: "v9.9.9",
+      body: "The redirect races the session load.",
+      draft: false,
+      prerelease: true,
+      authorLogin: "github-actions",
+      publishedAt: Date.parse("2026-01-14T12:00:00Z"),
+      htmlUrl: "https://github.com/acme/web/releases/tag/v9.9.9",
+      targetRef: "4cb6945",
+      assets: [
+        {
+          name: "nightly-mac.yml",
+          size: 786,
+          downloadUrl:
+            "https://github.com/acme/web/releases/download/v9.9.9/nightly-mac.yml",
+        },
+      ],
+    });
+    expect(blocked).toEqual([]);
+  });
+
+  test("the live thread url wins over the stored tag url", async () => {
+    await insertReleaseRow("rel_002", "https://github.com/acme/web/releases/tag/v1.0.0");
+    standIn.setSubject("/repos/acme/web/releases/tags/v1.0.0", {
+      ...RELEASE_PAYLOAD,
+      tag_name: "v1.0.0",
+    });
+    standIn.setSubject("/repos/acme/web/releases/777", {
+      ...RELEASE_PAYLOAD,
+      tag_name: "v2.0.0",
+    });
+    standIn.setThreads([
+      {
+        id: "rel_002",
+        unread: true,
+        reason: "subscribed",
+        updated_at: new Date(NOW - 3600 * 1000).toISOString(),
+        subject: {
+          title: "Release v2.0.0",
+          type: "Release",
+          url: `${standIn.url}/repos/acme/web/releases/777`,
+        },
+        repository: {
+          full_name: "acme/web",
+          html_url: "https://github.com/acme/web",
+          owner: { login: "acme" },
+        },
+        url: `${standIn.url}/notifications/threads/rel_002`,
+      },
+    ]);
+    const { GET } = await import("@/app/api/thread/route");
+    const res = await GET(new Request("http://localhost/api/thread?id=rel_002"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { release: { tagName: string } };
+    expect(body.release.tagName).toBe("v2.0.0");
+    expect(blocked).toEqual([]);
+  });
+
+  test("a release without any address is unavailable", async () => {
+    await insertReleaseRow("rel_003", "https://github.com/acme/web/releases");
+    const { GET } = await import("@/app/api/thread/route");
+    const res = await GET(new Request("http://localhost/api/thread?id=rel_003"));
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: "preview_unavailable" });
+    expect(blocked).toEqual([]);
+  });
+
+  test("a deleted release reports a fetch failure", async () => {
+    await insertReleaseRow("rel_004", "https://github.com/acme/web/releases/tag/v9.9.9");
+    standIn.setScenario("/repos/acme/web/releases/tags/v9.9.9", { status: 404 });
+    const { GET } = await import("@/app/api/thread/route");
+    const res = await GET(new Request("http://localhost/api/thread?id=rel_004"));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "fetch_failed" });
+    expect(blocked).toEqual([]);
+  });
+
+  test("draft and final releases project their flags and refs", async () => {
+    await insertReleaseRow("rel_005", "https://github.com/acme/web/releases/tag/v1.0.0-draft");
+    standIn.setSubject("/repos/acme/web/releases/tags/v1.0.0-draft", {
+      ...RELEASE_PAYLOAD,
+      tag_name: "v1.0.0-draft",
+      name: "Draft v1.0.0",
+      draft: true,
+      prerelease: false,
+      target_commitish: "main",
+    });
+    await insertReleaseRow("rel_006", "https://github.com/acme/web/releases/tag/v1.0.0");
+    standIn.setSubject("/repos/acme/web/releases/tags/v1.0.0", {
+      ...RELEASE_PAYLOAD,
+      tag_name: "v1.0.0",
+      name: "",
+      draft: false,
+      prerelease: false,
+      author: null,
+      published_at: null,
+      created_at: "not a date",
+      target_commitish: null,
+    });
+    const { GET } = await import("@/app/api/thread/route");
+    const draftRes = await GET(new Request("http://localhost/api/thread?id=rel_005"));
+    expect(draftRes.status).toBe(200);
+    const draftBody = (await draftRes.json()) as { release: Record<string, unknown> };
+    expect(draftBody.release.draft).toBe(true);
+    expect(draftBody.release.prerelease).toBe(false);
+    expect(draftBody.release.targetRef).toBe("main");
+    const finalRes = await GET(new Request("http://localhost/api/thread?id=rel_006"));
+    expect(finalRes.status).toBe(200);
+    const finalBody = (await finalRes.json()) as { release: Record<string, unknown> };
+    expect(finalBody.release.draft).toBe(false);
+    expect(finalBody.release.prerelease).toBe(false);
+    expect(finalBody.release.name).toBeNull();
+    expect(finalBody.release.authorLogin).toBeNull();
+    expect(finalBody.release.publishedAt).toBeNull();
+    expect(finalBody.release.targetRef).toBeNull();
+    expect(blocked).toEqual([]);
+  });
+
+  test("assets project name, size and download url, and empty stays empty", async () => {
+    await insertReleaseRow("rel_007", "https://github.com/acme/web/releases/tag/v3.0.0");
+    standIn.setSubject("/repos/acme/web/releases/tags/v3.0.0", {
+      ...RELEASE_PAYLOAD,
+      tag_name: "v3.0.0",
+      assets: [
+        {
+          name: "full.bin",
+          size: 2048,
+          browser_download_url: "https://github.com/acme/web/releases/download/v3.0.0/full.bin",
+        },
+        { name: "nosize.bin" },
+      ],
+    });
+    await insertReleaseRow("rel_008", "https://github.com/acme/web/releases/tag/v4.0.0");
+    standIn.setSubject("/repos/acme/web/releases/tags/v4.0.0", {
+      ...RELEASE_PAYLOAD,
+      tag_name: "v4.0.0",
+      assets: [],
+    });
+    const { GET } = await import("@/app/api/thread/route");
+    const fullRes = await GET(new Request("http://localhost/api/thread?id=rel_007"));
+    expect(fullRes.status).toBe(200);
+    const fullBody = (await fullRes.json()) as { release: { assets: unknown[] } };
+    expect(fullBody.release.assets).toEqual([
+      {
+        name: "full.bin",
+        size: 2048,
+        downloadUrl: "https://github.com/acme/web/releases/download/v3.0.0/full.bin",
+      },
+      { name: "nosize.bin", size: null, downloadUrl: null },
+    ]);
+    const emptyRes = await GET(new Request("http://localhost/api/thread?id=rel_008"));
+    expect(emptyRes.status).toBe(200);
+    const emptyBody = (await emptyRes.json()) as { release: { assets: unknown[] } };
+    expect(emptyBody.release.assets).toEqual([]);
+    expect(blocked).toEqual([]);
+  });
+});
+
 describe("the seeded subject paths", () => {
   test("the subject path of a seeded row matches its source url", async () => {
     // The stand-in keys its per-item payload by the subject path, and the

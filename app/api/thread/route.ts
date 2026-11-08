@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { notifications } from "@/db/schema";
-import { fetchCheckSummary, fetchDependabotAlert, fetchSubjectContent, fetchThread, fetchThreadComments, fetchWorkflowRuns, getStoredToken, parseBranchFromTitle, parseDependabotAlertCoords, parsePullCoords, parseRepoCoords, resolveSubjectHtmlUrl, subjectApiUrlFromHtml, subjectCommentsUrlFromHtml } from "@/lib/github";
+import { fetchCheckSummary, fetchDependabotAlert, fetchRelease, fetchSubjectContent, fetchThread, fetchThreadComments, fetchWorkflowRuns, getStoredToken, isReleaseApiUrl, parseBranchFromTitle, parseDependabotAlertCoords, parsePullCoords, parseRepoCoords, releaseApiUrlFromHtml, resolveSubjectHtmlUrl, subjectApiUrlFromHtml, subjectCommentsUrlFromHtml } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +74,33 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "fetch_failed" }, { status: 502 });
     }
     return NextResponse.json({ content: null, comments: [], checks: null, runs: [], alert });
+  }
+  if (row.subjectType === "Release") {
+    // The live thread carries the exact release API url (by id); the stored
+    // source url carries the tag page, which maps to the get-by-tag
+    // endpoint. The live url wins, the tag is the fallback.
+    let releaseApi: string | null = null;
+    const fetched = await fetchThread(token, row.id);
+    if (fetched.ok && fetched.data?.subjectApiUrl) {
+      if (isReleaseApiUrl(fetched.data.subjectApiUrl)) {
+        releaseApi = fetched.data.subjectApiUrl;
+      }
+    }
+    releaseApi ??= releaseApiUrlFromHtml(row.sourceUrl);
+    if (!releaseApi) {
+      return NextResponse.json({ error: "preview_unavailable" }, { status: 422 });
+    }
+    const release = await fetchRelease(token, releaseApi);
+    if (!release) {
+      return NextResponse.json({ error: "fetch_failed" }, { status: 502 });
+    }
+    return NextResponse.json({
+      content: null,
+      comments: [],
+      checks: null,
+      runs: [],
+      release,
+    });
   }
   const apiUrl = subjectApiUrlFromHtml(row.sourceUrl);
   if (!apiUrl) {

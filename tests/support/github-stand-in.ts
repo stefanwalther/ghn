@@ -112,6 +112,28 @@ export async function startGitHubStandIn(
     };
   }
 
+  function defaultRelease(path: string): unknown {
+    if (subjects.has(path)) return subjects.get(path);
+    const coords = path.match(/^\/repos\/([^/]+)\/([^/]+)\//);
+    const owner = coords?.[1] ?? "acme";
+    const repo = coords?.[2] ?? "web";
+    const tagMatch = path.match(/^\/repos\/[^/]+\/[^/]+\/releases\/tags\/(.+)/);
+    const tag = tagMatch?.[1] ?? "v9.9.9";
+    return {
+      tag_name: tag,
+      name: `Release ${tag}`,
+      body: "The redirect races the session load.",
+      draft: false,
+      prerelease: false,
+      author: { login: viewerLogin },
+      html_url: `https://github.com/${owner}/${repo}/releases/tag/${tag}`,
+      published_at: "2026-01-14T12:00:00Z",
+      created_at: "2026-01-14T12:00:00Z",
+      target_commitish: "main",
+      assets: [],
+    };
+  }
+
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -304,6 +326,14 @@ export async function startGitHubStandIn(
         );
         if (checkRunsMatch) {
           reply(200, { check_runs: [{ status: "completed", conclusion: "success" }] });
+          return;
+        }
+
+        const releaseMatch = path.match(
+          /^\/repos\/([^/]+)\/([^/]+)\/releases\/(.+)/
+        );
+        if (releaseMatch) {
+          reply(200, defaultRelease(path));
           return;
         }
 

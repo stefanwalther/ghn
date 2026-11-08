@@ -21,7 +21,7 @@ Zero friction. Based on the [`gh` CLI](https://cli.github.com/). If `gh` works, 
 ## Why ghn
 
 - **Fewer clicks** - bulk select and clear 20 threads in one action. Keyboard-first with vim-style keys (`j`/`k` to move, `x` to select, `d` for done), no mouse needed.
-- **Quicker insights** - no more jumping to a PR or Action to decide. Thread body, checks, and Dependabot detail show inline in the drawer.
+- **Quicker insights** - no more jumping to a PR or Action to decide. Thread body, checks, Dependabot detail, and release notes with badges and assets show inline in the drawer.
 - **Clever filtering** - slice by repo, type, age, and read or done state. The queue narrows to what matters now.
 - **Repo rhythms** - define which repos show immediately, weekly, or monthly, plus snooze for an hour, this evening, or next week.
 - **No API key wrangling** - reuses your `gh` login. No tokens to copy, no env files to maintain.

@@ -488,6 +488,133 @@ export async function fetchDependabotAlert(
   }
 }
 
+export interface ReleaseCoords {
+  owner: string;
+  repo: string;
+  tag: string;
+}
+
+export function parseReleaseTagFromHtml(htmlUrl: string): ReleaseCoords | null {
+  const match = htmlUrl.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/releases\/tag\/(.+)/
+  );
+  if (!match?.[1] || !match?.[2] || !match?.[3]) return null;
+  return { owner: match[1], repo: match[2], tag: match[3] };
+}
+
+export function releaseApiUrlFromHtml(htmlUrl: string): string | null {
+  const coords = parseReleaseTagFromHtml(htmlUrl);
+  if (!coords) return null;
+  return `${apiBase()}/repos/${coords.owner}/${coords.repo}/releases/tags/${coords.tag}`;
+}
+
+export function isReleaseApiUrl(apiUrl: string): boolean {
+  // Host agnostic on purpose: the API base is overridable, and the release
+  // check has to work against the local GitHub stand-in too.
+  return /\/repos\/[^/]+\/[^/]+\/releases\/.+/.test(apiUrl);
+}
+
+export interface ReleaseAsset {
+  name: string;
+  size: number | null;
+  downloadUrl: string | null;
+}
+
+export interface ReleaseDetails {
+  name: string | null;
+  tagName: string;
+  body: string | null;
+  draft: boolean;
+  prerelease: boolean;
+  authorLogin: string | null;
+  publishedAt: number | null;
+  htmlUrl: string;
+  targetRef: string | null;
+  assets: ReleaseAsset[];
+}
+
+export function releaseBadgeKind(input: {
+  draft: boolean;
+  prerelease: boolean;
+}): "draft" | "pre-release" | null {
+  if (input.draft) return "draft";
+  if (input.prerelease) return "pre-release";
+  return null;
+}
+
+export async function fetchRelease(
+  token: string,
+  apiUrl: string
+): Promise<ReleaseDetails | null> {
+  try {
+    const res = await fetch(apiUrl, { headers: baseHeaders(token) });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as {
+      tag_name?: unknown;
+      name?: unknown;
+      body?: unknown;
+      draft?: unknown;
+      prerelease?: unknown;
+      author?: unknown;
+      html_url?: unknown;
+      published_at?: unknown;
+      created_at?: unknown;
+      target_commitish?: unknown;
+      assets?: unknown;
+    };
+    if (
+      typeof payload.tag_name !== "string" ||
+      !payload.tag_name ||
+      typeof payload.html_url !== "string"
+    ) {
+      return null;
+    }
+    const author = payload.author as { login?: unknown } | null | undefined;
+    const toMs = (v: unknown): number | null => {
+      if (typeof v !== "string") return null;
+      const ms = Date.parse(v);
+      return Number.isNaN(ms) ? null : ms;
+    };
+    const rawAssets = Array.isArray(payload.assets) ? payload.assets : [];
+    const assets: ReleaseAsset[] = [];
+    for (const raw of rawAssets) {
+      if (typeof raw !== "object" || raw === null) continue;
+      const entry = raw as {
+        name?: unknown;
+        size?: unknown;
+        browser_download_url?: unknown;
+      };
+      if (typeof entry.name !== "string" || !entry.name) continue;
+      assets.push({
+        name: entry.name,
+        size: typeof entry.size === "number" ? entry.size : null,
+        downloadUrl:
+          typeof entry.browser_download_url === "string"
+            ? entry.browser_download_url
+            : null,
+      });
+    }
+    return {
+      name: typeof payload.name === "string" && payload.name ? payload.name : null,
+      tagName: payload.tag_name,
+      body: typeof payload.body === "string" && payload.body ? payload.body : null,
+      draft: payload.draft === true,
+      prerelease: payload.prerelease === true,
+      authorLogin:
+        typeof author?.login === "string" && author.login ? author.login : null,
+      publishedAt: toMs(payload.published_at) ?? toMs(payload.created_at),
+      htmlUrl: payload.html_url,
+      targetRef:
+        typeof payload.target_commitish === "string" && payload.target_commitish
+          ? payload.target_commitish
+          : null,
+      assets,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface SubjectContent {
   title: string;
   body: string | null;
