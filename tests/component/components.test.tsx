@@ -526,10 +526,15 @@ describe("ItemDrawer", () => {
 
   test("falls back to GitHub when the thread has no preview", async () => {
     stubThread({ content: null, comments: [], checks: null, runs: [] });
-    renderDrawer({ ...item, subjectType: "Release" });
+    renderDrawer({ ...item, subjectType: "Commit" });
 
     const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
-    expect(await within(drawer).findByText("No preview for releases")).toBeInTheDocument();
+    expect(await within(drawer).findByText("No preview for commits")).toBeInTheDocument();
+    expect(
+      within(drawer).getByText(
+        "The preview drawer renders issues, pull requests, releases, and security alerts. For everything else, continue on GitHub."
+      )
+    ).toBeInTheDocument();
     expect(
       within(drawer).getByRole("link", { name: "Open in new window" })
     ).toHaveAttribute("href", "https://github.com/acme/web/pull/1");
@@ -567,6 +572,181 @@ describe("ItemDrawer", () => {
     fireEvent.click(within(drawer).getByRole("button", { name: "Close details" }));
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  describe("release previews", () => {
+    const releaseItem: InboxItem = {
+      ...item,
+      id: "rel_001",
+      subject: "T3 Code Nightly 0.1.8-nightly.20261107.4301",
+      subjectType: "Release",
+      sourceUrl: "https://github.com/acme/web/releases/tag/v0.1.8",
+    };
+
+    const releasePayload = {
+      content: null,
+      comments: [],
+      checks: null,
+      runs: [],
+      release: {
+        name: "T3 Code Nightly 0.1.8-nightly.20261107.4301",
+        tagName: "v0.1.8",
+        body: "14 changes from 3 contributors.",
+        draft: false,
+        prerelease: true,
+        authorLogin: "github-actions",
+        publishedAt: Date.parse("2026-01-14T12:00:00Z"),
+        htmlUrl: "https://github.com/acme/web/releases/tag/v0.1.8",
+        targetRef: "4cb6945",
+        assets: [],
+      },
+    };
+
+    function renderRelease(payload: unknown = releasePayload) {
+      stubThread(payload, releaseItem.id);
+      return renderDrawer(releaseItem);
+    }
+
+    test("renders the release title, tag, author and body", async () => {
+      renderRelease();
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("14 changes from 3 contributors.")).toBeInTheDocument();
+      expect(within(drawer).getByText("v0.1.8")).toBeInTheDocument();
+      expect(within(drawer).getByText("github-actions")).toBeInTheDocument();
+      expect(within(drawer).queryByText("No preview for releases")).not.toBeInTheDocument();
+    });
+
+    test("keeps the triage actions for release threads", async () => {
+      const { onAction } = renderRelease();
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      fireEvent.click(await within(drawer).findByText("Done"));
+
+      expect(onAction).toHaveBeenCalledWith(releaseItem, "done");
+    });
+
+    test("shows an empty state when the release has no body", async () => {
+      renderRelease({
+        ...releasePayload,
+        release: { ...releasePayload.release, body: null },
+      });
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("No description.")).toBeInTheDocument();
+    });
+
+    test("shows the unavailable state when the release cannot be loaded", async () => {
+      const fetchMock = vi.fn(async () => {
+        throw new Error("the release is gone");
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      renderDrawer(releaseItem);
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("Release unavailable")).toBeInTheDocument();
+      expect(
+        within(drawer).getByRole("link", { name: "Open in new window" })
+      ).toHaveAttribute("href", "https://github.com/acme/web/releases/tag/v0.1.8");
+      expect(within(drawer).queryByText("No preview for releases")).not.toBeInTheDocument();
+    });
+
+    test("marks a pre-release and shows the tag plus target ref", async () => {
+      renderRelease();
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("pre-release")).toBeInTheDocument();
+      expect(within(drawer).getByText("· 4cb6945")).toBeInTheDocument();
+      expect(within(drawer).queryByText("draft")).not.toBeInTheDocument();
+    });
+
+    test("marks a draft release", async () => {
+      renderRelease({
+        ...releasePayload,
+        release: { ...releasePayload.release, draft: true, prerelease: false },
+      });
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("draft")).toBeInTheDocument();
+      expect(within(drawer).queryByText("pre-release")).not.toBeInTheDocument();
+    });
+
+    test("shows no badge for a final release", async () => {
+      renderRelease({
+        ...releasePayload,
+        release: { ...releasePayload.release, draft: false, prerelease: false },
+      });
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      await within(drawer).findByText("14 changes from 3 contributors.");
+      expect(within(drawer).queryByText("pre-release")).not.toBeInTheDocument();
+      expect(within(drawer).queryByText("draft")).not.toBeInTheDocument();
+    });
+
+    test("lists assets with size and download link", async () => {
+      renderRelease({
+        ...releasePayload,
+        release: {
+          ...releasePayload.release,
+          assets: [
+            {
+              name: "nightly-mac.yml",
+              size: 786,
+              downloadUrl: "https://github.com/acme/web/releases/download/v0.1.8/nightly-mac.yml",
+            },
+            { name: "checksums.txt", size: null, downloadUrl: null },
+          ],
+        },
+      });
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("Assets (2)")).toBeInTheDocument();
+      // Collapsed by default: the count shows, the files stay hidden.
+      expect(within(drawer).queryByText("nightly-mac.yml")).not.toBeInTheDocument();
+      fireEvent.click(within(drawer).getByRole("button", { name: "Expand assets" }));
+      expect(await within(drawer).findByText("nightly-mac.yml")).toBeInTheDocument();
+      expect(within(drawer).getByText("786 Bytes")).toBeInTheDocument();
+      expect(
+        within(drawer).getByRole("link", { name: /nightly-mac\.yml/ })
+      ).toHaveAttribute(
+        "href",
+        "https://github.com/acme/web/releases/download/v0.1.8/nightly-mac.yml"
+      );
+      expect(within(drawer).getByText("checksums.txt")).toBeInTheDocument();
+    });
+
+    test("hides the assets section when the release has none", async () => {
+      renderRelease();
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      await within(drawer).findByText("14 changes from 3 contributors.");
+      expect(within(drawer).queryByText(/Assets \(/)).not.toBeInTheDocument();
+    });
+
+    test("keeps triage usable with many assets", async () => {
+      const { onAction } = renderRelease({
+        ...releasePayload,
+        release: {
+          ...releasePayload.release,
+          assets: Array.from({ length: 30 }, (_, i) => ({
+            name: `asset-${String(i).padStart(2, "0")}.bin`,
+            size: 1024 + i,
+            downloadUrl: `https://example.com/asset-${i}.bin`,
+          })),
+        },
+      });
+
+      const drawer = await screen.findByRole("dialog", { name: "Preview drawer" });
+      expect(await within(drawer).findByText("Assets (30)")).toBeInTheDocument();
+      fireEvent.click(within(drawer).getByRole("button", { name: "Expand assets" }));
+      expect(await within(drawer).findByText("asset-00.bin")).toBeInTheDocument();
+      expect(within(drawer).getByText("asset-29.bin")).toBeInTheDocument();
+      fireEvent.click(within(drawer).getByRole("button", { name: "Done" }));
+      expect(onAction).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "rel_001" }),
+        "done"
+      );
+    });
   });
 });
 
