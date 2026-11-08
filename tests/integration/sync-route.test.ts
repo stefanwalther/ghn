@@ -371,6 +371,59 @@ describe("the queue drain", () => {
     expect(queued[0]?.attempts).toBe(1);
     expect(queued[0]?.lastError).toBe("unknown");
   });
+
+  test("a deleted thread drops from the queue while good work drains", async () => {
+    await db.insert(writebackQueue).values([
+      {
+        threadId: "t_001",
+        action: "done",
+        attempts: 0,
+        lastError: "auth",
+        createdAt: NOW,
+      },
+      {
+        threadId: "t_gone",
+        action: "done",
+        attempts: 0,
+        lastError: "unknown",
+        createdAt: NOW,
+      },
+    ]);
+    standIn.setScenario("/notifications/threads/t_gone", { status: 404 });
+    const body = await sync();
+    expect(body.queueDepth).toBe(0);
+    expect(await db.select().from(writebackQueue)).toHaveLength(0);
+    const deletes = standIn.requests.filter((r) => r.method === "DELETE");
+    expect(deletes.map((r) => r.path).sort()).toEqual([
+      "/notifications/threads/t_001",
+      "/notifications/threads/t_gone",
+    ]);
+  });
+
+  test("the sync response reports queue age and failure mix", async () => {
+    await db.insert(writebackQueue).values([
+      {
+        threadId: "t_h1",
+        action: "done",
+        attempts: 0,
+        lastError: "auth",
+        createdAt: NOW - 60_000,
+      },
+      {
+        threadId: "t_h2",
+        action: "read",
+        attempts: 0,
+        lastError: "auth",
+        createdAt: NOW - 10_000,
+      },
+    ]);
+    standIn.setScenario("/notifications/threads/t_h1", { status: 500 });
+    standIn.setScenario("/notifications/threads/t_h2", { status: 500 });
+    const body = await sync();
+    expect(body.queueDepth).toBe(2);
+    expect(body.queueOldestAgeMs).toBeGreaterThanOrEqual(60_000);
+    expect(body.queueReasonBreakdown).toEqual({ unknown: 2 });
+  });
 });
 
 describe("dirty local beats sync", () => {

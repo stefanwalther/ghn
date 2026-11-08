@@ -7,6 +7,8 @@ import {
   chunkIds,
   drainWritebacks,
   enqueueWritebacks,
+  getQueuedThreadIds,
+  queueDepth,
   QUEUE_CHUNK_SIZE,
 } from "@/lib/queue";
 
@@ -64,6 +66,40 @@ describe("enqueueWritebacks", () => {
 
   test("an empty list writes nothing", async () => {
     await enqueueWritebacks(db, [], "read", null, NOW);
+    expect(await db.select().from(writebackQueue)).toHaveLength(0);
+  });
+
+  test("depth and pending checks stay fast at 1500 rows", async () => {
+    const ids = Array.from({ length: 1500 }, (_, i) => `perf_${i}`);
+    await enqueueWritebacks(db, ids, "done", null, NOW);
+
+    const start = Date.now();
+    expect(await queueDepth(db)).toBe(1500);
+    expect((await getQueuedThreadIds(db)).size).toBe(1500);
+    // Smoke bound, not a benchmark: catches accidental full-row
+    // materialization if the count query regresses.
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
+  test("two overlapping drains send each row only once", async () => {
+    const ids = ["ov_001", "ov_002", "ov_003"];
+    await enqueueWritebacks(db, ids, "done", null, NOW);
+
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let calls = 0;
+    const apply = async () => {
+      calls += 1;
+      if (calls === ids.length) release();
+      await gate;
+      return { ok: true as const };
+    };
+    const { drainQueue } = await import("@/lib/queue");
+    await Promise.all([drainQueue(db, apply, 3), drainQueue(db, apply, 3)]);
+
+    expect(calls).toBe(ids.length);
     expect(await db.select().from(writebackQueue)).toHaveLength(0);
   });
 });

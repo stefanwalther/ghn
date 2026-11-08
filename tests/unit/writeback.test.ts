@@ -144,4 +144,20 @@ describe("write-back queue", () => {
     expect(remaining[0]?.lastError).toBe("network");
     expect(await getQueuedThreadIds(db)).toEqual(new Set(["5002"]));
   });
+
+  test("a terminal 404 or 410 drops the row instead of retrying", async () => {
+    const db = createMemoryDb().db;
+    await enqueueWriteback(db, "5101", "done", "unknown", 1000);
+    await enqueueWriteback(db, "5102", "read", "unknown", 1001);
+
+    const drained = await drainQueue(db, async (threadId) => {
+      if (threadId === "5101") return { ok: false as const, reason: "unknown" as const, status: 404 };
+      return { ok: false as const, reason: "unknown" as const, status: 410 };
+    });
+    expect(drained).toEqual({ processed: 2, succeeded: 0, failed: 0, succeededItems: [] });
+    expect(await queueDepth(db)).toBe(0);
+
+    const again = await drainQueue(db, async () => ({ ok: true as const }));
+    expect(again).toEqual({ processed: 0, succeeded: 0, failed: 0, succeededItems: [] });
+  });
 });

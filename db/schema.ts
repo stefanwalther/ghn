@@ -56,14 +56,20 @@ export const syncState = sqliteTable("sync_state", {
 
 export type SyncState = typeof syncState.$inferSelect;
 
-export const writebackQueue = sqliteTable("writeback_queue", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  threadId: text("thread_id").notNull(),
-  action: text("action").notNull().$type<"done" | "read" | "unsubscribe">(),
-  attempts: integer("attempts").notNull().default(0),
-  lastError: text("last_error"),
-  createdAt: integer("created_at").notNull(),
-});
+export const writebackQueue = sqliteTable(
+  "writeback_queue",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    threadId: text("thread_id").notNull(),
+    action: text("action").notNull().$type<"done" | "read" | "unsubscribe">(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => ({
+    threadActionIdx: index("writeback_queue_thread_action_idx").on(t.threadId, t.action),
+  })
+);
 
 export type WritebackItem = typeof writebackQueue.$inferSelect;
 export type NewWritebackItem = typeof writebackQueue.$inferInsert;

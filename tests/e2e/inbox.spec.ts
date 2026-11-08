@@ -230,6 +230,8 @@ test.describe("inbox load", () => {
       markedDone: 0,
       discoveredRepos: 10,
       queueDepth: 0,
+      queueOldestAgeMs: 0,
+      queueReasonBreakdown: {},
     });
 
     // The header shows a relative age; the exact clock time stays in the
