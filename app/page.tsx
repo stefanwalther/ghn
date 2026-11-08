@@ -86,7 +86,7 @@ function InboxView() {
   }
   const [confirmUnsub, setConfirmUnsub] = React.useState<string[] | null>(null);
   const [confirmDone, setConfirmDone] = React.useState<{
-    repositoryId: string;
+    repositoryIds: string[];
     total: number;
     main: number;
     quiet: number;
@@ -441,40 +441,110 @@ function InboxView() {
     }
   }
 
-  /** Marks every pending item of one repo done, with rollback on failure. */
-  async function markRepoDone(repositoryId: string, opts?: { confirmed?: boolean }) {
-    if (pendingRepos.has(repositoryId)) return;
-    const facet = repoFacets.find((r) => r.id === repositoryId);
-    const quietGroup = collapsed.find((g) => g.repositoryId === repositoryId);
-    const total = (facet?.main ?? 0) + (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0;
+  /**
+   * Bulk fan-out for the sidebar multi-selection: one existing
+   * per-repository mutation per id, in parallel.
+   */
+  async function bulkSnooze(ids: string[], snoozedUntil: number | null) {
+    if (ids.length === 0) return;
+    setNotice(null);
+    try {
+      await Promise.all(
+        ids.map((id) => updateRepo.mutateAsync({ id, patch: { snoozedUntil } }))
+      );
+      await notifQuery.refetch();
+      say(
+        ids.length === 1 ? "Repository snoozed." : `${ids.length} repositories snoozed.`,
+        "info"
+      );
+    } catch {
+      say("Snooze failed. Previous setting restored.");
+    }
+  }
+
+  async function bulkRhythm(ids: string[], rhythm: string) {
+    if (ids.length === 0) return;
+    setNotice(null);
+    try {
+      await Promise.all(
+        ids.map((id) => updateRepo.mutateAsync({ id, patch: { rhythm } }))
+      );
+      await notifQuery.refetch();
+      say(
+        ids.length === 1
+          ? "Digest rhythm updated."
+          : `${ids.length} repositories switched to the same rhythm.`,
+        "info"
+      );
+    } catch {
+      say("Rhythm update failed. Previous setting restored.");
+    }
+  }
+
+  async function bulkDone(ids: string[]) {
+    await markRepoDone(ids);
+  }
+
+  async function bulkRead(ids: string[]) {
+    await markRepoRead(ids);
+  }
+
+  function handleBulkCopied(ids: string[], ok: boolean) {
+    say(
+      ok
+        ? ids.length === 1
+          ? "Repo link copied to clipboard."
+          : `${ids.length} repo links copied to clipboard.`
+        : "Copy failed in this browser.",
+      ok ? "info" : "error"
+    );
+  }
+
+  /** Marks every pending item of one or more repos done, with rollback on failure. */
+  async function markRepoDone(repositoryIds: string | string[], opts?: { confirmed?: boolean }) {
+    const ids = Array.isArray(repositoryIds) ? repositoryIds : [repositoryIds];
+    if (ids.length === 0 || ids.some((id) => pendingRepos.has(id))) return;
+    // Combined totals across the set, with the same per-repo fallback as
+    // the single-repo flow (repo-wide counts, else the quiet digest group).
+    let total = 0;
+    let main = 0;
+    let quiet = 0;
+    for (const id of ids) {
+      const facet = repoFacets.find((r) => r.id === id);
+      const quietGroup = collapsed.find((g) => g.repositoryId === id);
+      total += (facet?.main ?? 0) + (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0;
+      main += facet?.main ?? 0;
+      quiet += (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0;
+    }
     if (!opts?.confirmed && total > BULK_CONFIRM_THRESHOLD) {
-      setConfirmDone({
-        repositoryId,
-        total,
-        main: facet?.main ?? 0,
-        quiet: (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0,
-      });
+      setConfirmDone({ repositoryIds: ids, total, main, quiet });
       return;
     }
     setNotice(null);
-    setPendingRepos((prev) => new Set(prev).add(repositoryId));
+    setPendingRepos((prev) => new Set([...prev, ...ids]));
+    const first = ids[0] ?? "";
     const repoName =
-      facet?.fullName ?? quietGroup?.repositoryName ?? repositoryId;
+      ids.length === 1
+        ? (repoFacets.find((r) => r.id === first)?.fullName ??
+          collapsed.find((g) => g.repositoryId === first)?.repositoryName ??
+          first)
+        : `${ids.length} repositories`;
     const prevDrawer = drawerItem;
-    const targets = items.filter((i) => i.repositoryId === repositoryId);
-    if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
+    const targets = items.filter((i) => ids.includes(i.repositoryId));
+    if (prevDrawer != null && ids.includes(prevDrawer.repositoryId)) {
       setDrawerItem(null);
     }
-    const intent: PendingIntent = {
+    const intents: PendingIntent[] = ids.map((repositoryId) => ({
       action: "done",
-      ids: targets.map((t) => t.id),
+      ids: targets.filter((t) => t.repositoryId === repositoryId).map((t) => t.id),
       state: filters.state,
       repositoryId,
       viewKey,
-    };
-    pendingRef.current = [...pendingRef.current, intent];
-    const hiddenPending =
-      collapsed.find((g) => g.repositoryId === repositoryId)?.pendingCount ?? 0;
+    }));
+    pendingRef.current = [...pendingRef.current, ...intents];
+    const hiddenPending = collapsed
+      .filter((g) => ids.includes(g.repositoryId))
+      .reduce((n, g) => n + g.pendingCount, 0);
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const next = new Set(prev);
@@ -482,19 +552,33 @@ function InboxView() {
       return next;
     });
     try {
-      const body = await markRepoDoneMutation.mutateAsync({ repositoryId });
-      const updated = typeof body?.updated === "number" ? body.updated : 0;
-      const queued = typeof body?.queued === "number" ? body.queued : 0;
-      const remote = typeof body?.remote === "string" ? body.remote : null;
+      const bodies = await Promise.all(
+        ids.map((id) => markRepoDoneMutation.mutateAsync({ repositoryId: id }))
+      );
+      const updated = bodies.reduce(
+        (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
+        0
+      );
+      const queued = bodies.reduce(
+        (n, b) => n + (typeof b?.queued === "number" ? b.queued : 0),
+        0
+      );
+      const remote = bodies.some((b) => b?.remote === "background")
+        ? "background"
+        : typeof bodies[0]?.remote === "string"
+          ? (bodies[0]?.remote as string)
+          : null;
+      const error =
+        bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
       if (updated === 0 && queued === 0) {
         say(`No pending items for ${repoName}.`, "info");
       } else if (remote === "background") {
         // Updated counts visible plus quiet; only the visible rows just left
         // the screen, so spell out the split or the total looks wrong.
-        const quiet = Math.max(0, updated - targets.length);
+        const quietDone = Math.max(0, updated - targets.length);
         say(
-          quiet > 0
-            ? `${updated} marked done (${targets.length} visible + ${quiet} quiet), syncing to GitHub in background.`
+          quietDone > 0
+            ? `${updated} marked done (${targets.length} visible + ${quietDone} quiet), syncing to GitHub in background.`
             : `${updated} marked done, syncing to GitHub in background.`,
           "info"
         );
@@ -504,14 +588,14 @@ function InboxView() {
             ? describeRepoDoneResult(repoName, {
                 updated,
                 queued,
-                error: typeof body?.error === "string" ? body.error : null,
+                error,
                 hiddenPending,
               })
             : null;
         const queuedNotice = describeBulkResult("done", {
           updated,
           queued,
-          error: typeof body?.error === "string" ? body.error : null,
+          error,
           remote,
         });
         if (hiddenNotice) say(hiddenNotice);
@@ -525,11 +609,11 @@ function InboxView() {
       // repo: the "all" view keeps its done rows, and the done view
       // disables this action. Runs on both the background and the
       // foreground path: large background dones empty the repo too.
-      if (filters.state === "unread" && filters.repo === repositoryId) {
+      if (filters.state === "unread" && ids.includes(filters.repo)) {
         const nextRepo = nextRepoAfterMarkDone(
           repoFacets,
           filters.repo,
-          repositoryId
+          ids
         );
         if (nextRepo !== null) {
           setFocusIdx(null);
@@ -537,17 +621,17 @@ function InboxView() {
         }
       }
     } catch {
-      if (prevDrawer != null && prevDrawer.repositoryId === repositoryId) {
+      if (prevDrawer != null && ids.includes(prevDrawer.repositoryId)) {
         setDrawerItem(prevDrawer);
       }
       say("Mark all as done failed. Restored previous state.");
     } finally {
       setPendingRepos((prev) => {
         const next = new Set(prev);
-        next.delete(repositoryId);
+        for (const id of ids) next.delete(id);
         return next;
       });
-      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
+      pendingRef.current = pendingRef.current.filter((i) => !intents.includes(i));
     }
   }
 
@@ -557,30 +641,48 @@ function InboxView() {
   // empty pending set swallow the done-view disable.
   const markAllDoneBusy = filters.state === "done";
 
-  /** Marks every unread item of one repo read, with rollback on failure. */
-  async function markRepoRead(repositoryId: string) {
-    if (pendingRepos.has(repositoryId)) return;
+  /** Marks every unread item of one or more repos read, with rollback on failure. */
+  async function markRepoRead(repositoryIds: string | string[]) {
+    const ids = Array.isArray(repositoryIds) ? repositoryIds : [repositoryIds];
+    if (ids.length === 0 || ids.some((id) => pendingRepos.has(id))) return;
     setNotice(null);
-    setPendingRepos((prev) => new Set(prev).add(repositoryId));
+    setPendingRepos((prev) => new Set([...prev, ...ids]));
+    const first = ids[0] ?? "";
     const repoName =
-      repoFacets.find((r) => r.id === repositoryId)?.fullName ??
-      collapsed.find((g) => g.repositoryId === repositoryId)?.repositoryName ??
-      repositoryId;
-    const targets = items.filter((i) => i.repositoryId === repositoryId);
+      ids.length === 1
+        ? (repoFacets.find((r) => r.id === first)?.fullName ??
+          collapsed.find((g) => g.repositoryId === first)?.repositoryName ??
+          first)
+        : `${ids.length} repositories`;
+    const targets = items.filter((i) => ids.includes(i.repositoryId));
     const visibleCount = targets.length;
-    const intent: PendingIntent = {
+    const intents: PendingIntent[] = ids.map((repositoryId) => ({
       action: "read",
-      ids: targets.map((t) => t.id),
+      ids: targets.filter((t) => t.repositoryId === repositoryId).map((t) => t.id),
       state: filters.state,
       repositoryId,
       viewKey,
-    };
-    pendingRef.current = [...pendingRef.current, intent];
+    }));
+    pendingRef.current = [...pendingRef.current, ...intents];
     try {
-      const body = await markRepoReadMutation.mutateAsync({ repositoryId });
-      const updated = typeof body?.updated === "number" ? body.updated : 0;
-      const queued = typeof body?.queued === "number" ? body.queued : 0;
-      const remote = typeof body?.remote === "string" ? body.remote : null;
+      const bodies = await Promise.all(
+        ids.map((id) => markRepoReadMutation.mutateAsync({ repositoryId: id }))
+      );
+      const updated = bodies.reduce(
+        (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
+        0
+      );
+      const queued = bodies.reduce(
+        (n, b) => n + (typeof b?.queued === "number" ? b.queued : 0),
+        0
+      );
+      const remote = bodies.some((b) => b?.remote === "background")
+        ? "background"
+        : typeof bodies[0]?.remote === "string"
+          ? (bodies[0]?.remote as string)
+          : null;
+      const error =
+        bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
       if (updated === 0 && queued === 0) {
         say(`All items for ${repoName} are already read.`, "info");
       } else if (remote === "background") {
@@ -595,7 +697,7 @@ function InboxView() {
         const queuedNotice = describeBulkResult("read", {
           updated,
           queued,
-          error: typeof body?.error === "string" ? body.error : null,
+          error,
           remote,
         });
         if (queuedNotice) say(queuedNotice);
@@ -605,10 +707,10 @@ function InboxView() {
     } finally {
       setPendingRepos((prev) => {
         const next = new Set(prev);
-        next.delete(repositoryId);
+        for (const id of ids) next.delete(id);
         return next;
       });
-      pendingRef.current = pendingRef.current.filter((i) => i !== intent);
+      pendingRef.current = pendingRef.current.filter((i) => !intents.includes(i));
     }
   }
 
@@ -941,6 +1043,11 @@ function InboxView() {
             busyRepoIds={pendingRepos}
             onMarkAllRead={markRepoRead}
             onCopied={handleRepoCopied}
+            onBulkSnooze={bulkSnooze}
+            onBulkRhythm={bulkRhythm}
+            onBulkDone={bulkDone}
+            onBulkRead={bulkRead}
+            onBulkCopied={handleBulkCopied}
             quietGroups={collapsed}
             quietActive={quietView}
             onQuietView={showQuietDigests}
@@ -1208,6 +1315,9 @@ function InboxView() {
               {confirmDone.quiet > 0
                 ? ` (${confirmDone.main} visible + ${confirmDone.quiet} quiet)`
                 : ""}
+              {confirmDone.repositoryIds.length > 1
+                ? ` across ${confirmDone.repositoryIds.length} repositories`
+                : ""}
               {" "}and syncs to GitHub in the background. Other repos stay
               usable while it syncs. Restore from the Done view if needed.
             </p>
@@ -1219,7 +1329,7 @@ function InboxView() {
                 onClick={() => {
                   const target = confirmDone;
                   setConfirmDone(null);
-                  void markRepoDone(target.repositoryId, { confirmed: true });
+                  void markRepoDone(target.repositoryIds, { confirmed: true });
                 }}
               >
                 Mark {confirmDone.total} done

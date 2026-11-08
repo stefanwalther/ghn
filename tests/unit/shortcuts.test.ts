@@ -70,6 +70,11 @@ describe("shortcuts", () => {
     expect(keys).toContain("Shift+Enter");
   });
 
+  test("help documents sidebar repo multi-select", () => {
+    const keys = SHORTCUTS.map((s) => s.key);
+    expect(keys).toContain("Ctrl / Cmd + click");
+  });
+
   test("theme cycle fires on Cmd+F12 and Ctrl+F12 only", () => {
     expect(isCycleThemeEvent(keyEvent({ key: "F12", metaKey: true }))).toBe(true);
     expect(isCycleThemeEvent(keyEvent({ key: "F12", ctrlKey: true }))).toBe(true);

@@ -189,6 +189,155 @@ describe("FilterSidebar repository search", () => {
   });
 });
 
+describe("FilterSidebar multi-select", () => {
+  function renderSidebar(overrides = {}) {
+    const props = {
+      types: typeFacets,
+      activeType: "all",
+      repos: repoFacets,
+      activeRepo: "all",
+      onType: vi.fn(),
+      onRepo: vi.fn(),
+      ...overrides,
+    };
+    render(<FilterSidebar {...props} />);
+    return props;
+  }
+
+  function row(name: string) {
+    return screen.getByRole("button", { name: `Filter by ${name}` });
+  }
+
+  test("ctrl-click toggles selection without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("ctrl-click again deselects the row", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("shift-click extends a range from the anchor in display order", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("acme/api"), { shiftKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    expect(row("acme/api")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("plain click clears the selection and filters as today", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).toHaveBeenCalledWith("other--docs");
+  });
+
+  test("escape clears the selection without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.keyDown(row("acme/web"), { key: "Escape" });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("clicking empty sidebar space clears the selection without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(screen.getByLabelText("Repository filters"));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("shift-arrow extends a range from the anchor", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    row("acme/web").focus();
+    fireEvent.keyDown(row("acme/web"), { key: "ArrowDown", shiftKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("FilterSidebar bulk menu", () => {
+  function renderBulkSidebar(overrides = {}) {
+    const props = {
+      types: typeFacets,
+      activeType: "all",
+      repos: repoFacets,
+      activeRepo: "all",
+      onType: vi.fn(),
+      onRepo: vi.fn(),
+      onSnooze: vi.fn(),
+      onRhythm: vi.fn(),
+      onBulkSnooze: vi.fn(),
+      onBulkRhythm: vi.fn(),
+      onBulkDone: vi.fn(),
+      onBulkRead: vi.fn(),
+      onBulkCopied: vi.fn(),
+      ...overrides,
+    };
+    render(<FilterSidebar {...props} />);
+    return props;
+  }
+
+  function row(name: string) {
+    return screen.getByRole("button", { name: `Filter by ${name}` });
+  }
+
+  function selectTwo() {
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+  }
+
+  test("right-click on a selected row opens one menu for the whole selection", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+  });
+
+  test("choosing a snooze preset fans out to every selected repository", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^In 1 hour/ }));
+    expect(props.onBulkSnooze).toHaveBeenCalledTimes(1);
+    const [ids, at] = props.onBulkSnooze.mock.calls[0];
+    expect([...ids].sort()).toEqual(["acme--web", "other--docs"]);
+    expect(typeof at).toBe("number");
+  });
+
+  test("disagreeing rhythms show as mixed", () => {
+    const repos = [
+      { id: "acme--web", fullName: "acme/web", main: 3, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "other--docs", fullName: "other/docs", main: 2, quiet: 0, isSnoozed: false, rhythm: "weekly" },
+    ];
+    renderBulkSidebar({ repos });
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByText("Mixed")).toBeInTheDocument();
+  });
+
+  test("right-click on an unselected row clears the selection and targets one repo", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/api"));
+    expect(
+      screen.getByRole("menu", { name: "Actions for acme/api" })
+    ).toBeInTheDocument();
+    expect(props.onBulkSnooze).not.toHaveBeenCalled();
+  });
+});
+
 describe("CommandPalette repository filtering", () => {
   test("offers a sidebar-list handoff after the repo hits without stealing Enter", async () => {
     installFetch();

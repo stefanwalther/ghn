@@ -49,6 +49,37 @@ export function toggleAllSelection(
 }
 
 /**
+ * Extends the selection with the visible range between the anchor and the
+ * target, unioned with the existing selection.
+ *
+ * Selection is by identity, not position: hidden rows stay selected because
+ * only visible ids can enter through a range. A null anchor (or an anchor
+ * or target outside the visible list) degrades to a plain toggle of the
+ * target so Shift-click never clears or surprises.
+ */
+export function rangeSelection(
+  visibleIds: string[],
+  anchorId: string | null,
+  targetId: string,
+  selected: Set<string>
+): Set<string> {
+  const next = new Set(selected);
+  const anchorIdx = anchorId === null ? -1 : visibleIds.indexOf(anchorId);
+  const targetIdx = visibleIds.indexOf(targetId);
+  if (anchorIdx === -1 || targetIdx === -1) {
+    if (targetIdx !== -1) {
+      if (next.has(targetId)) next.delete(targetId);
+      else next.add(targetId);
+    }
+    return next;
+  }
+  const [from, to] =
+    anchorIdx <= targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx];
+  for (let i = from; i <= to; i++) next.add(visibleIds[i] as string);
+  return next;
+}
+
+/**
  * The optimistic update for a triage action.
  *
  * "done" and "unsubscribe" remove the rows from the list. "read" marks them
@@ -211,6 +242,73 @@ export interface RepoCount {
 }
 
 /**
+ * Actionable counts for one repository row, with the same fallback chain
+ * the sidebar uses: repo-wide fields first (they ignore the current
+ * filter), then the current-view fields, then the visible badge totals.
+ */
+export interface RepoSummaryCount extends RepoCount {
+  pending?: number;
+  unread?: number;
+  pendingAll?: number;
+  readable?: number;
+  rhythm?: string;
+}
+
+export interface RepoSelectionSummary {
+  /** Selected ids in sidebar display order. */
+  ids: string[];
+  /** Combined actionable pending total across the selection. */
+  pending: number;
+  /** Combined actionable unread total across the selection. */
+  readable: number;
+  /** Common rhythm, "mixed" on disagreement, null when nothing selected. */
+  rhythm: string | null;
+  /** Whether none, all, or some of the selection is snoozed. */
+  snoozed: "none" | "all" | "mixed";
+}
+
+/**
+ * Pure derivation of the combined menu target from the selection: combined
+ * counts plus mixed-state flags. An entry stays enabled while its combined
+ * count is above zero; the menu disables an entry only when no selected
+ * repository can act on it.
+ */
+export function summarizeRepoSelection(
+  repos: RepoSummaryCount[],
+  ids: string[]
+): RepoSelectionSummary {
+  const wanted = new Set(ids);
+  const members = repos.filter((r) => wanted.has(r.id));
+  let pending = 0;
+  let readable = 0;
+  const rhythms = new Set<string>();
+  let snoozedCount = 0;
+  for (const r of members) {
+    pending += r.pendingAll ?? r.pending ?? r.main + r.quiet;
+    readable += r.readable ?? r.unread ?? r.main + r.quiet;
+    if (r.rhythm !== undefined) rhythms.add(r.rhythm);
+    if (r.isSnoozed === true) snoozedCount += 1;
+  }
+  return {
+    ids: members.map((r) => r.id),
+    pending,
+    readable,
+    rhythm:
+      members.length === 0 || rhythms.size === 0
+        ? null
+        : rhythms.size === 1
+          ? [...rhythms][0] as string
+          : "mixed",
+    snoozed:
+      members.length === 0 || snoozedCount === 0
+        ? "none"
+        : snoozedCount === members.length
+          ? "all"
+          : "mixed",
+  };
+}
+
+/**
  * The repository to select after its pending items are marked done.
  *
  * The sidebar hides repositories with zero items unless they are the active
@@ -219,15 +317,21 @@ export interface RepoCount {
  * the emptied row was last, "all" when nothing else remains, or null when no
  * navigation is needed (the emptied repo was not the active filter).
  *
+ * Accepts one emptied repository or several (bulk done across a selection);
+ * every emptied id is excluded from the remaining list.
+ *
  * The display order matches the sidebar: regular repositories in facet order,
  * then snoozed repositories in facet order.
  */
 export function nextRepoAfterMarkDone(
   repos: RepoCount[],
   activeRepoId: string,
-  emptiedRepoId: string
+  emptiedRepoId: string | string[]
 ): string | null {
-  if (activeRepoId !== emptiedRepoId) return null;
+  const emptied = new Set(
+    Array.isArray(emptiedRepoId) ? emptiedRepoId : [emptiedRepoId]
+  );
+  if (!emptied.has(activeRepoId)) return null;
   if (activeRepoId === "all") return null;
   const visible = repos.filter(
     (r) => r.id === activeRepoId || r.main > 0 || r.quiet > 0
@@ -236,9 +340,9 @@ export function nextRepoAfterMarkDone(
     ...visible.filter((r) => !r.isSnoozed),
     ...visible.filter((r) => r.isSnoozed),
   ];
-  const idx = display.findIndex((r) => r.id === emptiedRepoId);
+  const idx = display.findIndex((r) => r.id === activeRepoId);
   if (idx === -1) return null;
-  const remaining = display.filter((r) => r.id !== emptiedRepoId);
+  const remaining = display.filter((r) => !emptied.has(r.id));
   if (remaining.length === 0) return "all";
   if (idx < remaining.length) return remaining[idx]?.id ?? "all";
   return remaining[remaining.length - 1]?.id ?? "all";

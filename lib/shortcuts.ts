@@ -9,6 +9,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { key: "j / k", label: "Move down / up", description: "Move focus between rows, or to the next / previous thread when details are open", group: "Navigate" },
   { key: "[ / ]", label: "Prev / next in details", description: "Jump to the previous / next thread while details are open", group: "Navigate" },
   { key: "o", label: "Open", description: "Open the focused thread in a new tab", group: "Navigate" },
+  { key: "Ctrl / Cmd + click", label: "Select repos", description: "Toggle repository rows in the filter sidebar; Shift+click extends a range, right-click acts on the whole selection", group: "Navigate" },
   { key: "m / Shift+F10", label: "Menu", description: "Open the focused row actions menu", group: "Navigate" },
   { key: "Shift+D", label: "Details", description: "Open the focused thread details in the side panel", group: "Navigate" },
   { key: "x / Space", label: "Select", description: "Toggle the focused row", group: "Triage" },
