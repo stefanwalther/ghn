@@ -125,8 +125,23 @@ export function ContributionsChip() {
     loadDays();
   };
 
-  const label = count === null ? "– today" : `${count} today`;
+  const countLabel = count === null ? null : `${count} today`;
   const total = days?.reduce((sum, d) => sum + d.count, 0) ?? null;
+
+  const badge =
+    count === null ? (
+      <Badge variant="muted" aria-busy="true" className="min-w-[5.5rem] justify-center">
+        <span
+          aria-hidden="true"
+          className="inline-block h-4 w-16 animate-pulse rounded bg-muted-foreground/20"
+        />
+        <span className="sr-only">Loading today’s contributions…</span>
+      </Badge>
+    ) : (
+      <Badge variant="muted" className="min-w-[5.5rem] justify-center tabular-nums">
+        {countLabel}
+      </Badge>
+    );
   const max = days?.reduce((m, d) => Math.max(m, d.count), 0) ?? 0;
   const padStart = days && days.length > 0 ? weekdayOf(days[0].date) : 0;
   const colCount = days && days.length > 0 ? Math.ceil((padStart + days.length) / 7) : 0;
@@ -151,12 +166,6 @@ export function ContributionsChip() {
       prev = m;
     }
   }
-
-  const badge = (
-    <Badge variant="muted">
-      {label}
-    </Badge>
-  );
 
   // GitHub draws a 0.5px hairline inside every 11px cell so empty days read
   // as squares. Border-box keeps the cell at exactly 11px.
@@ -329,9 +338,11 @@ export function ContributionsChip() {
         onClick={toggleOverlay}
         aria-expanded={open}
         aria-label={
-          login
-            ? `GitHub contributions for ${login}, ${label}. Activate to ${open ? "hide" : "show"} the 180-day graph.`
-            : `GitHub contributions, ${label}. Activate for details.`
+          countLabel === null
+            ? "Loading GitHub contributions. Activate for details."
+            : login
+              ? `GitHub contributions for ${login}, ${countLabel}. Activate to ${open ? "hide" : "show"} the 180-day graph.`
+              : `GitHub contributions, ${countLabel}. Activate for details.`
         }
         className="cursor-pointer rounded-md transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
