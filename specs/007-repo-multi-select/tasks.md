@@ -47,17 +47,17 @@ Single-project web app: `app/`, `components/`, `lib/`, `tests/` at repository ro
 
 **Goal**: Ctrl/Cmd-toggle and Shift-range selection with distinct selected visuals, plain click preserving filter behavior, Escape/empty-space clearing
 
-**Independent Test**: Ctrl/Cmd-click three separate rows then Shift-click a fourth; selected set matches, inbox filter unchanged except for plain clicks; `aria-selected` exposed on rows
+**Independent Test**: Ctrl/Cmd-click three separate rows then Shift-click a fourth; selected set matches, inbox filter unchanged except for plain clicks; `aria-pressed` exposed on row toggle buttons
 
 ### Tests for User Story 1 (write FIRST, confirm FAIL)
 
-- [X] T006 [P] [US1] Component tests for selection gestures in `tests/component/repo-list-filter.test.tsx` (toggle two non-adjacent rows; Shift-range from anchor; plain click clears and filters; Escape and empty-space click clear without changing filter; `aria-selected` on selected rows)
+- [X] T006 [P] [US1] Component tests for selection gestures in `tests/component/repo-list-filter.test.tsx` (toggle two non-adjacent rows; Shift-range from anchor; plain click clears and filters; Escape and empty-space click clear without changing filter; `aria-pressed` on row toggle buttons)
 
 ### Implementation for User Story 1
 
 - [X] T007 [US1] Add selection state (`selected: Set<string>`, `anchorId: string | null`, "Empty set means no selection") to `components/inbox/filter-sidebar.tsx`
 - [X] T008 [US1] Modifier click handling in `components/inbox/filter-sidebar.tsx` via `rangeSelection` (depends on T007; Ctrl/Cmd toggles and moves anchor, Shift extends visible range, plain click clears and filters as today)
-- [X] T009 [US1] Selected-row visuals distinct from active-filter style with both visible on overlap, plus `aria-selected`, in `components/inbox/filter-sidebar.tsx` (depends on T007)
+- [X] T009 [US1] Selected-row visuals distinct from active-filter style with both visible on overlap, plus `aria-pressed` toggle semantics, in `components/inbox/filter-sidebar.tsx` (depends on T007)
 - [X] T010 [US1] Keyboard support in `components/inbox/filter-sidebar.tsx` (depends on T007; Ctrl/Cmd+Space/Enter toggle via click modifiers, Shift+Arrow extends range, Escape clears selection, menu key opens row menu)
 
 **Checkpoint**: At this point, User Story 1 is fully functional and testable independently (selection with zero menu changes; right-clicks still open single-row menus)

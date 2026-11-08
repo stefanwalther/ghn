@@ -51,7 +51,7 @@ No `NEEDS CLARIFICATION` items existed in the Technical Context (stack, patterns
 
 ## Decision 6: Keyboard story without roving tabindex
 
-**Decision**: Rows stay native buttons (Tab-reachable). Ctrl/Cmd+Space/Enter toggles for free because the click event carries modifier flags. Add Shift+Arrow range extension on focused rows and Shift+F10/Applications-key menu opening via the existing per-row trigger path. `aria-selected` on rows, selection count announced via the existing `role="status"` patterns.
+**Decision**: Rows stay native buttons (Tab-reachable). Ctrl/Cmd+Space/Enter toggles for free because the click event carries modifier flags. Add Shift+Arrow range extension on focused rows and Shift+F10/Applications-key menu opening via the existing per-row trigger path. `aria-pressed` on row toggle buttons, selection count announced via the existing `role="status"` patterns.
 
 **Rationale**: Minimal mechanism that satisfies FR-016. Native buttons already handle focus visibility; arrow-key row movement is a small `onKeyDown` addition. Full roving-tabindex grid semantics would be heavier than the list warrants.
 

@@ -22,7 +22,7 @@ Expected: each step matches the [interaction contract](contracts/sidebar-selecti
 ## Automated validation
 
 - `bun run test:unit -- inbox-state` — range helper cases (null anchor, forward/backward ranges, target outside visible list, hidden-row preservation).
-- `bun run test:component -- repo-list-filter` — toggle/range/clear visuals, `aria-selected`, combined menu targeting, disabled-when-zero-actionable.
+- `bun run test:component -- repo-list-filter` — toggle/range/clear visuals, `aria-pressed`, combined menu targeting, disabled-when-zero-actionable.
 - `make test-e2e` (or the triage spec) — select three via modifiers, snooze all, combined done with confirmation.
 - Full gate before PR: `make check` (typecheck, lint, unit, integration, component).
 

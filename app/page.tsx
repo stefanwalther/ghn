@@ -30,6 +30,7 @@ import {
   useSyncFlow,
   useThreadSync,
   useUpdateRepository,
+  type BulkMutationBody,
   type NotificationsResponse,
 } from "@/lib/queries";
 import { useUIStore } from "@/lib/ui-store";
@@ -446,38 +447,55 @@ function InboxView() {
    * per-repository mutation per id, in parallel.
    */
   async function bulkSnooze(ids: string[], snoozedUntil: number | null) {
-    if (ids.length === 0) return;
+    const fresh = ids.filter((id) => !pendingRepos.has(id));
+    if (fresh.length === 0) return;
     setNotice(null);
+    setPendingRepos((prev) => new Set([...prev, ...fresh]));
     try {
       await Promise.all(
-        ids.map((id) => updateRepo.mutateAsync({ id, patch: { snoozedUntil } }))
+        fresh.map((id) => updateRepo.mutateAsync({ id, patch: { snoozedUntil } }))
       );
       await notifQuery.refetch();
+      const verb = snoozedUntil === null ? "unsnoozed" : "snoozed";
       say(
-        ids.length === 1 ? "Repository snoozed." : `${ids.length} repositories snoozed.`,
+        fresh.length === 1 ? `Repository ${verb}.` : `${fresh.length} repositories ${verb}.`,
         "info"
       );
     } catch {
       say("Snooze failed. Previous setting restored.");
+    } finally {
+      setPendingRepos((prev) => {
+        const next = new Set(prev);
+        for (const id of fresh) next.delete(id);
+        return next;
+      });
     }
   }
 
   async function bulkRhythm(ids: string[], rhythm: string) {
-    if (ids.length === 0) return;
+    const fresh = ids.filter((id) => !pendingRepos.has(id));
+    if (fresh.length === 0) return;
     setNotice(null);
+    setPendingRepos((prev) => new Set([...prev, ...fresh]));
     try {
       await Promise.all(
-        ids.map((id) => updateRepo.mutateAsync({ id, patch: { rhythm } }))
+        fresh.map((id) => updateRepo.mutateAsync({ id, patch: { rhythm } }))
       );
       await notifQuery.refetch();
       say(
-        ids.length === 1
+        fresh.length === 1
           ? "Digest rhythm updated."
-          : `${ids.length} repositories switched to the same rhythm.`,
+          : `${fresh.length} repositories switched to the same rhythm.`,
         "info"
       );
     } catch {
       say("Rhythm update failed. Previous setting restored.");
+    } finally {
+      setPendingRepos((prev) => {
+        const next = new Set(prev);
+        for (const id of fresh) next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -502,32 +520,51 @@ function InboxView() {
 
   /** Marks every pending item of one or more repos done, with rollback on failure. */
   async function markRepoDone(repositoryIds: string | string[], opts?: { confirmed?: boolean }) {
-    const ids = Array.isArray(repositoryIds) ? repositoryIds : [repositoryIds];
-    if (ids.length === 0 || ids.some((id) => pendingRepos.has(id))) return;
-    // Combined totals across the set, with the same per-repo fallback as
-    // the single-repo flow (repo-wide counts, else the quiet digest group).
-    let total = 0;
-    let main = 0;
-    let quiet = 0;
-    for (const id of ids) {
+    const requested = Array.isArray(repositoryIds) ? repositoryIds : [repositoryIds];
+    // Only repos with repo-wide pending items act. Zero-count members are
+    // neither confirmed, busied, nor sent, so narrowing filters cannot
+    // inflate the dialog or fire no-op mutations.
+    const pendingOf = (id: string) => {
       const facet = repoFacets.find((r) => r.id === id);
       const quietGroup = collapsed.find((g) => g.repositoryId === id);
-      total += (facet?.main ?? 0) + (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0;
-      main += facet?.main ?? 0;
-      quiet += (facet?.quiet ?? 0) || quietGroup?.pendingCount || 0;
+      return (
+        (facet?.pendingAll ?? (((facet?.main ?? 0) + (facet?.quiet ?? 0)) ||
+          quietGroup?.pendingCount ||
+          0))
+      );
+    };
+    const ids = requested.filter((id) => pendingOf(id) > 0);
+    const first = requested[0] ?? "";
+    const requestedName =
+      requested.length === 1
+        ? (repoFacets.find((r) => r.id === first)?.fullName ??
+          collapsed.find((g) => g.repositoryId === first)?.repositoryName ??
+          first)
+        : `${requested.length} repositories`;
+    if (ids.length === 0) {
+      say(`No pending items for ${requestedName}.`, "info");
+      return;
     }
+    if (ids.some((id) => pendingRepos.has(id))) return;
+    // Totals use repo-wide counts so narrowing filters cannot undercount
+    // what the action will mark done. The visible split below still
+    // describes the current view.
+    let total = 0;
+    let main = 0;
+    for (const id of ids) total += pendingOf(id);
+    for (const id of ids) main += repoFacets.find((r) => r.id === id)?.main ?? 0;
+    const quiet = Math.max(0, total - main);
     if (!opts?.confirmed && total > BULK_CONFIRM_THRESHOLD) {
       setConfirmDone({ repositoryIds: ids, total, main, quiet });
       return;
     }
     setNotice(null);
     setPendingRepos((prev) => new Set([...prev, ...ids]));
-    const first = ids[0] ?? "";
     const repoName =
       ids.length === 1
-        ? (repoFacets.find((r) => r.id === first)?.fullName ??
-          collapsed.find((g) => g.repositoryId === first)?.repositoryName ??
-          first)
+        ? (repoFacets.find((r) => r.id === ids[0])?.fullName ??
+          collapsed.find((g) => g.repositoryId === ids[0])?.repositoryName ??
+          ids[0])
         : `${ids.length} repositories`;
     const prevDrawer = drawerItem;
     const targets = items.filter((i) => ids.includes(i.repositoryId));
@@ -551,55 +588,81 @@ function InboxView() {
       for (const t of targets) next.delete(t.id);
       return next;
     });
-    try {
-      const bodies = await Promise.all(
-        ids.map((id) => markRepoDoneMutation.mutateAsync({ repositoryId: id }))
-      );
-      const updated = bodies.reduce(
-        (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
-        0
-      );
-      const queued = bodies.reduce(
-        (n, b) => n + (typeof b?.queued === "number" ? b.queued : 0),
-        0
-      );
-      const remote = bodies.some((b) => b?.remote === "background")
-        ? "background"
-        : typeof bodies[0]?.remote === "string"
-          ? (bodies[0]?.remote as string)
-          : null;
-      const error =
-        bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
-      if (updated === 0 && queued === 0) {
-        say(`No pending items for ${repoName}.`, "info");
-      } else if (remote === "background") {
-        // Updated counts visible plus quiet; only the visible rows just left
-        // the screen, so spell out the split or the total looks wrong.
-        const quietDone = Math.max(0, updated - targets.length);
-        say(
-          quietDone > 0
-            ? `${updated} marked done (${targets.length} visible + ${quietDone} quiet), syncing to GitHub in background.`
-            : `${updated} marked done, syncing to GitHub in background.`,
-          "info"
-        );
+    // Every mutation settles before busy state drains, so a failure cannot
+    // release a still-pending sibling early. Only failed repos roll back;
+    // successes stand and are reported alongside the failures.
+    const settled = await Promise.allSettled(
+      ids.map((id) => markRepoDoneMutation.mutateAsync({ repositoryId: id }))
+    );
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const bodies: BulkMutationBody[] = [];
+    settled.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        succeeded.push(ids[i] as string);
+        bodies.push(r.value);
       } else {
-        const hiddenNotice =
-          hiddenPending > 0
-            ? describeRepoDoneResult(repoName, {
-                updated,
-                queued,
-                error,
-                hiddenPending,
-              })
-            : null;
-        const queuedNotice = describeBulkResult("done", {
-          updated,
-          queued,
-          error,
-          remote,
-        });
-        if (hiddenNotice) say(hiddenNotice);
-        else if (queuedNotice) say(queuedNotice);
+        failed.push(ids[i] as string);
+      }
+    });
+    const visibleCount = targets.filter((t) => succeeded.includes(t.repositoryId)).length;
+    const updated = bodies.reduce(
+      (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
+      0
+    );
+    const queued = bodies.reduce(
+      (n, b) => n + (typeof b?.queued === "number" ? b.queued : 0),
+      0
+    );
+    const remote = bodies.some((b) => b?.remote === "background")
+      ? "background"
+      : typeof bodies[0]?.remote === "string"
+        ? (bodies[0]?.remote as string)
+        : null;
+    const error =
+      bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
+    const failedNames = failed
+      .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+      .join(", ");
+    try {
+      if (failed.length === ids.length) {
+        say("Mark all as done failed. Restored previous state.");
+      } else {
+        const parts: string[] = [];
+        if (updated === 0 && queued === 0) {
+          parts.push(`No pending items for ${repoName}.`);
+        } else if (remote === "background") {
+          // Updated counts visible plus quiet; only the visible rows just left
+          // the screen, so spell out the split or the total looks wrong.
+          const quietDone = Math.max(0, updated - visibleCount);
+          parts.push(
+            quietDone > 0
+              ? `${updated} marked done (${visibleCount} visible + ${quietDone} quiet), syncing to GitHub in background.`
+              : `${updated} marked done, syncing to GitHub in background.`
+          );
+        } else {
+          const hiddenNotice =
+            hiddenPending > 0
+              ? describeRepoDoneResult(repoName, {
+                  updated,
+                  queued,
+                  error,
+                  hiddenPending,
+                })
+              : null;
+          const queuedNotice = describeBulkResult("done", {
+            updated,
+            queued,
+            error,
+            remote,
+          });
+          if (hiddenNotice) parts.push(hiddenNotice);
+          else if (queuedNotice) parts.push(queuedNotice);
+        }
+        if (failed.length > 0) {
+          parts.push(`Done failed for ${failedNames}; those repos were restored.`);
+        }
+        if (parts.length > 0) say(parts.join(" "), "info");
       }
       // The sidebar hides zero-item repos unless they are the active
       // filter. When the active repo was just emptied, move the filter to
@@ -620,12 +683,10 @@ function InboxView() {
           setFilters({ ...filters, repo: nextRepo });
         }
       }
-    } catch {
-      if (prevDrawer != null && ids.includes(prevDrawer.repositoryId)) {
+    } finally {
+      if (prevDrawer != null && failed.includes(prevDrawer.repositoryId)) {
         setDrawerItem(prevDrawer);
       }
-      say("Mark all as done failed. Restored previous state.");
-    } finally {
       setPendingRepos((prev) => {
         const next = new Set(prev);
         for (const id of ids) next.delete(id);
@@ -643,19 +704,35 @@ function InboxView() {
 
   /** Marks every unread item of one or more repos read, with rollback on failure. */
   async function markRepoRead(repositoryIds: string | string[]) {
-    const ids = Array.isArray(repositoryIds) ? repositoryIds : [repositoryIds];
-    if (ids.length === 0 || ids.some((id) => pendingRepos.has(id))) return;
-    setNotice(null);
-    setPendingRepos((prev) => new Set([...prev, ...ids]));
-    const first = ids[0] ?? "";
-    const repoName =
-      ids.length === 1
+    const requested = Array.isArray(repositoryIds) ? repositoryIds : [repositoryIds];
+    // Only repos with repo-wide unread items act; zero-count members are
+    // neither busied nor sent.
+    const readableOf = (id: string) => {
+      const facet = repoFacets.find((r) => r.id === id);
+      return facet?.readable ?? facet?.unread ?? ((facet?.main ?? 0) + (facet?.quiet ?? 0));
+    };
+    const ids = requested.filter((id) => readableOf(id) > 0);
+    const first = requested[0] ?? "";
+    const requestedName =
+      requested.length === 1
         ? (repoFacets.find((r) => r.id === first)?.fullName ??
           collapsed.find((g) => g.repositoryId === first)?.repositoryName ??
           first)
+        : `${requested.length} repositories`;
+    if (ids.length === 0) {
+      say(`All items for ${requestedName} are already read.`, "info");
+      return;
+    }
+    if (ids.some((id) => pendingRepos.has(id))) return;
+    setNotice(null);
+    setPendingRepos((prev) => new Set([...prev, ...ids]));
+    const repoName =
+      ids.length === 1
+        ? (repoFacets.find((r) => r.id === ids[0])?.fullName ??
+          collapsed.find((g) => g.repositoryId === ids[0])?.repositoryName ??
+          ids[0])
         : `${ids.length} repositories`;
     const targets = items.filter((i) => ids.includes(i.repositoryId));
-    const visibleCount = targets.length;
     const intents: PendingIntent[] = ids.map((repositoryId) => ({
       action: "read",
       ids: targets.filter((t) => t.repositoryId === repositoryId).map((t) => t.id),
@@ -664,46 +741,69 @@ function InboxView() {
       viewKey,
     }));
     pendingRef.current = [...pendingRef.current, ...intents];
-    try {
-      const bodies = await Promise.all(
-        ids.map((id) => markRepoReadMutation.mutateAsync({ repositoryId: id }))
-      );
-      const updated = bodies.reduce(
-        (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
-        0
-      );
-      const queued = bodies.reduce(
-        (n, b) => n + (typeof b?.queued === "number" ? b.queued : 0),
-        0
-      );
-      const remote = bodies.some((b) => b?.remote === "background")
-        ? "background"
-        : typeof bodies[0]?.remote === "string"
-          ? (bodies[0]?.remote as string)
-          : null;
-      const error =
-        bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
-      if (updated === 0 && queued === 0) {
-        say(`All items for ${repoName} are already read.`, "info");
-      } else if (remote === "background") {
-        const quiet = Math.max(0, updated - visibleCount);
-        say(
-          quiet > 0
-            ? `${updated} marked read (${visibleCount} visible + ${quiet} quiet), syncing to GitHub in background.`
-            : `${updated} marked read, syncing to GitHub in background.`,
-          "info"
-        );
+    // Every mutation settles before busy state drains; only failed repos
+    // roll back while successes stand.
+    const settled = await Promise.allSettled(
+      ids.map((id) => markRepoReadMutation.mutateAsync({ repositoryId: id }))
+    );
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const bodies: BulkMutationBody[] = [];
+    settled.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        succeeded.push(ids[i] as string);
+        bodies.push(r.value);
       } else {
-        const queuedNotice = describeBulkResult("read", {
-          updated,
-          queued,
-          error,
-          remote,
-        });
-        if (queuedNotice) say(queuedNotice);
+        failed.push(ids[i] as string);
       }
-    } catch {
-      say("Mark all as read failed. Restored previous state.");
+    });
+    const visibleCount = targets.filter((t) => succeeded.includes(t.repositoryId)).length;
+    const updated = bodies.reduce(
+      (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
+      0
+    );
+    const queued = bodies.reduce(
+      (n, b) => n + (typeof b?.queued === "number" ? b.queued : 0),
+      0
+    );
+    const remote = bodies.some((b) => b?.remote === "background")
+      ? "background"
+      : typeof bodies[0]?.remote === "string"
+        ? (bodies[0]?.remote as string)
+        : null;
+    const error =
+      bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
+    const failedNames = failed
+      .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+      .join(", ");
+    try {
+      if (failed.length === ids.length) {
+        say("Mark all as read failed. Restored previous state.");
+      } else {
+        const parts: string[] = [];
+        if (updated === 0 && queued === 0) {
+          parts.push(`All items for ${repoName} are already read.`);
+        } else if (remote === "background") {
+          const quiet = Math.max(0, updated - visibleCount);
+          parts.push(
+            quiet > 0
+              ? `${updated} marked read (${visibleCount} visible + ${quiet} quiet), syncing to GitHub in background.`
+              : `${updated} marked read, syncing to GitHub in background.`
+          );
+        } else {
+          const queuedNotice = describeBulkResult("read", {
+            updated,
+            queued,
+            error,
+            remote,
+          });
+          if (queuedNotice) parts.push(queuedNotice);
+        }
+        if (failed.length > 0) {
+          parts.push(`Read failed for ${failedNames}; those repos were restored.`);
+        }
+        if (parts.length > 0) say(parts.join(" "), "info");
+      }
     } finally {
       setPendingRepos((prev) => {
         const next = new Set(prev);

@@ -42,7 +42,6 @@ function SidebarButton({
   selected,
   rowId,
   onClick,
-  onKeyDown,
   label,
   children,
   className,
@@ -52,7 +51,6 @@ function SidebarButton({
   /** Repository id; rendered as data-repo-row for arrow-key focus moves. */
   rowId?: string;
   onClick: (e: React.MouseEvent) => void;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
   label: string;
   children: React.ReactNode;
   className?: string;
@@ -65,7 +63,6 @@ function SidebarButton({
       aria-pressed={rowId === undefined ? undefined : (selected ?? false)}
       data-repo-row={rowId}
       onClick={onClick}
-      onKeyDown={onKeyDown}
       className={cn(
         "flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
@@ -91,6 +88,8 @@ export interface RepoBulkContext {
   onMarkAllRead: (ids: string[]) => void;
   markAllReadDisabled?: boolean;
   onCopied?: (ids: string[], ok: boolean) => void;
+  /** True when any selected member has an update in flight. */
+  anyBusy: boolean;
 }
 
 /** One repository filter row with hover actions and a right-click menu. */
@@ -166,6 +165,11 @@ function RepoFilterRow({
           setContextAnchor({ x: e.clientX, y: e.clientY });
         }
       }}
+      // Row-level keyboard handling covers the filter button and the
+      // hover "..." trigger alike: Escape with the trigger focused clears
+      // the selection after the menu closed, and Shift+Arrow never reaches
+      // the inbox list behind the sidebar.
+      onKeyDown={(e) => onRowKeyDown(r, e)}
     >
       <SidebarButton
         active={active}
@@ -173,7 +177,6 @@ function RepoFilterRow({
         rowId={r.id}
         label={`Filter by ${r.fullName}`}
         onClick={(e) => onRowClick(r, e)}
-        onKeyDown={(e) => onRowKeyDown(r, e)}
         className="min-w-0 flex-1"
       >
         <span className="min-w-0 flex-1 truncate" title={r.fullName}>
@@ -196,10 +199,11 @@ function RepoFilterRow({
           onSnooze={bulk.onSnooze}
           onRhythm={bulk.onRhythm}
           rhythmDisabled={bulk.rhythmDisabled ?? snoozeDisabled}
+          bulkBusy={bulk.anyBusy}
           onMarkAllDone={bulk.onMarkAllDone}
-          markAllDoneDisabled={bulk.markAllDoneDisabled ?? doneBusy}
+          markAllDoneDisabled={bulk.markAllDoneDisabled ?? (doneBusy || bulk.anyBusy)}
           onMarkAllRead={bulk.onMarkAllRead}
-          markAllReadDisabled={bulk.markAllReadDisabled ?? readBusy}
+          markAllReadDisabled={bulk.markAllReadDisabled ?? (readBusy || bulk.anyBusy)}
           onCopied={bulk.onCopied}
           visible={visible}
           contextAnchor={bulkAnchor}
@@ -385,26 +389,36 @@ export function FilterSidebar({
       : searchedRepos;
   const regularRepos = listedRepos.filter((r) => !r.isSnoozed);
   const snoozedRepos = listedRepos.filter((r) => r.isSnoozed);
-  // Display order for Shift-range extension and arrow-key moves: regular
-  // rows in facet order, then snoozed rows in facet order.
-  const displayIds = [...regularRepos, ...snoozedRepos].map((r) => r.id);
+  // Display order for Shift-range extension and arrow-key moves: only rows
+  // currently rendered (regular and snoozed sections, unless collapsed),
+  // regulars in facet order, then snoozed rows in facet order. Hidden
+  // selections stay selected but are never range or focus targets.
+  const displayIds = [
+    ...(collapsed.repos ? [] : regularRepos),
+    ...(collapsed.snoozed ? [] : snoozedRepos),
+  ].map((r) => r.id);
   const activeSnoozedName = snoozedRepos.find((r) => r.id === activeRepo)?.fullName;
-  // Resolved bulk context for the combined menu. Members follow display
-  // order; counts derive from the same facet fields as the single menu.
+  // Resolved bulk context for the combined menu. Members cover the whole
+  // selection by repository identity (visible members in display order,
+  // hidden members appended in facet order) so search-hidden selections
+  // stay included; counts derive from the same facet fields as the single menu.
+  const visibleIdSet = new Set(displayIds);
+  const memberIds = [
+    ...displayIds.filter((id) => selected.has(id)),
+    ...repos.map((r) => r.id).filter((id) => selected.has(id) && !visibleIdSet.has(id)),
+  ];
   const bulk: RepoBulkContext | null =
     onBulkSnooze && onBulkRhythm && onBulkDone && onBulkRead && selected.size > 0
       ? {
-          members: displayIds
-            .filter((id) => selected.has(id))
-            .map((id) => {
-              const facet = repos.find((r) => r.id === id);
-              return {
-                id,
-                fullName: facet?.fullName ?? id,
-                isSnoozed: facet?.isSnoozed ?? false,
-                rhythm: facet?.rhythm,
-              };
-            }),
+          members: memberIds.map((id) => {
+            const facet = repos.find((r) => r.id === id);
+            return {
+              id,
+              fullName: facet?.fullName ?? id,
+              isSnoozed: facet?.isSnoozed ?? false,
+              rhythm: facet?.rhythm,
+            };
+          }),
           summary: summarizeRepoSelection(repos, [...selected]),
           onSnooze: onBulkSnooze,
           onRhythm: onBulkRhythm,
@@ -412,6 +426,7 @@ export function FilterSidebar({
           onMarkAllDone: onBulkDone,
           onMarkAllRead: onBulkRead,
           onCopied: onBulkCopied,
+          anyBusy: memberIds.some((id) => busyRepoIds?.has(id) ?? false),
         }
       : null;
   const quietTotal = quietGroups.reduce((n, g) => n + g.pendingCount, 0);
@@ -421,8 +436,16 @@ export function FilterSidebar({
     setAnchorId(null);
   }
 
-  /** Modifier-aware row activation: toggle, range, or plain filter. */
+  /** Modifier-aware row activation: range, toggle, or plain filter. */
   function handleRowClick(repo: RepoFacet, e: React.MouseEvent) {
+    // Shift wins over Ctrl/Cmd so combined modifiers extend the range
+    // instead of toggling a single row.
+    if (e.shiftKey) {
+      const base = anchorId ?? repo.id;
+      if (anchorId === null) setAnchorId(repo.id);
+      setSelected((prev) => rangeSelection(displayIds, base, repo.id, prev));
+      return;
+    }
     if (e.ctrlKey || e.metaKey) {
       setSelected((prev) =>
         nextSelection(
@@ -432,12 +455,6 @@ export function FilterSidebar({
         )
       );
       setAnchorId(repo.id);
-      return;
-    }
-    if (e.shiftKey) {
-      const base = anchorId ?? repo.id;
-      if (anchorId === null) setAnchorId(repo.id);
-      setSelected((prev) => rangeSelection(displayIds, base, repo.id, prev));
       return;
     }
     clearSelection();
@@ -452,6 +469,9 @@ export function FilterSidebar({
     }
     if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
+      // The inbox list owns window-level arrow handling; stop here so the
+      // focused notification row does not also move behind the sidebar.
+      e.stopPropagation();
       const idx = displayIds.indexOf(repo.id);
       const next = idx === -1 ? undefined : displayIds[idx + (e.key === "ArrowDown" ? 1 : -1)];
       if (!next) return;

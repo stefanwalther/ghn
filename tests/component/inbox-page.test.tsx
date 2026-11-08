@@ -1906,4 +1906,197 @@ describe("sidebar multi-select bulk fan-out", () => {
     expect(bodies).toContainEqual({ repositoryId: "acme--web", action: "done" });
     expect(bodies).toContainEqual({ repositoryId: "acme--api", action: "done" });
   });
+
+  test("bulk done uses repo-wide totals under a narrowing filter", async () => {
+    const narrowedPayload = {
+      ...notificationsPayload,
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, pendingAll: 30, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) return Response.json(narrowedPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by acme/web" }), {
+      ctrlKey: true,
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+    const menu = await screen.findByRole("menu", { name: "Actions for 1 repository" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (30)" }));
+
+    expect(
+      await screen.findByRole("alertdialog", { name: /Mark 30 as done/ })
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input) === "/api/notifications/bulk")
+    ).toHaveLength(0);
+  });
+
+  test("bulk done skips repos with nothing pending", async () => {
+    nav.params = new URLSearchParams("repo=acme--api");
+    const zeroPayload = {
+      ...notificationsPayload,
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false },
+          { id: "acme--api", fullName: "acme/api", main: 0, quiet: 0, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) return Response.json(zeroPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (1)" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) => String(input) === "/api/notifications/bulk")
+      ).toHaveLength(1);
+    });
+    const [, init] = fetchMock.mock.calls.filter(
+      ([input]) => String(input) === "/api/notifications/bulk"
+    )[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      repositoryId: "acme--web",
+      action: "done",
+    });
+  });
+
+  test("bulk done reports partial failure without losing successes", async () => {
+    let resolveWeb: (value: Response) => void = () => {};
+    const webGate = new Promise<Response>((resolve) => {
+      resolveWeb = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--api") {
+          return new Response("nope", { status: 500 });
+        }
+        return webGate;
+      }
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (2)" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) => String(input) === "/api/notifications/bulk")
+      ).toHaveLength(2);
+    });
+    resolveWeb(Response.json({ updated: 1, action: "done" }));
+
+    expect(
+      await screen.findByText("Done failed for acme/api; those repos were restored.")
+    ).toBeInTheDocument();
+  });
+
+  test("bulk read reports partial failure without losing successes", async () => {
+    let resolveWeb: (value: Response) => void = () => {};
+    const webGate = new Promise<Response>((resolve) => {
+      resolveWeb = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--api") {
+          return new Response("nope", { status: 500 });
+        }
+        return webGate;
+      }
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as read (2)" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) => String(input) === "/api/notifications/bulk")
+      ).toHaveLength(2);
+    });
+    resolveWeb(Response.json({ updated: 1, action: "read" }));
+
+    expect(
+      await screen.findByText("Read failed for acme/api; those repos were restored.")
+    ).toBeInTheDocument();
+  });
+
+  test("bulk snooze marks its targets busy until it settles", async () => {
+    let resolvePatch: (value: Response) => void = () => {};
+    const patchGate = new Promise<Response>((resolve) => {
+      resolvePatch = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.startsWith("/api/repositories/")) return patchGate;
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /^In 1 hour/ }));
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/repositories/acme--web")).toHaveLength(1);
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+    const reopened = await screen.findByRole("menu", { name: "Actions for 2 repositories" });
+    expect(
+      within(reopened).getByRole("menuitem", { name: "Mark all as done (2)" })
+    ).toBeDisabled();
+
+    resolvePatch(Response.json({}));
+    expect(await screen.findByText("2 repositories snoozed.")).toBeInTheDocument();
+  });
 });

@@ -344,7 +344,12 @@ export function nextRepoAfterMarkDone(
   if (idx === -1) return null;
   const remaining = display.filter((r) => !emptied.has(r.id));
   if (remaining.length === 0) return "all";
-  if (idx < remaining.length) return remaining[idx]?.id ?? "all";
+  // Survivors before the active row decide the landing spot, so removing
+  // rows above it does not skip the nearest survivor below it.
+  const survivorsBefore = display
+    .slice(0, idx)
+    .filter((r) => !emptied.has(r.id)).length;
+  if (survivorsBefore < remaining.length) return remaining[survivorsBefore]?.id ?? "all";
   return remaining[remaining.length - 1]?.id ?? "all";
 }
 

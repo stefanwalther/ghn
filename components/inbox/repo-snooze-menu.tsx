@@ -789,6 +789,7 @@ export function RepoBulkMenu({
   onMarkAllRead,
   markAllReadDisabled,
   onCopied,
+  bulkBusy,
   triggerClassName,
   triggerStyle,
   visible = true,
@@ -809,6 +810,8 @@ export function RepoBulkMenu({
   onMarkAllRead: (ids: string[]) => void;
   markAllReadDisabled?: boolean;
   onCopied?: (ids: string[], ok: boolean) => void;
+  /** True while any selected repo has an update in flight; locks edits. */
+  bulkBusy?: boolean;
   triggerClassName?: string;
   triggerStyle?: React.CSSProperties;
   visible?: boolean;
@@ -915,7 +918,13 @@ export function RepoBulkMenu({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") closeAll(true);
     }
-    function onScroll() {
+    function onScroll(e: Event) {
+      // Scrolls inside the menu (wheel over the list, keyboard focus moving
+      // rows into view) must not dismiss it; only outside scrolls and
+      // resizes close it.
+      if (e.type === "scroll" && e.target instanceof Node && menuRef.current?.contains(e.target)) {
+        return;
+      }
       setOpen(false);
     }
     document.addEventListener("mousedown", onPointerDown);
@@ -940,13 +949,14 @@ export function RepoBulkMenu({
   }
 
   function chooseSnooze(at: number | null, e: React.SyntheticEvent) {
+    if (bulkBusy) return;
     resetVisibility();
     closeAll(refocusForClick(e));
     onSnooze(ids, at);
   }
 
   function chooseRhythm(value: string, e: React.SyntheticEvent) {
-    if (rhythmDisabled || value === summary.rhythm) return;
+    if (bulkBusy || rhythmDisabled || value === summary.rhythm) return;
     closeAll(refocusForClick(e));
     onRhythm(ids, value);
   }
@@ -1073,7 +1083,7 @@ export function RepoBulkMenu({
                     type="button"
                     role="menuitemradio"
                     aria-checked={current}
-                    disabled={rhythmDisabled || current}
+                    disabled={bulkBusy || rhythmDisabled || current}
                     onClick={(e) => chooseRhythm(o.value, e)}
                     className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -1085,15 +1095,21 @@ export function RepoBulkMenu({
                 );
               })}
               <p aria-hidden="true" className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                Snooze{anySnoozed ? " · some snoozed" : ""}
+                Snooze
               </p>
+              {summary.snoozed !== "none" ? (
+                <p className="px-3 pb-1 text-xs text-muted-foreground">
+                  {summary.snoozed === "mixed" ? "Mixed" : "Snoozed"}
+                </p>
+              ) : null}
               {presets.map((p) => (
                 <button
                   key={p.value}
                   type="button"
                   role="menuitem"
+                  disabled={bulkBusy}
                   onClick={(e) => chooseSnooze(p.at, e)}
-                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Clock className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{p.label}</span>
@@ -1103,8 +1119,9 @@ export function RepoBulkMenu({
                 <button
                   type="button"
                   role="menuitem"
+                  disabled={bulkBusy}
                   onClick={(e) => chooseSnooze(null, e)}
-                  className="flex w-full cursor-pointer items-center gap-2 border-t border-border/40 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex w-full cursor-pointer items-center gap-2 border-t border-border/40 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="min-w-0 flex-1 truncate">Unsnooze all</span>
                 </button>

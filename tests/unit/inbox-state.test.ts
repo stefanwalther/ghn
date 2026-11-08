@@ -337,6 +337,17 @@ describe("next repo after mark done", () => {
     expect(nextRepoAfterMarkDone(repos, "a", ["b", "c"])).toBeNull();
   });
 
+  test("bulk done lands on the visual successor, not the old index", () => {
+    const five = [
+      { id: "a", main: 1, quiet: 0 },
+      { id: "b", main: 1, quiet: 0 },
+      { id: "c", main: 1, quiet: 0 },
+      { id: "d", main: 1, quiet: 0 },
+      { id: "e", main: 1, quiet: 0 },
+    ];
+    expect(nextRepoAfterMarkDone(five, "c", ["a", "c"])).toBe("d");
+  });
+
   test("selects the previous repo when the emptied one was last", () => {
     expect(nextRepoAfterMarkDone(repos, "c", "c")).toBe("b");
   });
