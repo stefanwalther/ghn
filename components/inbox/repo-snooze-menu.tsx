@@ -824,6 +824,10 @@ export function RepoBulkMenu({
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [presets, setPresets] = React.useState(() => inboxPresets(Date.now()));
+  // Unique hint ids per menu instance for aria-describedby below.
+  const hintIdBase = React.useId();
+  const markAllDoneHintId = `${hintIdBase}-done-hint`;
+  const markAllReadHintId = `${hintIdBase}-read-hint`;
   const contextCloseRef = React.useRef(onContextClose);
   contextCloseRef.current = onContextClose;
   const onVisibilityResetRef = React.useRef(onVisibilityReset);
@@ -832,6 +836,8 @@ export function RepoBulkMenu({
   const doneable = summary.pending;
   const readable = summary.readable;
   const anySnoozed = summary.snoozed !== "none";
+  const markAllDoneLabel = `Mark all as done (${doneable})`;
+  const markAllReadLabel = `Mark all as read (${readable})`;
   const markAllDoneHint =
     count === 1 ? "Removes from inbox" : `Applies to ${count} repositories`;
   const markAllReadHint = count === 1 ? "Stays in list" : `Applies to ${count} repositories`;
@@ -1018,6 +1024,8 @@ export function RepoBulkMenu({
               <button
                 type="button"
                 role="menuitem"
+                aria-label={markAllDoneLabel}
+                aria-describedby={markAllDoneHintId}
                 disabled={markAllDoneDisabled || doneable === 0}
                 onClick={(e) => {
                   resetVisibility();
@@ -1028,13 +1036,15 @@ export function RepoBulkMenu({
               >
                 <CheckCheck className="h-4 w-4 shrink-0" aria-hidden />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate">Mark all as done ({doneable})</span>
-                  <span className="block truncate text-xs text-muted-foreground">{markAllDoneHint}</span>
+                  <span className="block truncate">{markAllDoneLabel}</span>
+                  <span id={markAllDoneHintId} className="block truncate text-xs text-muted-foreground">{markAllDoneHint}</span>
                 </span>
               </button>
               <button
                 type="button"
                 role="menuitem"
+                aria-label={markAllReadLabel}
+                aria-describedby={markAllReadHintId}
                 disabled={markAllReadDisabled || readable === 0}
                 onClick={(e) => {
                   resetVisibility();
@@ -1045,8 +1055,8 @@ export function RepoBulkMenu({
               >
                 <MailOpen className="h-4 w-4 shrink-0" aria-hidden />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate">Mark all as read ({readable})</span>
-                  <span className="block truncate text-xs text-muted-foreground">{markAllReadHint}</span>
+                  <span className="block truncate">{markAllReadLabel}</span>
+                  <span id={markAllReadHintId} className="block truncate text-xs text-muted-foreground">{markAllReadHint}</span>
                 </span>
               </button>
               <p aria-hidden="true" className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">

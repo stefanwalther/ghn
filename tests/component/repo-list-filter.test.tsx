@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FilterSidebar } from "@/components/inbox/filter-sidebar";
 import { CommandPalette } from "@/components/search/command-palette";
@@ -335,6 +335,115 @@ describe("FilterSidebar bulk menu", () => {
       screen.getByRole("menu", { name: "Actions for acme/api" })
     ).toBeInTheDocument();
     expect(props.onBulkSnooze).not.toHaveBeenCalled();
+  });
+
+  test("trigger button opens the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    const triggers = screen.getAllByRole("button", { name: "Actions for 2 repositories" });
+    expect(triggers).toHaveLength(2);
+    fireEvent.click(triggers[0]!);
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+  });
+
+  test("rhythm, done, and read entries fan out to the whole selection", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Weekly" }));
+    expect(props.onBulkRhythm).toHaveBeenCalledTimes(1);
+    expect(props.onBulkRhythm.mock.calls[0]).toEqual([["acme--web", "other--docs"], "weekly"]);
+
+    fireEvent.contextMenu(row("acme/web"));
+    const reopened = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(reopened).toBeInTheDocument();
+    fireEvent.click(within(reopened).getByRole("menuitem", { name: "Mark all as done (5)" }));
+    expect(props.onBulkDone).toHaveBeenCalledTimes(1);
+    expect(props.onBulkDone.mock.calls[0]).toEqual([["acme--web", "other--docs"]]);
+
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as read (5)" }));
+    expect(props.onBulkRead).toHaveBeenCalledTimes(1);
+    expect(props.onBulkRead.mock.calls[0]).toEqual([["acme--web", "other--docs"]]);
+  });
+
+  test("copy joins every selected link and open targets the anchor row", async () => {
+    const props = renderBulkSidebar();
+    const writeSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText: writeSpy },
+      configurable: true,
+    });
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      selectTwo();
+      fireEvent.contextMenu(row("other/docs"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy 2 links" }));
+      await waitFor(() => {
+        expect(writeSpy).toHaveBeenCalledWith(
+          "https://github.com/acme/web\nhttps://github.com/other/docs"
+        );
+      });
+      expect(props.onBulkCopied).toHaveBeenCalledWith(["acme--web", "other--docs"], true);
+
+      fireEvent.contextMenu(row("other/docs"));
+      fireEvent.click(screen.getByRole("menuitem", { name: /Open repo/ }));
+      expect(openSpy).toHaveBeenCalledWith("https://github.com/other/docs", "_blank", "noopener");
+    } finally {
+      vi.unstubAllGlobals();
+      openSpy.mockRestore();
+    }
+  });
+
+  test("unsnooze appears when any selected repo is snoozed", () => {
+    const props = renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("acme/api"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unsnooze all" }));
+    expect(props.onBulkSnooze).toHaveBeenCalledTimes(1);
+    expect(props.onBulkSnooze.mock.calls[0]).toEqual([["acme--web", "acme--api"], null]);
+  });
+
+  test("escape closes the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+    fireEvent.keyDown(document.documentElement, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("arrow keys move focus between combined entries", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    const done = within(menu).getByRole("menuitem", { name: "Mark all as done (5)" });
+    const read = within(menu).getByRole("menuitem", { name: "Mark all as read (5)" });
+    done.focus();
+    fireEvent.keyDown(done, { key: "ArrowDown" });
+    expect(read).toHaveFocus();
+    fireEvent.keyDown(read, { key: "ArrowUp" });
+    expect(done).toHaveFocus();
+  });
+
+  test("clicking outside closes the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("scrolling closes the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });
 

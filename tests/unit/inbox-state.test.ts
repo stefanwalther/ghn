@@ -391,6 +391,15 @@ describe("pending display intents", () => {
     expect(next[0]?.isRead).toBe(1);
   });
 
+  test("a repo-scoped intent with a non-repo action folds the id list", () => {
+    const next = applyPendingIntents(
+      base.map((r) => ({ ...r, isDone: 1 })),
+      [{ action: "unread", ids: ["a"], state: "done", repositoryId: "web", viewKey: "v1" }],
+      "v1"
+    );
+    expect(next.map((r) => r.id)).toEqual(["b"]);
+  });
+
   test("intents from another view do not apply", () => {
     const next = applyPendingIntents(
       base,
