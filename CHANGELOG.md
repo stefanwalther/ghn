@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.9.1...ghn-v0.10.0) (2026-11-08)
+
+
+### Features
+
+* **inbox:** inline release preview in drawer ([#142](https://github.com/stefanwalther/ghn/issues/142)) ([9817289](https://github.com/stefanwalther/ghn/commit/9817289b13e290f71248c0e9ceb650db1c98108b))
+* **queue:** harden writeback queue with cap, dedupe, and single-flight drains ([#141](https://github.com/stefanwalther/ghn/issues/141)) ([3cc15b4](https://github.com/stefanwalther/ghn/commit/3cc15b4d8b2aa5f642156c77ce2f266171b310ac))
+
+
+### Bug Fixes
+
+* **contributions:** size-matched skeleton for loading badge ([#139](https://github.com/stefanwalther/ghn/issues/139)) ([b3e0dec](https://github.com/stefanwalther/ghn/commit/b3e0dece91db3611b7dc843a090da94e82ef7807))
+
 ## [0.9.1](https://github.com/stefanwalther/ghn/compare/ghn-v0.9.0...ghn-v0.9.1) (2026-11-07)
 
 
