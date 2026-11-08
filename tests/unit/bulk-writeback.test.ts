@@ -67,3 +67,26 @@ describe("pending read preservation across sync", () => {
     expect(rows[0]?.isRead).toBe(0);
   });
 });
+
+describe("small-path enqueue dedupe", () => {
+  test("re-enqueueing the same thread and action replaces the row", async () => {
+    const db = createMemoryDb().db;
+    await enqueueWriteback(db, "9101", "done", "network", 1000);
+    await enqueueWriteback(db, "9101", "done", "auth", 2000);
+
+    const rows = await db.select().from(schema.writebackQueue);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.attempts).toBe(0);
+    expect(rows[0]?.lastError).toBe("auth");
+    expect(rows[0]?.createdAt).toBe(2000);
+  });
+
+  test("different actions for the same thread stay separate", async () => {
+    const db = createMemoryDb().db;
+    await enqueueWriteback(db, "9102", "done", null, 1000);
+    await enqueueWriteback(db, "9102", "read", null, 1000);
+
+    const rows = await db.select().from(schema.writebackQueue);
+    expect(rows).toHaveLength(2);
+  });
+});

@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS writeback_queue (
   last_error TEXT,
   created_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS writeback_queue_thread_action_idx
+  ON writeback_queue (thread_id, action);
 `);
   const repoCols = tableInfo(sqlite, "repositories");
   if (!repoCols.includes("snoozed_until")) {

@@ -25,9 +25,19 @@ import {
   upsertThreads,
   writeSyncState,
 } from "@/lib/sync";
-import { drainQueue, getQueuedThreadIds, queueDepth } from "@/lib/queue";
+import { drainQueue, getQueuedThreadIds, queueHealth } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
+
+/** Queue fields shared by every sync response shape. */
+async function queueJson(db: Parameters<typeof queueHealth>[0], now: number) {
+  const health = await queueHealth(db, now);
+  return {
+    queueDepth: health.depth,
+    queueOldestAgeMs: health.oldestAgeMs,
+    queueReasonBreakdown: health.reasonBreakdown,
+  };
+}
 
 async function refreshUnreachableFlags(
   token: string,
@@ -70,14 +80,13 @@ export async function POST(request: Request) {
   const probe = await probeConnection();
   if (!probe.connected) {
     const lastSyncAt = Number.parseInt((await readSyncState(db, "lastSyncAt")) ?? "0", 10) || null;
-    const depth = await queueDepth(db);
     return NextResponse.json({
       now,
       lastSyncAt,
       fresh: false,
       reason: probe.reason ?? "auth",
       retryable: true,
-      queueDepth: depth,
+      ...(await queueJson(db, now)),
     });
   }
   const token = (await getStoredToken()) as string;
@@ -128,7 +137,7 @@ export async function POST(request: Request) {
       upserted: 0,
       markedDone: 0,
       discoveredRepos: 0,
-      queueDepth: await queueDepth(db),
+      ...(await queueJson(db, now)),
       notModified: true,
     });
   }
@@ -149,14 +158,13 @@ export async function POST(request: Request) {
     full,
   });
   if (!listed.ok || !listed.data) {
-    const depth = await queueDepth(db);
     return NextResponse.json({
       now,
       lastSyncAt,
       fresh: false,
       reason: listed.reason ?? "unknown",
       retryable: true,
-      queueDepth: depth,
+      ...(await queueJson(db, now)),
     });
   }
 
@@ -179,7 +187,7 @@ export async function POST(request: Request) {
       upserted: 0,
       markedDone: 0,
       discoveredRepos: 0,
-      queueDepth: await queueDepth(db),
+      ...(await queueJson(db, now)),
       notModified: true,
     });
   }
@@ -214,6 +222,6 @@ export async function POST(request: Request) {
     upserted: summary.upserted,
     markedDone,
     discoveredRepos: summary.discoveredRepos,
-    queueDepth: await queueDepth(db),
+    ...(await queueJson(db, now)),
   });
 }

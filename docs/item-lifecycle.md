@@ -18,6 +18,10 @@ and settings reuse the same states but do not redefine them.
 - Remote settled: the writeback queue in `lib/queue.ts` drained against
   GitHub. Until then the row stays hidden locally with an explicit queued
   label. Offline done can stay in this state by design.
+- Poison: a queued write whose thread is gone (404/410) drops after one
+  drain instead of retrying. A write failing past 10 attempts stays stored
+  with its last error but is no longer retried. Local state is unchanged
+  in both cases.
 - Rhythm: per repo cadence in `lib/digest.ts`. Immediate, weekly, biweekly,
   monthly plus `snoozedUntil`, `nextDueAt`, `lastPromotedAt`. Controls
   placement only, computed in `app/api/notifications/route.ts`. Never marks

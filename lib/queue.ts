@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, lt, sql } from "drizzle-orm";
 import { writebackQueue } from "@/db/schema";
 import type { Db } from "@/db/client";
 import {
@@ -10,6 +10,36 @@ import {
 import { mapWithLimit } from "@/lib/sync";
 
 export type WritebackAction = "done" | "read" | "unsubscribe";
+
+/** Retryable rows stop being retried once attempts reach this cap. */
+export const MAX_WRITEBACK_ATTEMPTS = 10;
+
+/** Remote statuses that never succeed on retry: the thread is gone. */
+export function isTerminalStatus(status: number | undefined): boolean {
+  return status === 404 || status === 410;
+}
+
+/**
+ * Serializes drains within this process. The second drain waits for the
+ * first to finish, then re-reads the queue, so an overlapping background
+ * drain and sync drain never send the same row twice. No schema change:
+ * a single local process needs no cross-process lock.
+ */
+let drainTail: Promise<void> = Promise.resolve();
+
+async function withDrainLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = drainTail;
+  let release!: () => void;
+  drainTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
 
 /** SQLite-friendly chunking for large id lists (variable cap + fast batches). */
 export const QUEUE_CHUNK_SIZE = 200;
@@ -27,6 +57,14 @@ export async function enqueueWriteback(
   lastError: string | null,
   now: number
 ): Promise<void> {
+  // One row per thread and action: a retried small bulk replaces the
+  // superseded retry instead of stacking duplicates, matching the bulk
+  // replacement path below.
+  await db
+    .delete(writebackQueue)
+    .where(
+      and(eq(writebackQueue.threadId, threadId), eq(writebackQueue.action, action))
+    );
   await db.insert(writebackQueue).values({
     threadId,
     action,
@@ -108,8 +146,33 @@ export async function getQueuedThreadIds(db: Db): Promise<Set<string>> {
 }
 
 export async function queueDepth(db: Db): Promise<number> {
-  const rows = await db.select({ id: writebackQueue.id }).from(writebackQueue);
-  return rows.length;
+  const rows = await db.select({ value: count() }).from(writebackQueue);
+  return rows[0]?.value ?? 0;
+}
+
+export interface QueueHealth {
+  depth: number;
+  oldestAgeMs: number;
+  reasonBreakdown: Record<string, number>;
+}
+
+/** Health snapshot for diagnosis: depth plus oldest age and failure mix. */
+export async function queueHealth(db: Db, now: number): Promise<QueueHealth> {
+  const depth = await queueDepth(db);
+  if (depth === 0) return { depth: 0, oldestAgeMs: 0, reasonBreakdown: {} };
+  const oldest = await db
+    .select({ createdAt: writebackQueue.createdAt })
+    .from(writebackQueue)
+    .orderBy(asc(writebackQueue.createdAt))
+    .limit(1);
+  const groups = await db
+    .select({ lastError: writebackQueue.lastError, value: count() })
+    .from(writebackQueue)
+    .groupBy(writebackQueue.lastError);
+  const reasonBreakdown: Record<string, number> = {};
+  for (const g of groups) reasonBreakdown[g.lastError ?? "unknown"] = g.value;
+  const oldestAgeMs = oldest[0] ? Math.max(0, now - oldest[0].createdAt) : 0;
+  return { depth, oldestAgeMs, reasonBreakdown };
 }
 
 /**
@@ -125,15 +188,20 @@ export async function drainWritebacks(
   action: WritebackAction,
   concurrency = 4
 ): Promise<{ succeeded: number; failed: number; skipped: number }> {
-  let succeeded = 0;
-  let failed = 0;
-  let skipped = 0;
+  return withDrainLock(async () => {
+    let succeeded = 0;
+    let failed = 0;
+    let skipped = 0;
   await mapWithLimit(ids, concurrency, async (id) => {
     const pending = await db
-      .select({ id: writebackQueue.id, attempts: writebackQueue.attempts })
+      .select({ id: writebackQueue.id })
       .from(writebackQueue)
       .where(
-        and(eq(writebackQueue.threadId, id), eq(writebackQueue.action, action))
+        and(
+          eq(writebackQueue.threadId, id),
+          eq(writebackQueue.action, action),
+          lt(writebackQueue.attempts, MAX_WRITEBACK_ATTEMPTS)
+        )
       );
     if (pending.length === 0) {
       skipped += 1;
@@ -153,17 +221,27 @@ export async function drainWritebacks(
         .delete(writebackQueue)
         .where(inArray(writebackQueue.id, pending.map((r) => r.id)));
       succeeded += 1;
+    } else if (isTerminalStatus(remote.status)) {
+      // The thread is gone and will never drain: drop the row so it
+      // stops inflating every later sync.
+      await db
+        .delete(writebackQueue)
+        .where(inArray(writebackQueue.id, pending.map((r) => r.id)));
     } else {
       for (const r of pending) {
         await db
           .update(writebackQueue)
-          .set({ attempts: r.attempts + 1, lastError: remote.reason ?? "unknown" })
+          .set({
+            attempts: sql`${writebackQueue.attempts} + 1`,
+            lastError: remote.reason ?? "unknown",
+          })
           .where(eq(writebackQueue.id, r.id));
       }
       failed += 1;
     }
+    });
+    return { succeeded, failed, skipped };
   });
-  return { succeeded, failed, skipped };
 }
 
 export interface DrainResult {
@@ -178,7 +256,16 @@ export async function drainQueue(
   apply: (threadId: string, action: WritebackAction) => Promise<GhResult<void>>,
   concurrency = 8
 ): Promise<DrainResult> {
-  const rows = await db.select().from(writebackQueue).orderBy(asc(writebackQueue.id));
+  return withDrainLock(async () => {
+    const rows = await db
+      .select({
+        id: writebackQueue.id,
+        threadId: writebackQueue.threadId,
+        action: writebackQueue.action,
+      })
+      .from(writebackQueue)
+      .where(lt(writebackQueue.attempts, MAX_WRITEBACK_ATTEMPTS))
+      .orderBy(asc(writebackQueue.id));
   // Remote calls run concurrently so a large queued batch drains in
   // seconds, not minutes. DB writes stay sequential afterwards because
   // SQLite handles one writer at a time. Workers stop claiming new rows
@@ -221,14 +308,28 @@ export async function drainQueue(
       processed += 1;
       succeeded += 1;
       succeededItems.push({ threadId: row.threadId, action: row.action as WritebackAction });
+    } else if (isTerminalStatus(result.status)) {
+      // The thread is gone and will never drain: drop the row so it
+      // stops inflating every later sync.
+      const stillQueued = await db
+        .select({ id: writebackQueue.id })
+        .from(writebackQueue)
+        .where(eq(writebackQueue.id, row.id));
+      if (stillQueued.length === 0) continue;
+      await db.delete(writebackQueue).where(eq(writebackQueue.id, row.id));
+      processed += 1;
     } else {
       await db
         .update(writebackQueue)
-        .set({ attempts: row.attempts + 1, lastError: result.reason ?? "unknown" })
+        .set({
+          attempts: sql`${writebackQueue.attempts} + 1`,
+          lastError: result.reason ?? "unknown",
+        })
         .where(eq(writebackQueue.id, row.id));
       processed += 1;
       failed += 1;
     }
   }
   return { processed, succeeded, failed, succeededItems };
+  });
 }
