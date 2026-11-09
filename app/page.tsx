@@ -449,20 +449,42 @@ function InboxView() {
   async function bulkSnooze(ids: string[], snoozedUntil: number | null) {
     const fresh = ids.filter((id) => !pendingRepos.has(id));
     if (fresh.length === 0) return;
+    const verb = snoozedUntil === null ? "unsnoozed" : "snoozed";
     setNotice(null);
     setPendingRepos((prev) => new Set([...prev, ...fresh]));
+    // Sequential on purpose, like the done/read fan-out: each mutation
+    // snapshots settled predecessors only.
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    for (const id of fresh) {
+      try {
+        await updateRepo.mutateAsync({ id, patch: { snoozedUntil } });
+        succeeded.push(id);
+      } catch {
+        failed.push(id);
+      }
+    }
     try {
-      await Promise.all(
-        fresh.map((id) => updateRepo.mutateAsync({ id, patch: { snoozedUntil } }))
-      );
-      await notifQuery.refetch();
-      const verb = snoozedUntil === null ? "unsnoozed" : "snoozed";
-      say(
-        fresh.length === 1 ? `Repository ${verb}.` : `${fresh.length} repositories ${verb}.`,
-        "info"
-      );
-    } catch {
-      say("Snooze failed. Previous setting restored.");
+      if (succeeded.length > 0) {
+        // Confirm the settled state from the server. A failed refresh
+        // leaves the settled optimistic values in place and surfaces
+        // through the shared refresh-failed notice.
+        await notifQuery.refetch().catch(() => null);
+        const okNotice =
+          succeeded.length === 1
+            ? `Repository ${verb}.`
+            : `${succeeded.length} repositories ${verb}.`;
+        say(
+          failed.length === 0
+            ? okNotice
+            : `${okNotice} Failed for ${failed
+                .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+                .join(", ")}; those repos were restored.`,
+          failed.length === 0 ? "info" : "error"
+        );
+      } else {
+        say("Snooze failed. Previous setting restored.");
+      }
     } finally {
       setPendingRepos((prev) => {
         const next = new Set(prev);
@@ -477,19 +499,39 @@ function InboxView() {
     if (fresh.length === 0) return;
     setNotice(null);
     setPendingRepos((prev) => new Set([...prev, ...fresh]));
+    // Sequential on purpose, like the done/read fan-out: each mutation
+    // snapshots settled predecessors only.
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    for (const id of fresh) {
+      try {
+        await updateRepo.mutateAsync({ id, patch: { rhythm } });
+        succeeded.push(id);
+      } catch {
+        failed.push(id);
+      }
+    }
     try {
-      await Promise.all(
-        fresh.map((id) => updateRepo.mutateAsync({ id, patch: { rhythm } }))
-      );
-      await notifQuery.refetch();
-      say(
-        fresh.length === 1
-          ? "Digest rhythm updated."
-          : `${fresh.length} repositories switched to the same rhythm.`,
-        "info"
-      );
-    } catch {
-      say("Rhythm update failed. Previous setting restored.");
+      if (succeeded.length > 0) {
+        // Confirm the settled state from the server. A failed refresh
+        // leaves the settled optimistic values in place and surfaces
+        // through the shared refresh-failed notice.
+        await notifQuery.refetch().catch(() => null);
+        const okNotice =
+          succeeded.length === 1
+            ? "Digest rhythm updated."
+            : `${succeeded.length} repositories switched to the same rhythm.`;
+        say(
+          failed.length === 0
+            ? okNotice
+            : `${okNotice} Failed for ${failed
+                .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+                .join(", ")}; those repos were restored.`,
+          failed.length === 0 ? "info" : "error"
+        );
+      } else {
+        say("Rhythm update failed. Previous setting restored.");
+      }
     } finally {
       setPendingRepos((prev) => {
         const next = new Set(prev);
@@ -591,20 +633,21 @@ function InboxView() {
     // Every mutation settles before busy state drains, so a failure cannot
     // release a still-pending sibling early. Only failed repos roll back;
     // successes stand and are reported alongside the failures.
-    const settled = await Promise.allSettled(
-      ids.map((id) => markRepoDoneMutation.mutateAsync({ repositoryId: id }))
-    );
+    // Mutations run sequentially on purpose: each one snapshots the settled
+    // outcome of its predecessors, so a rollback can only ever restore
+    // settled state and never clobber a still-pending sibling, no matter
+    // when confirming refetches land.
     const succeeded: string[] = [];
     const failed: string[] = [];
     const bodies: BulkMutationBody[] = [];
-    settled.forEach((r, i) => {
-      if (r.status === "fulfilled") {
-        succeeded.push(ids[i] as string);
-        bodies.push(r.value);
-      } else {
-        failed.push(ids[i] as string);
+    for (const id of ids) {
+      try {
+        bodies.push(await markRepoDoneMutation.mutateAsync({ repositoryId: id }));
+        succeeded.push(id);
+      } catch {
+        failed.push(id);
       }
-    });
+    }
     const visibleCount = targets.filter((t) => succeeded.includes(t.repositoryId)).length;
     const updated = bodies.reduce(
       (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
@@ -743,20 +786,20 @@ function InboxView() {
     pendingRef.current = [...pendingRef.current, ...intents];
     // Every mutation settles before busy state drains; only failed repos
     // roll back while successes stand.
-    const settled = await Promise.allSettled(
-      ids.map((id) => markRepoReadMutation.mutateAsync({ repositoryId: id }))
-    );
+    // Mutations run sequentially on purpose: each one snapshots the settled
+    // outcome of its predecessors, so a rollback can only ever restore
+    // settled state and never clobber a still-pending sibling.
     const succeeded: string[] = [];
     const failed: string[] = [];
     const bodies: BulkMutationBody[] = [];
-    settled.forEach((r, i) => {
-      if (r.status === "fulfilled") {
-        succeeded.push(ids[i] as string);
-        bodies.push(r.value);
-      } else {
-        failed.push(ids[i] as string);
+    for (const id of ids) {
+      try {
+        bodies.push(await markRepoReadMutation.mutateAsync({ repositoryId: id }));
+        succeeded.push(id);
+      } catch {
+        failed.push(id);
       }
-    });
+    }
     const visibleCount = targets.filter((t) => succeeded.includes(t.repositoryId)).length;
     const updated = bodies.reduce(
       (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
