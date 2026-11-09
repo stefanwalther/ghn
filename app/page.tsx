@@ -648,7 +648,6 @@ function InboxView() {
         failed.push(id);
       }
     }
-    const visibleCount = targets.filter((t) => succeeded.includes(t.repositoryId)).length;
     const updated = bodies.reduce(
       (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
       0
@@ -664,9 +663,38 @@ function InboxView() {
         : null;
     const error =
       bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
+    // Partial remote results arrive with HTTP 200, so they never land in
+    // `failed`. Track them separately or a background sibling would hide
+    // their queued counts and reasons.
+    const partialUpdated = bodies.reduce(
+      (n, b) => n + (b?.remote === "partial" && typeof b?.updated === "number" ? b.updated : 0),
+      0
+    );
+    const partialQueued = bodies.reduce(
+      (n, b) => n + (b?.remote === "partial" && typeof b?.queued === "number" ? b.queued : 0),
+      0
+    );
+    const partialError =
+      bodies
+        .map((b) => (b?.remote === "partial" && typeof b?.error === "string" ? b.error : null))
+        .find(Boolean) ?? null;
+    const partialNames = ids
+      .filter((_, i) => bodies[i]?.remote === "partial")
+      .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+      .join(", ");
     const failedNames = failed
       .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
       .join(", ");
+    // Background counts stay scoped to background results so a mixed set
+    // never reports partial rows as background-synced.
+    const bgIds = new Set(
+      succeeded.filter((_, i) => bodies[i]?.remote === "background")
+    );
+    const bgVisibleCount = targets.filter((t) => bgIds.has(t.repositoryId)).length;
+    const bgUpdated = bodies.reduce(
+      (n, b) => n + (b?.remote === "background" && typeof b?.updated === "number" ? b.updated : 0),
+      0
+    );
     try {
       if (failed.length === ids.length) {
         say("Mark all as done failed. Restored previous state.");
@@ -677,12 +705,17 @@ function InboxView() {
         } else if (remote === "background") {
           // Updated counts visible plus quiet; only the visible rows just left
           // the screen, so spell out the split or the total looks wrong.
-          const quietDone = Math.max(0, updated - visibleCount);
+          const quietDone = Math.max(0, bgUpdated - bgVisibleCount);
           parts.push(
             quietDone > 0
-              ? `${updated} marked done (${visibleCount} visible + ${quietDone} quiet), syncing to GitHub in background.`
-              : `${updated} marked done, syncing to GitHub in background.`
+              ? `${bgUpdated} marked done (${bgVisibleCount} visible + ${quietDone} quiet), syncing to GitHub in background.`
+              : `${bgUpdated} marked done, syncing to GitHub in background.`
           );
+          if (partialQueued > 0) {
+            parts.push(
+              `Partially applied for ${partialNames}: ${partialUpdated} marked done, ${partialQueued} queued for retry (${partialError ?? "unknown reason"}).`
+            );
+          }
         } else {
           const hiddenNotice =
             hiddenPending > 0
@@ -800,7 +833,6 @@ function InboxView() {
         failed.push(id);
       }
     }
-    const visibleCount = targets.filter((t) => succeeded.includes(t.repositoryId)).length;
     const updated = bodies.reduce(
       (n, b) => n + (typeof b?.updated === "number" ? b.updated : 0),
       0
@@ -816,9 +848,38 @@ function InboxView() {
         : null;
     const error =
       bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
+    // Partial remote results arrive with HTTP 200, so they never land in
+    // `failed`. Track them separately or a background sibling would hide
+    // their queued counts and reasons.
+    const partialUpdated = bodies.reduce(
+      (n, b) => n + (b?.remote === "partial" && typeof b?.updated === "number" ? b.updated : 0),
+      0
+    );
+    const partialQueued = bodies.reduce(
+      (n, b) => n + (b?.remote === "partial" && typeof b?.queued === "number" ? b.queued : 0),
+      0
+    );
+    const partialError =
+      bodies
+        .map((b) => (b?.remote === "partial" && typeof b?.error === "string" ? b.error : null))
+        .find(Boolean) ?? null;
+    const partialNames = ids
+      .filter((_, i) => bodies[i]?.remote === "partial")
+      .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+      .join(", ");
     const failedNames = failed
       .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
       .join(", ");
+    // Background counts stay scoped to background results so a mixed set
+    // never reports partial rows as background-synced.
+    const bgIds = new Set(
+      succeeded.filter((_, i) => bodies[i]?.remote === "background")
+    );
+    const bgVisibleCount = targets.filter((t) => bgIds.has(t.repositoryId)).length;
+    const bgUpdated = bodies.reduce(
+      (n, b) => n + (b?.remote === "background" && typeof b?.updated === "number" ? b.updated : 0),
+      0
+    );
     try {
       if (failed.length === ids.length) {
         say("Mark all as read failed. Restored previous state.");
@@ -827,12 +888,17 @@ function InboxView() {
         if (updated === 0 && queued === 0) {
           parts.push(`All items for ${repoName} are already read.`);
         } else if (remote === "background") {
-          const quiet = Math.max(0, updated - visibleCount);
+          const quiet = Math.max(0, bgUpdated - bgVisibleCount);
           parts.push(
             quiet > 0
-              ? `${updated} marked read (${visibleCount} visible + ${quiet} quiet), syncing to GitHub in background.`
-              : `${updated} marked read, syncing to GitHub in background.`
+              ? `${bgUpdated} marked read (${bgVisibleCount} visible + ${quiet} quiet), syncing to GitHub in background.`
+              : `${bgUpdated} marked read, syncing to GitHub in background.`
           );
+          if (partialQueued > 0) {
+            parts.push(
+              `Partially applied for ${partialNames}: ${partialUpdated} marked read, ${partialQueued} queued for retry (${partialError ?? "unknown reason"}).`
+            );
+          }
         } else {
           const queuedNotice = describeBulkResult("read", {
             updated,

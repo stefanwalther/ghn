@@ -2033,6 +2033,70 @@ describe("sidebar multi-select bulk fan-out", () => {
     ).toBeInTheDocument();
   });
 
+  test("bulk done reports partial results alongside background syncing", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--api") {
+          return Response.json({ updated: 5, action: "done", remote: "partial", queued: 3, error: "auth" });
+        }
+        return Response.json({ updated: 10, action: "done", remote: "background", queued: 10 });
+      }
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (2)" }));
+
+    expect(
+      await screen.findByText(/syncing to GitHub in background\./)
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Partially applied for acme\/api: 5 marked done, 3 queued for retry \(auth\)\./)
+    ).toBeInTheDocument();
+  });
+
+  test("bulk read reports partial results alongside background syncing", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--api") {
+          return Response.json({ updated: 4, action: "read", remote: "partial", queued: 2, error: "network" });
+        }
+        return Response.json({ updated: 6, action: "read", remote: "background", queued: 6 });
+      }
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as read (2)" }));
+
+    expect(
+      await screen.findByText(/syncing to GitHub in background\./)
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Partially applied for acme\/api: 4 marked read, 2 queued for retry \(network\)\./)
+    ).toBeInTheDocument();
+  });
+
   test("bulk read reports partial failure without losing successes", async () => {
     let resolveWeb: (value: Response) => void = () => {};
     const webGate = new Promise<Response>((resolve) => {
