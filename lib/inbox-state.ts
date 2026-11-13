@@ -281,24 +281,31 @@ export function summarizeRepoSelection(
   const members = repos.filter((r) => wanted.has(r.id));
   let pending = 0;
   let readable = 0;
-  const rhythms = new Set<string>();
   let snoozedCount = 0;
   for (const r of members) {
     pending += r.pendingAll ?? r.pending ?? r.main + r.quiet;
     readable += r.readable ?? r.unread ?? r.main + r.quiet;
-    if (r.rhythm !== undefined) rhythms.add(r.rhythm);
     if (r.isSnoozed === true) snoozedCount += 1;
   }
+  // A rhythm counts as common only when every selected repository provides
+  // a known rhythm and they all agree. Partial knowledge reports unknown
+  // rather than promoting one repo's rhythm, and any disagreement is mixed.
+  const knownRhythms = members
+    .map((r) => r.rhythm)
+    .filter((r): r is string => r !== undefined);
+  const distinctRhythms = new Set(knownRhythms);
   return {
     ids: members.map((r) => r.id),
     pending,
     readable,
     rhythm:
-      members.length === 0 || rhythms.size === 0
+      members.length === 0 || knownRhythms.length === 0
         ? null
-        : rhythms.size === 1
-          ? [...rhythms][0] as string
-          : "mixed",
+        : distinctRhythms.size > 1
+          ? "mixed"
+          : knownRhythms.length < members.length
+            ? null
+            : (knownRhythms[0] as string),
     snoozed:
       members.length === 0 || snoozedCount === 0
         ? "none"

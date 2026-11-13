@@ -428,6 +428,57 @@ describe("FilterSidebar bulk menu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  test("escape on the trigger moves focus to the row before clearing", () => {
+    const props = renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 1 repository" })).toBeInTheDocument();
+    fireEvent.keyDown(document.documentElement, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Actions for 1 repository" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(document.activeElement).toBe(row("acme/web"));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("selection count is announced as it changes", () => {
+    renderBulkSidebar();
+    expect(screen.queryByText(/repositories? selected/)).not.toBeInTheDocument();
+    const r = row("acme/web");
+    fireEvent.click(r, { ctrlKey: true });
+    expect(screen.getByRole("status")).toHaveTextContent("1 repository selected");
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(screen.getByRole("status")).toHaveTextContent("1 repository selected");
+  });
+
+  test("single-repo updates disable bulk snooze and rhythm entries", () => {
+    renderBulkSidebar({ snoozeDisabled: true });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(within(menu).getByRole("menuitem", { name: /^In 1 hour/ })).toBeDisabled();
+    expect(within(menu).getByRole("menuitemradio", { name: "Weekly" })).toBeDisabled();
+  });
+
+  test("partially known rhythm keeps the known choice enabled", () => {
+    const repos = [
+      { id: "acme--web", fullName: "acme/web", main: 3, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "other--docs", fullName: "other/docs", main: 2, quiet: 0, isSnoozed: false },
+    ];
+    renderBulkSidebar({ repos });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(within(menu).getByRole("menuitemradio", { name: "Immediate" })).toBeEnabled();
+    expect(within(menu).queryByText("Mixed")).not.toBeInTheDocument();
+  });
+
   test("arrow keys move focus between combined entries", () => {
     renderBulkSidebar();
     selectTwo();

@@ -570,9 +570,9 @@ function InboxView() {
       const facet = repoFacets.find((r) => r.id === id);
       const quietGroup = collapsed.find((g) => g.repositoryId === id);
       return (
-        (facet?.pendingAll ?? (((facet?.main ?? 0) + (facet?.quiet ?? 0)) ||
+        facet?.pendingAll ?? facet?.pending ?? (((facet?.main ?? 0) + (facet?.quiet ?? 0)) ||
           quietGroup?.pendingCount ||
-          0))
+          0)
       );
     };
     const ids = requested.filter((id) => pendingOf(id) > 0);
@@ -588,6 +588,9 @@ function InboxView() {
       return;
     }
     if (ids.some((id) => pendingRepos.has(id))) return;
+    // Filters captured when the batch begins; completion navigation must
+    // not clobber a filter change the user made while it ran.
+    const startFilters = filters;
     // Totals use repo-wide counts so narrowing filters cannot undercount
     // what the action will mark done. The visible split below still
     // describes the current view.
@@ -621,9 +624,6 @@ function InboxView() {
       viewKey,
     }));
     pendingRef.current = [...pendingRef.current, ...intents];
-    const hiddenPending = collapsed
-      .filter((g) => ids.includes(g.repositoryId))
-      .reduce((n, g) => n + g.pendingCount, 0);
     setSelected((prev) => {
       if (prev.size === 0) return prev;
       const next = new Set(prev);
@@ -666,21 +666,29 @@ function InboxView() {
     // Partial remote results arrive with HTTP 200, so they never land in
     // `failed`. Track them separately or a background sibling would hide
     // their queued counts and reasons.
-    const partialUpdated = bodies.reduce(
-      (n, b) => n + (b?.remote === "partial" && typeof b?.updated === "number" ? b.updated : 0),
+    // Responses stay paired with their repository through the succeeded
+    // list, since failed requests contribute no body and plain indexes
+    // would drift after a failure.
+    const partialPairs = succeeded
+      .map((id, i) => ({ id, body: bodies[i] }))
+      .filter((p) => p.body?.remote === "partial");
+    const partialUpdated = partialPairs.reduce(
+      (n, p) => n + (typeof p.body?.updated === "number" ? p.body.updated : 0),
       0
     );
-    const partialQueued = bodies.reduce(
-      (n, b) => n + (b?.remote === "partial" && typeof b?.queued === "number" ? b.queued : 0),
+    const partialQueued = partialPairs.reduce(
+      (n, p) => n + (typeof p.body?.queued === "number" ? p.body.queued : 0),
       0
     );
-    const partialError =
-      bodies
-        .map((b) => (b?.remote === "partial" && typeof b?.error === "string" ? b.error : null))
-        .find(Boolean) ?? null;
-    const partialNames = ids
-      .filter((_, i) => bodies[i]?.remote === "partial")
-      .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+    const partialErrors = [
+      ...new Set(
+        partialPairs.flatMap((p) =>
+          typeof p.body?.error === "string" ? [p.body.error] : []
+        )
+      ),
+    ];
+    const partialNames = partialPairs
+      .map((p) => repoFacets.find((r) => r.id === p.id)?.fullName ?? p.id)
       .join(", ");
     const failedNames = failed
       .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
@@ -695,6 +703,17 @@ function InboxView() {
       (n, b) => n + (b?.remote === "background" && typeof b?.updated === "number" ? b.updated : 0),
       0
     );
+    // Hidden counts describe only repos that actually completed; failed
+    // repos keep their quiet items and must not appear as marked done.
+    const hiddenPending = collapsed
+      .filter((g) => succeeded.includes(g.repositoryId))
+      .reduce((n, g) => n + g.pendingCount, 0);
+    const hiddenRepoName =
+      succeeded.length === 1
+        ? (repoFacets.find((r) => r.id === succeeded[0])?.fullName ??
+          collapsed.find((g) => g.repositoryId === succeeded[0])?.repositoryName ??
+          succeeded[0])
+        : `${succeeded.length} repositories`;
     try {
       if (failed.length === ids.length) {
         say("Mark all as done failed. Restored previous state.");
@@ -713,13 +732,13 @@ function InboxView() {
           );
           if (partialQueued > 0) {
             parts.push(
-              `Partially applied for ${partialNames}: ${partialUpdated} marked done, ${partialQueued} queued for retry (${partialError ?? "unknown reason"}).`
+              `Partially applied for ${partialNames}: ${partialUpdated} marked done, ${partialQueued} queued for retry (${partialErrors.join("; ") || "unknown reason"}).`
             );
           }
         } else {
           const hiddenNotice =
             hiddenPending > 0
-              ? describeRepoDoneResult(repoName, {
+              ? describeRepoDoneResult(hiddenRepoName, {
                   updated,
                   queued,
                   error,
@@ -738,7 +757,7 @@ function InboxView() {
         if (failed.length > 0) {
           parts.push(`Done failed for ${failedNames}; those repos were restored.`);
         }
-        if (parts.length > 0) say(parts.join(" "), "info");
+        if (parts.length > 0) say(parts.join(" "), failed.length > 0 ? "error" : "info");
       }
       // The sidebar hides zero-item repos unless they are the active
       // filter. When the active repo was just emptied, move the filter to
@@ -748,19 +767,34 @@ function InboxView() {
       // repo: the "all" view keeps its done rows, and the done view
       // disables this action. Runs on both the background and the
       // foreground path: large background dones empty the repo too.
-      if (filters.state === "unread" && ids.includes(filters.repo)) {
+      // Navigation follows only succeeded repos, and never a filter the
+      // user changed while the batch ran.
+      const liveFilters = filtersRef.current;
+      if (
+        liveFilters.state === "unread" &&
+        liveFilters.repo === startFilters.repo &&
+        startFilters.state === "unread" &&
+        succeeded.includes(liveFilters.repo)
+      ) {
         const nextRepo = nextRepoAfterMarkDone(
           repoFacets,
-          filters.repo,
-          ids
+          liveFilters.repo,
+          succeeded
         );
         if (nextRepo !== null) {
           setFocusIdx(null);
-          setFilters({ ...filters, repo: nextRepo });
+          setFilters({ ...liveFilters, repo: nextRepo });
         }
       }
     } finally {
-      if (prevDrawer != null && failed.includes(prevDrawer.repositoryId)) {
+      // Restore the saved drawer only when it belongs to a failed repo
+      // and the user has not opened another drawer since.
+      const newerDrawer = drawerItemRef.current;
+      if (
+        prevDrawer != null &&
+        failed.includes(prevDrawer.repositoryId) &&
+        (newerDrawer == null || newerDrawer.id === prevDrawer.id)
+      ) {
         setDrawerItem(prevDrawer);
       }
       setPendingRepos((prev) => {
@@ -851,21 +885,29 @@ function InboxView() {
     // Partial remote results arrive with HTTP 200, so they never land in
     // `failed`. Track them separately or a background sibling would hide
     // their queued counts and reasons.
-    const partialUpdated = bodies.reduce(
-      (n, b) => n + (b?.remote === "partial" && typeof b?.updated === "number" ? b.updated : 0),
+    // Responses stay paired with their repository through the succeeded
+    // list, since failed requests contribute no body and plain indexes
+    // would drift after a failure.
+    const partialPairs = succeeded
+      .map((id, i) => ({ id, body: bodies[i] }))
+      .filter((p) => p.body?.remote === "partial");
+    const partialUpdated = partialPairs.reduce(
+      (n, p) => n + (typeof p.body?.updated === "number" ? p.body.updated : 0),
       0
     );
-    const partialQueued = bodies.reduce(
-      (n, b) => n + (b?.remote === "partial" && typeof b?.queued === "number" ? b.queued : 0),
+    const partialQueued = partialPairs.reduce(
+      (n, p) => n + (typeof p.body?.queued === "number" ? p.body.queued : 0),
       0
     );
-    const partialError =
-      bodies
-        .map((b) => (b?.remote === "partial" && typeof b?.error === "string" ? b.error : null))
-        .find(Boolean) ?? null;
-    const partialNames = ids
-      .filter((_, i) => bodies[i]?.remote === "partial")
-      .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
+    const partialErrors = [
+      ...new Set(
+        partialPairs.flatMap((p) =>
+          typeof p.body?.error === "string" ? [p.body.error] : []
+        )
+      ),
+    ];
+    const partialNames = partialPairs
+      .map((p) => repoFacets.find((r) => r.id === p.id)?.fullName ?? p.id)
       .join(", ");
     const failedNames = failed
       .map((id) => repoFacets.find((r) => r.id === id)?.fullName ?? id)
@@ -875,7 +917,9 @@ function InboxView() {
     const bgIds = new Set(
       succeeded.filter((_, i) => bodies[i]?.remote === "background")
     );
-    const bgVisibleCount = targets.filter((t) => bgIds.has(t.repositoryId)).length;
+    const bgVisibleCount = targets.filter(
+      (t) => t.isRead === 0 && bgIds.has(t.repositoryId)
+    ).length;
     const bgUpdated = bodies.reduce(
       (n, b) => n + (b?.remote === "background" && typeof b?.updated === "number" ? b.updated : 0),
       0
@@ -896,7 +940,7 @@ function InboxView() {
           );
           if (partialQueued > 0) {
             parts.push(
-              `Partially applied for ${partialNames}: ${partialUpdated} marked read, ${partialQueued} queued for retry (${partialError ?? "unknown reason"}).`
+              `Partially applied for ${partialNames}: ${partialUpdated} marked read, ${partialQueued} queued for retry (${partialErrors.join("; ") || "unknown reason"}).`
             );
           }
         } else {
@@ -911,7 +955,7 @@ function InboxView() {
         if (failed.length > 0) {
           parts.push(`Read failed for ${failedNames}; those repos were restored.`);
         }
-        if (parts.length > 0) say(parts.join(" "), "info");
+        if (parts.length > 0) say(parts.join(" "), failed.length > 0 ? "error" : "info");
       }
     } finally {
       setPendingRepos((prev) => {
@@ -976,8 +1020,14 @@ function InboxView() {
 
   const itemsRef = React.useRef(items);
   itemsRef.current = items;
+  const drawerItemRef = React.useRef(drawerItem);
+  drawerItemRef.current = drawerItem;
   const refreshRef = React.useRef(sync.refresh);
   refreshRef.current = sync.refresh;
+  // Live filters for in-flight bulk actions to compare against: a filter
+  // change mid-batch must not be clobbered by completion navigation.
+  const filtersRef = React.useRef(filters);
+  filtersRef.current = filters;
 
   // Typed global UI actions from the palette or keyboard shortcuts elsewhere.
   // Counters use seen-refs so a remount never replays an old request.

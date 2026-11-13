@@ -1596,6 +1596,45 @@ describe("repo-wide inbox actions", () => {
     });
   });
 
+  test("a failed active repo stays put after bulk done", async () => {
+    nav.params = new URLSearchParams("repo=acme--web");
+    const baseline = nav.replace.mock.calls.length;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--web") {
+          return new Response("nope", { status: 500 });
+        }
+        return Response.json({ updated: 1, action: "done" });
+      }
+      if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by acme/web" }), {
+      ctrlKey: true,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Filter by acme/api" }), {
+      ctrlKey: true,
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as done (2)" }));
+
+    // The api success plus the web failure: navigation must not move away
+    // from the failed active repo to its emptied successor.
+    expect(
+      await screen.findByText(/Done failed for acme\/web; those repos were restored\./)
+    ).toBeInTheDocument();
+    expect(nav.replace.mock.calls.length).toBe(baseline);
+  });
+
   test("asks to confirm before marking a large repo done", async () => {
     nav.params = new URLSearchParams("repo=acme--web");
     const fetchMock = installFetch({
@@ -1850,7 +1889,7 @@ describe("sidebar multi-select bulk fan-out", () => {
     expect(bodies).toContainEqual({ repositoryId: "acme--web", action: "read" });
     expect(bodies).toContainEqual({ repositoryId: "acme--api", action: "read" });
     expect(
-      await screen.findByText("4 marked read (2 visible + 2 quiet), syncing to GitHub in background.")
+      await screen.findByText("4 marked read (1 visible + 3 quiet), syncing to GitHub in background.")
     ).toBeInTheDocument();
   });
 
@@ -2244,42 +2283,6 @@ describe("sidebar multi-select bulk fan-out", () => {
         { repositoryId: "acme--api", action: "done" },
       ]);
     });
-  });
-
-  test("bulk done keeps successes when the refresh fails", async () => {
-    let notifCalls = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      void init;
-      const url = String(input);
-      if (url.includes("/api/notifications/bulk")) {
-        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
-        if (body.repositoryId === "acme--api") {
-          return new Response("nope", { status: 500 });
-        }
-        return Response.json({ updated: 1, action: "done" });
-      }
-      if (url.includes("/api/notifications")) {
-        notifCalls += 1;
-        if (notifCalls === 1) return Response.json(notificationsPayload);
-        throw new Error("network unavailable");
-      }
-      if (url.includes("/api/connection")) return Response.json({ connected: true });
-      return Response.json({});
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderWithQuery(<InboxPage />);
-    await screen.findByText("Fix flaky login redirect");
-
-    selectWebAndApi();
-    const menu = openBulkMenu();
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (2)" }));
-
-    await waitFor(() => {
-      expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
-    });
-    expect(screen.getByText("Bump the linter")).toBeInTheDocument();
-    expect(screen.queryByText("Mark all as done failed. Restored previous state.")).not.toBeInTheDocument();
   });
 
   test("bulk done keeps successes when the refresh fails", async () => {

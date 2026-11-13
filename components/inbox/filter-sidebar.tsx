@@ -464,6 +464,15 @@ export function FilterSidebar({
   /** Escape clears; Shift+Arrow extends a range and moves focus. */
   function handleRowKeyDown(repo: RepoFacet, e: React.KeyboardEvent) {
     if (e.key === "Escape") {
+      // The trigger unmounts when the selection clears, so move focus back
+      // to the row button first; otherwise focus leaves the sidebar and the
+      // next Shift+Arrow has nowhere to go.
+      if (selected.size > 0) {
+        const rowButton = e.currentTarget.querySelector("[data-repo-row]");
+        if (rowButton instanceof HTMLElement && document.activeElement !== rowButton) {
+          rowButton.focus();
+        }
+      }
       clearSelection();
       return;
     }
@@ -494,6 +503,11 @@ export function FilterSidebar({
 
   return (
     <div className="flex flex-col gap-6" onClick={handleContainerClick}>
+      {selected.size > 0 ? (
+        <p role="status" className="px-3 text-xs text-muted-foreground">
+          {selected.size} {selected.size === 1 ? "repository" : "repositories"} selected
+        </p>
+      ) : null}
       <section aria-label="Type filters">
         <button
           type="button"

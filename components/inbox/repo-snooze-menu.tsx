@@ -949,14 +949,14 @@ export function RepoBulkMenu({
   }
 
   function chooseSnooze(at: number | null, e: React.SyntheticEvent) {
-    if (bulkBusy) return;
+    if (bulkBusy || disabled) return;
     resetVisibility();
     closeAll(refocusForClick(e));
     onSnooze(ids, at);
   }
 
   function chooseRhythm(value: string, e: React.SyntheticEvent) {
-    if (bulkBusy || rhythmDisabled || value === summary.rhythm) return;
+    if (bulkBusy || disabled || rhythmDisabled || value === summary.rhythm) return;
     closeAll(refocusForClick(e));
     onRhythm(ids, value);
   }
@@ -1083,7 +1083,7 @@ export function RepoBulkMenu({
                     type="button"
                     role="menuitemradio"
                     aria-checked={current}
-                    disabled={bulkBusy || rhythmDisabled || current}
+                    disabled={bulkBusy || disabled || rhythmDisabled || current}
                     onClick={(e) => chooseRhythm(o.value, e)}
                     className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -1107,7 +1107,7 @@ export function RepoBulkMenu({
                   key={p.value}
                   type="button"
                   role="menuitem"
-                  disabled={bulkBusy}
+                  disabled={bulkBusy || disabled}
                   onClick={(e) => chooseSnooze(p.at, e)}
                   className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1119,7 +1119,7 @@ export function RepoBulkMenu({
                 <button
                   type="button"
                   role="menuitem"
-                  disabled={bulkBusy}
+                  disabled={bulkBusy || disabled}
                   onClick={(e) => chooseSnooze(null, e)}
                   className="flex w-full cursor-pointer items-center gap-2 border-t border-border/40 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >

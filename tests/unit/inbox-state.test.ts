@@ -155,6 +155,23 @@ describe("repo selection summary", () => {
     expect(summarizeRepoSelection(repos, ["a", "b"]).rhythm).toBe("mixed");
   });
 
+  test("partially known agreeing rhythms report unknown, not common", () => {
+    const partial = [
+      { id: "a", main: 1, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "b", main: 1, quiet: 0, isSnoozed: false },
+    ];
+    expect(summarizeRepoSelection(partial, ["a", "b"]).rhythm).toBeNull();
+  });
+
+  test("partially known disagreeing rhythms report mixed", () => {
+    const partial = [
+      { id: "a", main: 1, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "b", main: 1, quiet: 0, isSnoozed: false, rhythm: "weekly" },
+      { id: "c", main: 1, quiet: 0, isSnoozed: false },
+    ];
+    expect(summarizeRepoSelection(partial, ["a", "b", "c"]).rhythm).toBe("mixed");
+  });
+
   test("snooze reports none, all, or mixed", () => {
     expect(summarizeRepoSelection(repos, ["a", "c"]).snoozed).toBe("none");
     expect(summarizeRepoSelection(repos, ["b"]).snoozed).toBe("all");
