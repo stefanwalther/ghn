@@ -466,12 +466,15 @@ describe("FilterSidebar bulk menu", () => {
     const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
     const done = within(menu).getByRole("menuitem", { name: "Mark all as done (5)" });
     done.focus();
-    fireEvent.keyDown(done, { key: "Escape" });
-    expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
+    // Shift+Arrow on the open menu must not reshape the row selection.
     fireEvent.keyDown(done, { key: "ArrowDown", shiftKey: true });
     expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
     expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
     expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    // Escape closes the menu but keeps the selection behind it.
+    fireEvent.keyDown(done, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
   });
 
   test("single-repo updates disable bulk snooze and rhythm entries", () => {

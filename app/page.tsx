@@ -662,8 +662,14 @@ function InboxView() {
       : typeof bodies[0]?.remote === "string"
         ? (bodies[0]?.remote as string)
         : null;
+    // First error from non-partial bodies only: partial reasons get their
+    // own per-repo line, so the generic notices must not repeat the first
+    // partial error.
     const error =
-      bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
+      succeeded
+        .map((_, i) => bodies[i])
+        .filter((b) => b?.remote !== "partial")
+        .map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
     // Partial remote results arrive with HTTP 200, so they never land in
     // `failed`. Track them separately or a background sibling would hide
     // their queued counts and reasons.
@@ -737,11 +743,14 @@ function InboxView() {
             );
           }
         } else {
+          // The hidden-item notice keeps its scope: partial counts and
+          // errors belong to the per-repo partial line below, not to the
+          // hidden summary.
           const hiddenNotice =
             hiddenPending > 0
               ? describeRepoDoneResult(hiddenRepoName, {
-                  updated,
-                  queued,
+                  updated: updated - partialUpdated,
+                  queued: queued - partialQueued,
                   error,
                   hiddenPending,
                 })
@@ -899,8 +908,14 @@ function InboxView() {
       : typeof bodies[0]?.remote === "string"
         ? (bodies[0]?.remote as string)
         : null;
+    // First error from non-partial bodies only: partial reasons get their
+    // own per-repo line, so the generic notices must not repeat the first
+    // partial error.
     const error =
-      bodies.map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
+      succeeded
+        .map((_, i) => bodies[i])
+        .filter((b) => b?.remote !== "partial")
+        .map((b) => (typeof b?.error === "string" ? b.error : null)).find(Boolean) ?? null;
     // Partial remote results arrive with HTTP 200, so they never land in
     // `failed`. Track them separately or a background sibling would hide
     // their queued counts and reasons.

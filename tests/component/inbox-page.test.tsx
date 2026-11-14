@@ -2216,6 +2216,61 @@ describe("sidebar multi-select bulk fan-out", () => {
     );
   });
 
+  test("bulk done keeps partial counts out of the hidden-item notice", async () => {
+    const quietGroup = {
+      repositoryId: "acme--api",
+      repositoryName: "acme/api",
+      rhythm: "weekly",
+      nextDueAt: Date.parse("2026-01-22T09:00:00Z"),
+      nextDueLabel: "in 7 days",
+      pendingCount: 2,
+      isSnoozed: false,
+      snoozeLabel: "Not snoozed",
+    };
+    const quietPayload = {
+      ...notificationsPayload,
+      collapsedSection: [quietGroup],
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, isSnoozed: false },
+          { id: "acme--api", fullName: "acme/api", main: 0, quiet: 2, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--web") {
+          return Response.json({ updated: 1, action: "done", remote: "partial", queued: 1, error: "network" });
+        }
+        return Response.json({ updated: 2, action: "done" });
+      }
+      if (url.includes("/api/notifications")) return Response.json(quietPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (3)" }));
+
+    // The hidden summary reports only the non-partial remainder; the
+    // partial count and error live on the per-repo line, reported once.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("2 repositories marked done, including 2 hidden pending items.");
+    expect(alert).toHaveTextContent(
+      "Partially applied for acme/web: 1 marked done, 1 queued for retry (network)."
+    );
+    expect(alert.textContent).not.toMatch(/queued for retry.*queued for retry/);
+  });
+
   test("bulk read reports every distinct partial error without background results", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
@@ -2368,7 +2423,7 @@ describe("sidebar multi-select bulk fan-out", () => {
       if (url.includes("/api/notifications/bulk")) {
         const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
         if (body.repositoryId === "acme--web") return webGate;
-        return Response.json({ updated: 1, action: "done" });
+        return Response.json({ updated: 1, action: "done", remote: "partial", queued: 1, error: "network" });
       }
       if (url.includes("/api/notifications")) return Response.json(notificationsPayload);
       if (url.includes("/api/connection")) return Response.json({ connected: true });
@@ -2399,13 +2454,12 @@ describe("sidebar multi-select bulk fan-out", () => {
     const baseline = nav.replace.mock.calls.length;
     resolveWeb(Response.json({ updated: 1, action: "done" }));
 
-    // Both repos empty, so completion would navigate under the stale
-    // filters. The newer type choice must win instead. The component reads
-    // useSearchParams on every render, so mutating params mid-batch is
-    // enough for the completion guard to see the newer filters.
-    await waitFor(() => {
-      expect(screen.queryByText("Fix flaky login redirect")).not.toBeInTheDocument();
-    });
+    // The partial notice renders strictly after the completion block, so by
+    // the time it appears the navigation decision has already run. The
+    // newer type choice must win over the stale repo target.
+    expect(
+      await screen.findByText(/Partially applied for acme\/api: 1 marked done, 1 queued for retry \(network\)\./)
+    ).toBeInTheDocument();
     expect(nav.replace.mock.calls.length).toBe(baseline);
   });
 
