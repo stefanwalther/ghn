@@ -612,6 +612,7 @@ function InboxView() {
           ids[0])
         : `${ids.length} repositories`;
     const prevDrawer = drawerItem;
+    const startDrawerGen = drawerOpenGenRef.current;
     const targets = items.filter((i) => ids.includes(i.repositoryId));
     if (prevDrawer != null && ids.includes(prevDrawer.repositoryId)) {
       setDrawerItem(null);
@@ -745,19 +746,28 @@ function InboxView() {
                   hiddenPending,
                 })
               : null;
-          const queuedNotice = describeBulkResult("done", {
-            updated,
-            queued,
+          // Partial results carry their own per-repo line (names plus every
+          // distinct error); keep them out of the generic notice so a batch
+          // without background results neither drops them nor truncates the
+          // reasons to the first error.
+          const restNotice = describeBulkResult("done", {
+            updated: updated - partialUpdated,
+            queued: queued - partialQueued,
             error,
             remote,
           });
           if (hiddenNotice) parts.push(hiddenNotice);
-          else if (queuedNotice) parts.push(queuedNotice);
+          else if (restNotice) parts.push(restNotice);
+          if (partialQueued > 0) {
+            parts.push(
+              `Partially applied for ${partialNames}: ${partialUpdated} marked done, ${partialQueued} queued for retry (${partialErrors.join("; ") || "unknown reason"}).`
+            );
+          }
         }
         if (failed.length > 0) {
           parts.push(`Done failed for ${failedNames}; those repos were restored.`);
         }
-        if (parts.length > 0) say(parts.join(" "), failed.length > 0 ? "error" : "info");
+        if (parts.length > 0) say(parts.join(" "), failed.length > 0 || partialQueued > 0 ? "error" : "info");
       }
       // The sidebar hides zero-item repos unless they are the active
       // filter. When the active repo was just emptied, move the filter to
@@ -768,12 +778,18 @@ function InboxView() {
       // disables this action. Runs on both the background and the
       // foreground path: large background dones empty the repo too.
       // Navigation follows only succeeded repos, and never a filter the
-      // user changed while the batch ran.
+      // user changed while the batch ran. Every filter field counts: a
+      // newer type or age choice must block navigation just like a newer
+      // repository or state choice does.
       const liveFilters = filtersRef.current;
+      const filtersUnchanged =
+        liveFilters.repo === startFilters.repo &&
+        liveFilters.state === startFilters.state &&
+        liveFilters.type === startFilters.type &&
+        liveFilters.age === startFilters.age;
       if (
         liveFilters.state === "unread" &&
-        liveFilters.repo === startFilters.repo &&
-        startFilters.state === "unread" &&
+        filtersUnchanged &&
         succeeded.includes(liveFilters.repo)
       ) {
         const nextRepo = nextRepoAfterMarkDone(
@@ -787,13 +803,16 @@ function InboxView() {
         }
       }
     } finally {
-      // Restore the saved drawer only when it belongs to a failed repo
-      // and the user has not opened another drawer since.
+      // Restore the saved drawer only when it belongs to a failed repo,
+      // the user has not opened another drawer since, and no drawer choice
+      // was made while the batch ran (an open-then-close still counts as a
+      // choice: the user deliberately dismissed the drawer).
       const newerDrawer = drawerItemRef.current;
       if (
         prevDrawer != null &&
         failed.includes(prevDrawer.repositoryId) &&
-        (newerDrawer == null || newerDrawer.id === prevDrawer.id)
+        (newerDrawer == null || newerDrawer.id === prevDrawer.id) &&
+        drawerOpenGenRef.current === startDrawerGen
       ) {
         setDrawerItem(prevDrawer);
       }
@@ -944,18 +963,27 @@ function InboxView() {
             );
           }
         } else {
-          const queuedNotice = describeBulkResult("read", {
-            updated,
-            queued,
+          // Partial results carry their own per-repo line (names plus every
+          // distinct error); keep them out of the generic notice so a batch
+          // without background results neither drops them nor truncates the
+          // reasons to the first error.
+          const restNotice = describeBulkResult("read", {
+            updated: updated - partialUpdated,
+            queued: queued - partialQueued,
             error,
             remote,
           });
-          if (queuedNotice) parts.push(queuedNotice);
+          if (restNotice) parts.push(restNotice);
+          if (partialQueued > 0) {
+            parts.push(
+              `Partially applied for ${partialNames}: ${partialUpdated} marked read, ${partialQueued} queued for retry (${partialErrors.join("; ") || "unknown reason"}).`
+            );
+          }
         }
         if (failed.length > 0) {
           parts.push(`Read failed for ${failedNames}; those repos were restored.`);
         }
-        if (parts.length > 0) say(parts.join(" "), failed.length > 0 ? "error" : "info");
+        if (parts.length > 0) say(parts.join(" "), failed.length > 0 || partialQueued > 0 ? "error" : "info");
       }
     } finally {
       setPendingRepos((prev) => {
@@ -1028,6 +1056,13 @@ function InboxView() {
   // change mid-batch must not be clobbered by completion navigation.
   const filtersRef = React.useRef(filters);
   filtersRef.current = filters;
+  // Counts drawer opens so a bulk batch can tell whether the user chose a
+  // drawer while it ran. Closes do not count: the batch itself closes the
+  // drawer at the start, and only a newer *choice* must block the restore.
+  const drawerOpenGenRef = React.useRef(0);
+  React.useEffect(() => {
+    if (drawerItem != null) drawerOpenGenRef.current += 1;
+  }, [drawerItem]);
 
   // Typed global UI actions from the palette or keyboard shortcuts elsewhere.
   // Counters use seen-refs so a remount never replays an old request.

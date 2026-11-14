@@ -23,7 +23,7 @@ Both Ctrl and Cmd toggle on every platform. Either modifier plus Shift extends a
 - Selected rows carry `aria-pressed="true"` (toggle-button pattern; `aria-selected` is invalid on the `button` role) and a selected style distinct from the active-filter style.
 - A row that is both active filter and selected shows both states simultaneously.
 - Busy rows (bulk action in flight) show the existing per-repo busy indication in addition to selection.
-- A persistent `role="status"` live region announces the selected count (including hidden rows) whenever the selection is non-empty.
+- A persistent `role="status"` live region announces the selected count (including hidden rows). It stays mounted even with an empty selection so the first selection is announced reliably; only its text changes.
 
 ## 3. Menu targeting
 

@@ -463,6 +463,11 @@ export function FilterSidebar({
 
   /** Escape clears; Shift+Arrow extends a range and moves focus. */
   function handleRowKeyDown(repo: RepoFacet, e: React.KeyboardEvent) {
+    // Menus portal to document.body but stay in this React tree, so their
+    // keystrokes bubble here. The menu owns its keys: without this guard an
+    // Escape or Shift+Arrow pressed on a menu entry would also clear or
+    // reshape the row selection behind the open menu.
+    if ((e.target as HTMLElement | null)?.closest?.('[role="menu"]')) return;
     if (e.key === "Escape") {
       // The trigger unmounts when the selection clears, so move focus back
       // to the row button first; otherwise focus leaves the sidebar and the
@@ -503,11 +508,14 @@ export function FilterSidebar({
 
   return (
     <div className="flex flex-col gap-6" onClick={handleContainerClick}>
-      {selected.size > 0 ? (
-        <p role="status" className="px-3 text-xs text-muted-foreground">
-          {selected.size} {selected.size === 1 ? "repository" : "repositories"} selected
-        </p>
-      ) : null}
+      {/* Always mounted: a live region that appears only with the first
+          selection is not announced reliably, so the element exists from the
+          start and only its text changes. */}
+      <p role="status" className="px-3 text-xs text-muted-foreground">
+        {selected.size > 0
+          ? `${selected.size} ${selected.size === 1 ? "repository" : "repositories"} selected`
+          : null}
+      </p>
       <section aria-label="Type filters">
         <button
           type="button"

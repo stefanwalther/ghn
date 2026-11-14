@@ -129,7 +129,7 @@ describe("FilterSidebar repository search", () => {
 
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Filter by other/docs" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 repositories");
+    expect(screen.getByText("1 of 3 repositories")).toBeInTheDocument();
   });
 
   test("clearing restores every repository", () => {
@@ -155,7 +155,9 @@ describe("FilterSidebar repository search", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Filter repositories" }), {
       target: { value: "zzz-no-such-repo" },
     });
-    expect(screen.getByRole("status")).toHaveTextContent("No repositories match");
+    expect(
+      screen.getAllByRole("status").some((s) => s.textContent?.includes("No repositories match"))
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Clear the filter/ }));
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
   });
@@ -185,7 +187,7 @@ describe("FilterSidebar repository search", () => {
     });
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filter by other/docs" })).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("No repositories match")).not.toBeInTheDocument();
   });
 });
 
@@ -445,14 +447,31 @@ describe("FilterSidebar bulk menu", () => {
 
   test("selection count is announced as it changes", () => {
     renderBulkSidebar();
-    expect(screen.queryByText(/repositories? selected/)).not.toBeInTheDocument();
+    // Mounted from the start so the first selection is announced reliably.
+    const live = screen.getByRole("status");
+    expect(live).toBeEmptyDOMElement();
     const r = row("acme/web");
     fireEvent.click(r, { ctrlKey: true });
-    expect(screen.getByRole("status")).toHaveTextContent("1 repository selected");
+    expect(live).toHaveTextContent("1 repository selected");
     fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(live).toHaveTextContent("2 repositories selected");
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(live).toHaveTextContent("1 repository selected");
+  });
+
+  test("menu keystrokes never reach the row selection", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    const done = within(menu).getByRole("menuitem", { name: "Mark all as done (5)" });
+    done.focus();
+    fireEvent.keyDown(done, { key: "Escape" });
     expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
-    fireEvent.click(row("other/docs"), { ctrlKey: true });
-    expect(screen.getByRole("status")).toHaveTextContent("1 repository selected");
+    fireEvent.keyDown(done, { key: "ArrowDown", shiftKey: true });
+    expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
   });
 
   test("single-repo updates disable bulk snooze and rhythm entries", () => {
