@@ -2023,6 +2023,46 @@ describe("sidebar multi-select bulk fan-out", () => {
     expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
   });
 
+  test("the all view omits the visible/quiet split from the done dialog", async () => {
+    nav.params = new URLSearchParams("state=all");
+    const allPayload = {
+      ...notificationsPayload,
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 27, quiet: 8, pendingAll: 30, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) return Response.json(allPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by acme/web" }), {
+      ctrlKey: true,
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+    const menu = await screen.findByRole("menu", { name: "Actions for 1 repository" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (30)" }));
+
+    // The all view folds already-done rows into facet main, so the split
+    // would describe rows the action never marks done; the dialog shows
+    // the total without a breakdown instead.
+    expect(
+      await screen.findByRole("alertdialog", { name: /Mark 30 as done/ })
+    ).toHaveTextContent("Removes 30 items from the inbox");
+    expect(screen.getByRole("alertdialog").textContent).not.toContain("quiet");
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+  });
+
   test("bulk done skips repos with nothing pending", async () => {
     nav.params = new URLSearchParams("repo=acme--api");
     const zeroPayload = {

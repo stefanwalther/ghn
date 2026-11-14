@@ -601,9 +601,15 @@ function InboxView() {
     // The visible/quiet split is only exact when the view covers every
     // not-done row the same way the repo-wide total does. Facets ignore the
     // repo filter, but a narrowed type or age filter hides rows the action
-    // still marks done, so the difference would mislabel them as quiet;
-    // omit the split when the counts cannot be trusted.
-    const splitExact = filters.type === "all" && filters.age === "all";
+    // still marks done, so the difference would mislabel them as quiet.
+    // State matters too: the all view counts already-done rows into facet
+    // main and the done view is done rows only, while the total is not-done
+    // rows; only the unread view shares the total's scope. Omit the split
+    // when the counts cannot be trusted.
+    const splitExact =
+      filters.type === "all" &&
+      filters.age === "all" &&
+      filters.state === "unread";
     const quiet = splitExact ? Math.max(0, total - main) : 0;
     if (!opts?.confirmed && total > BULK_CONFIRM_THRESHOLD) {
       setConfirmDone({ repositoryIds: ids, total, main, quiet });
