@@ -3,10 +3,13 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { RepoSnoozeMenu, useRowVisibility } from "@/components/inbox/repo-snooze-menu";
+import { RepoBulkMenu, RepoSnoozeMenu, useRowVisibility } from "@/components/inbox/repo-snooze-menu";
+import type { RepoBulkTarget } from "@/components/inbox/repo-snooze-menu";
 import type { DigestGroup } from "@/components/inbox/digest-section";
 import { rankSearch } from "@/lib/search";
 import { stripScopePrefix } from "@/lib/palette-commands";
+import { nextSelection, rangeSelection, summarizeRepoSelection } from "@/lib/inbox-state";
+import type { RepoSelectionSummary } from "@/lib/inbox-state";
 import { cn } from "@/lib/utils";
 
 export interface TypeFacet {
@@ -36,13 +39,18 @@ export interface RepoFacet {
 
 function SidebarButton({
   active,
+  selected,
+  rowId,
   onClick,
   label,
   children,
   className,
 }: {
   active: boolean;
-  onClick: () => void;
+  selected?: boolean;
+  /** Repository id; rendered as data-repo-row for arrow-key focus moves. */
+  rowId?: string;
+  onClick: (e: React.MouseEvent) => void;
   label: string;
   children: React.ReactNode;
   className?: string;
@@ -52,10 +60,14 @@ function SidebarButton({
       type="button"
       aria-label={label}
       aria-current={active ? "true" : undefined}
+      aria-pressed={rowId === undefined ? undefined : (selected ?? false)}
+      data-repo-row={rowId}
       onClick={onClick}
       className={cn(
         "flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
+        selected && !active && "bg-accent/60 text-accent-foreground",
+        selected && active && "ring-2 ring-inset ring-ring",
         className
       )}
     >
@@ -64,11 +76,31 @@ function SidebarButton({
   );
 }
 
+/** Bulk intent handlers plus the resolved selection, or null for single menus. */
+export interface RepoBulkContext {
+  members: RepoBulkTarget[];
+  summary: RepoSelectionSummary;
+  onSnooze: (ids: string[], snoozedUntil: number | null) => void;
+  onRhythm: (ids: string[], rhythm: string) => void;
+  rhythmDisabled?: boolean;
+  onMarkAllDone: (ids: string[]) => void;
+  markAllDoneDisabled?: boolean;
+  onMarkAllRead: (ids: string[]) => void;
+  markAllReadDisabled?: boolean;
+  onCopied?: (ids: string[], ok: boolean) => void;
+  /** True when any selected member has an update in flight. */
+  anyBusy: boolean;
+}
+
 /** One repository filter row with hover actions and a right-click menu. */
 function RepoFilterRow({
   repo: r,
   active,
-  onRepo,
+  selected,
+  bulk,
+  onClearSelection,
+  onRowClick,
+  onRowKeyDown,
   onSnooze,
   snoozeDisabled,
   onRhythm,
@@ -83,7 +115,13 @@ function RepoFilterRow({
 }: {
   repo: RepoFacet;
   active: boolean;
-  onRepo: (repo: string) => void;
+  /** Whether this row is part of the multi-selection. */
+  selected: boolean;
+  /** Resolved bulk context; null renders the single-row menu. */
+  bulk: RepoBulkContext | null;
+  onClearSelection: () => void;
+  onRowClick: (repo: RepoFacet, e: React.MouseEvent) => void;
+  onRowKeyDown: (repo: RepoFacet, e: React.KeyboardEvent) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
   snoozeDisabled?: boolean;
   onRhythm?: (id: string, rhythm: string) => void;
@@ -99,6 +137,10 @@ function RepoFilterRow({
 }) {
   const { visible, reset, rowHandlers } = useRowVisibility();
   const [contextAnchor, setContextAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  const [bulkAnchor, setBulkAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  // A selected row with a bulk context opens the combined menu; anywhere
+  // else the prior selection clears and the single-row menu targets one repo.
+  const isBulkTarget = selected && bulk !== null;
   const pendingTotal = r.main + r.quiet;
   // Actionable counts fall back to the visible total for payloads that
   // predate the facet fields (tests, cached responses).
@@ -117,13 +159,24 @@ function RepoFilterRow({
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setContextAnchor({ x: e.clientX, y: e.clientY });
+        if (isBulkTarget) setBulkAnchor({ x: e.clientX, y: e.clientY });
+        else {
+          onClearSelection();
+          setContextAnchor({ x: e.clientX, y: e.clientY });
+        }
       }}
+      // Row-level keyboard handling covers the filter button and the
+      // hover "..." trigger alike: Escape with the trigger focused clears
+      // the selection after the menu closed, and Shift+Arrow never reaches
+      // the inbox list behind the sidebar.
+      onKeyDown={(e) => onRowKeyDown(r, e)}
     >
       <SidebarButton
         active={active}
+        selected={selected}
+        rowId={r.id}
         label={`Filter by ${r.fullName}`}
-        onClick={() => onRepo(active ? "all" : r.id)}
+        onClick={(e) => onRowClick(r, e)}
         className="min-w-0 flex-1"
       >
         <span className="min-w-0 flex-1 truncate" title={r.fullName}>
@@ -137,7 +190,34 @@ function RepoFilterRow({
           <Badge variant="muted">{r.main}</Badge>
         </span>
       </SidebarButton>
-      {(onSnooze || onRhythm) ? (
+      {isBulkTarget && bulk ? (
+        <RepoBulkMenu
+          targets={bulk.members}
+          summary={bulk.summary}
+          anchorId={r.id}
+          disabled={snoozeDisabled}
+          onSnooze={bulk.onSnooze}
+          onRhythm={bulk.onRhythm}
+          rhythmDisabled={bulk.rhythmDisabled ?? snoozeDisabled}
+          bulkBusy={bulk.anyBusy}
+          onMarkAllDone={bulk.onMarkAllDone}
+          markAllDoneDisabled={bulk.markAllDoneDisabled ?? (doneBusy || bulk.anyBusy)}
+          onMarkAllRead={bulk.onMarkAllRead}
+          markAllReadDisabled={bulk.markAllReadDisabled ?? (readBusy || bulk.anyBusy)}
+          onCopied={bulk.onCopied}
+          visible={visible}
+          contextAnchor={bulkAnchor}
+          onContextClose={() => setBulkAnchor(null)}
+          onVisibilityReset={reset}
+          triggerClassName="bg-background"
+          triggerStyle={{
+            position: "absolute",
+            top: "50%",
+            right: 4,
+            transform: "translateY(-50%)",
+          }}
+        />
+      ) : (onSnooze || onRhythm) ? (
         <RepoSnoozeMenu
           repoId={r.id}
           fullName={r.fullName}
@@ -191,6 +271,11 @@ export function FilterSidebar({
   onMarkAllRead,
   markAllReadBusy,
   onCopied,
+  onBulkSnooze,
+  onBulkRhythm,
+  onBulkDone,
+  onBulkRead,
+  onBulkCopied,
   quietGroups = [],
   quietActive = false,
   onQuietView,
@@ -214,6 +299,12 @@ export function FilterSidebar({
   onMarkAllRead?: (id: string) => void;
   markAllReadBusy?: boolean;
   onCopied?: (id: string, ok: boolean) => void;
+  /** Bulk fan-out intents; all four enable the combined menu for selections. */
+  onBulkSnooze?: (ids: string[], snoozedUntil: number | null) => void;
+  onBulkRhythm?: (ids: string[], rhythm: string) => void;
+  onBulkDone?: (ids: string[]) => void;
+  onBulkRead?: (ids: string[]) => void;
+  onBulkCopied?: (ids: string[], ok: boolean) => void;
   quietGroups?: DigestGroup[];
   quietActive?: boolean;
   onQuietView?: () => void;
@@ -229,6 +320,10 @@ export function FilterSidebar({
     snoozed: false,
     quiet: false,
   });
+  // Multi-selection working set, independent of the active inbox filter.
+  // Empty means nothing selected; anchorId bases Shift-range extension.
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [anchorId, setAnchorId] = React.useState<string | null>(null);
   // Controlled when the inbox wires the palette handoff through; otherwise
   // local so the sidebar works standalone in tests and embeds.
   const [internalFilter, setInternalFilter] = React.useState("");
@@ -294,11 +389,133 @@ export function FilterSidebar({
       : searchedRepos;
   const regularRepos = listedRepos.filter((r) => !r.isSnoozed);
   const snoozedRepos = listedRepos.filter((r) => r.isSnoozed);
+  // Display order for Shift-range extension and arrow-key moves: only rows
+  // currently rendered (regular and snoozed sections, unless collapsed),
+  // regulars in facet order, then snoozed rows in facet order. Hidden
+  // selections stay selected but are never range or focus targets.
+  const displayIds = [
+    ...(collapsed.repos ? [] : regularRepos),
+    ...(collapsed.snoozed ? [] : snoozedRepos),
+  ].map((r) => r.id);
   const activeSnoozedName = snoozedRepos.find((r) => r.id === activeRepo)?.fullName;
+  // Resolved bulk context for the combined menu. Members cover the whole
+  // selection by repository identity (visible members in display order,
+  // hidden members appended in facet order) so search-hidden selections
+  // stay included; counts derive from the same facet fields as the single menu.
+  const visibleIdSet = new Set(displayIds);
+  const memberIds = [
+    ...displayIds.filter((id) => selected.has(id)),
+    ...repos.map((r) => r.id).filter((id) => selected.has(id) && !visibleIdSet.has(id)),
+  ];
+  const bulk: RepoBulkContext | null =
+    onBulkSnooze && onBulkRhythm && onBulkDone && onBulkRead && selected.size > 0
+      ? {
+          members: memberIds.map((id) => {
+            const facet = repos.find((r) => r.id === id);
+            return {
+              id,
+              fullName: facet?.fullName ?? id,
+              isSnoozed: facet?.isSnoozed ?? false,
+              rhythm: facet?.rhythm,
+            };
+          }),
+          summary: summarizeRepoSelection(repos, [...selected]),
+          onSnooze: onBulkSnooze,
+          onRhythm: onBulkRhythm,
+          rhythmDisabled,
+          onMarkAllDone: onBulkDone,
+          onMarkAllRead: onBulkRead,
+          onCopied: onBulkCopied,
+          anyBusy: memberIds.some((id) => busyRepoIds?.has(id) ?? false),
+        }
+      : null;
   const quietTotal = quietGroups.reduce((n, g) => n + g.pendingCount, 0);
 
+  function clearSelection() {
+    setSelected(new Set());
+    setAnchorId(null);
+  }
+
+  /** Modifier-aware row activation: range, toggle, or plain filter. */
+  function handleRowClick(repo: RepoFacet, e: React.MouseEvent) {
+    // Shift wins over Ctrl/Cmd so combined modifiers extend the range
+    // instead of toggling a single row.
+    if (e.shiftKey) {
+      const base = anchorId ?? repo.id;
+      if (anchorId === null) setAnchorId(repo.id);
+      setSelected((prev) => rangeSelection(displayIds, base, repo.id, prev));
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      setSelected((prev) =>
+        nextSelection(
+          displayIds.map((id) => ({ id })),
+          prev,
+          repo.id
+        )
+      );
+      setAnchorId(repo.id);
+      return;
+    }
+    clearSelection();
+    onRepo(activeRepo === repo.id ? "all" : repo.id);
+  }
+
+  /** Escape clears; Shift+Arrow extends a range and moves focus. */
+  function handleRowKeyDown(repo: RepoFacet, e: React.KeyboardEvent) {
+    // Menus portal to document.body but stay in this React tree, so their
+    // keystrokes bubble here. The menu owns its keys: without this guard an
+    // Escape or Shift+Arrow pressed on a menu entry would also clear or
+    // reshape the row selection behind the open menu.
+    if ((e.target as HTMLElement | null)?.closest?.('[role="menu"]')) return;
+    if (e.key === "Escape") {
+      // The trigger unmounts when the selection clears, so move focus back
+      // to the row button first; otherwise focus leaves the sidebar and the
+      // next Shift+Arrow has nowhere to go.
+      if (selected.size > 0) {
+        const rowButton = e.currentTarget.querySelector("[data-repo-row]");
+        if (rowButton instanceof HTMLElement && document.activeElement !== rowButton) {
+          rowButton.focus();
+        }
+      }
+      clearSelection();
+      return;
+    }
+    if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      // The inbox list owns window-level arrow handling; stop here so the
+      // focused notification row does not also move behind the sidebar.
+      e.stopPropagation();
+      const idx = displayIds.indexOf(repo.id);
+      const next = idx === -1 ? undefined : displayIds[idx + (e.key === "ArrowDown" ? 1 : -1)];
+      if (!next) return;
+      const base = anchorId ?? repo.id;
+      if (anchorId === null) setAnchorId(repo.id);
+      setSelected((prev) => rangeSelection(displayIds, base, next, prev));
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-repo-row="${next}"]`);
+        if (el instanceof HTMLElement) el.focus();
+      });
+    }
+  }
+
+  /** Clicks landing on sidebar chrome (not controls) clear the selection. */
+  function handleContainerClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.("button, input, a, [role='menu'], [role='dialog']")) return;
+    if (selected.size > 0) clearSelection();
+  }
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" onClick={handleContainerClick}>
+      {/* Always mounted: a live region that appears only with the first
+          selection is not announced reliably, so the element exists from the
+          start and only its text changes. */}
+      <p role="status" className="px-3 text-xs text-muted-foreground">
+        {selected.size > 0
+          ? `${selected.size} ${selected.size === 1 ? "repository" : "repositories"} selected`
+          : null}
+      </p>
       <section aria-label="Type filters">
         <button
           type="button"
@@ -435,7 +652,11 @@ export function FilterSidebar({
               key={r.id}
               repo={r}
               active={activeRepo === r.id}
-              onRepo={onRepo}
+              selected={selected.has(r.id)}
+              bulk={bulk}
+              onClearSelection={clearSelection}
+              onRowClick={handleRowClick}
+              onRowKeyDown={handleRowKeyDown}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
               onRhythm={onRhythm}
@@ -488,7 +709,11 @@ export function FilterSidebar({
               key={r.id}
               repo={r}
               active={activeRepo === r.id}
-              onRepo={onRepo}
+              selected={selected.has(r.id)}
+              bulk={bulk}
+              onClearSelection={clearSelection}
+              onRowClick={handleRowClick}
+              onRowKeyDown={handleRowKeyDown}
               onSnooze={onSnooze}
               snoozeDisabled={snoozeDisabled}
               onRhythm={onRhythm}

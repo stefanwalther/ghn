@@ -6,6 +6,7 @@ import { CalendarClock, Check, CheckCheck, ChevronRight, Clock, ExternalLink, Li
 import { copyText } from "@/lib/clipboard";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { snoozePresets } from "@/lib/snooze";
+import type { RepoSelectionSummary } from "@/lib/inbox-state";
 import { cn } from "@/lib/utils";
 
 const MENU_WIDTH = 220;
@@ -753,6 +754,399 @@ export function RepoSnoozeMenu({
                 </button>
                 );
               })}
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+/** One selected repository for the combined menu. */
+export interface RepoBulkTarget {
+  id: string;
+  fullName: string;
+  isSnoozed: boolean;
+  rhythm?: string;
+}
+
+/**
+ * One combined menu for a multi-selection. Flat where the single-row menu
+ * nests: snooze presets and rhythm options render inline so bulk actions
+ * stay one tap away on touch. Shares the positioning, focus, and dismiss
+ * patterns of RepoSnoozeMenu; state-changing entries fan out to every id.
+ */
+export function RepoBulkMenu({
+  targets,
+  summary,
+  anchorId,
+  disabled,
+  onSnooze,
+  onRhythm,
+  rhythmDisabled,
+  onMarkAllDone,
+  markAllDoneDisabled,
+  onMarkAllRead,
+  markAllReadDisabled,
+  onCopied,
+  bulkBusy,
+  triggerClassName,
+  triggerStyle,
+  visible = true,
+  contextAnchor,
+  onContextClose,
+  onVisibilityReset,
+}: {
+  targets: RepoBulkTarget[];
+  summary: RepoSelectionSummary;
+  /** Row under the cursor; "Open repo" targets it alone. */
+  anchorId: string;
+  disabled?: boolean;
+  onSnooze: (ids: string[], snoozedUntil: number | null) => void;
+  onRhythm: (ids: string[], rhythm: string) => void;
+  rhythmDisabled?: boolean;
+  onMarkAllDone: (ids: string[]) => void;
+  markAllDoneDisabled?: boolean;
+  onMarkAllRead: (ids: string[]) => void;
+  markAllReadDisabled?: boolean;
+  onCopied?: (ids: string[], ok: boolean) => void;
+  /** True while any selected repo has an update in flight; locks edits. */
+  bulkBusy?: boolean;
+  triggerClassName?: string;
+  triggerStyle?: React.CSSProperties;
+  visible?: boolean;
+  contextAnchor?: { x: number; y: number } | null;
+  onContextClose?: () => void;
+  onVisibilityReset?: () => void;
+}) {
+  const ids = targets.map((t) => t.id);
+  const count = targets.length;
+  const title = `${count} ${count === 1 ? "repository" : "repositories"}`;
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const [presets, setPresets] = React.useState(() => inboxPresets(Date.now()));
+  // Unique hint ids per menu instance for aria-describedby below.
+  const hintIdBase = React.useId();
+  const markAllDoneHintId = `${hintIdBase}-done-hint`;
+  const markAllReadHintId = `${hintIdBase}-read-hint`;
+  const contextCloseRef = React.useRef(onContextClose);
+  contextCloseRef.current = onContextClose;
+  const onVisibilityResetRef = React.useRef(onVisibilityReset);
+  onVisibilityResetRef.current = onVisibilityReset;
+
+  const doneable = summary.pending;
+  const readable = summary.readable;
+  const anySnoozed = summary.snoozed !== "none";
+  const markAllDoneLabel = `Mark all as done (${doneable})`;
+  const markAllReadLabel = `Mark all as read (${readable})`;
+  const markAllDoneHint =
+    count === 1 ? "Removes from inbox" : `Applies to ${count} repositories`;
+  const markAllReadHint = count === 1 ? "Stays in list" : `Applies to ${count} repositories`;
+
+  function resetVisibility() {
+    onVisibilityResetRef.current?.();
+  }
+
+  function openMenu() {
+    setPresets(inboxPresets(Date.now()));
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const height = 9 * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
+      const below = rect.bottom + MENU_GAP;
+      const top =
+        below + height + MENU_GAP > window.innerHeight
+          ? Math.max(MENU_GAP, rect.top - height - MENU_GAP)
+          : below;
+      setPos({
+        top,
+        left: Math.max(
+          MENU_GAP,
+          Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - MENU_GAP)
+        ),
+      });
+    }
+    setOpen(true);
+  }
+
+  function closeAll(focusTrigger = false) {
+    setOpen(false);
+    contextCloseRef.current?.();
+    if (focusTrigger) triggerRef.current?.focus();
+  }
+
+  function refocusForClick(e: React.SyntheticEvent): boolean {
+    const detail = (e as unknown as { detail?: number }).detail;
+    return detail === 0;
+  }
+
+  // Right-click on a selected row opens the combined menu at the cursor.
+  React.useEffect(() => {
+    if (!contextAnchor) return;
+    setPresets(inboxPresets(Date.now()));
+    const height = 9 * MENU_ITEM_HEIGHT + MENU_LIST_PADDING;
+    setPos({
+      top: Math.max(MENU_GAP, Math.min(contextAnchor.y, window.innerHeight - height - MENU_GAP)),
+      left: Math.max(
+        MENU_GAP,
+        Math.min(contextAnchor.x, window.innerWidth - MENU_WIDTH - MENU_GAP)
+      ),
+    });
+    setOpen(true);
+  }, [contextAnchor]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const buttons = menuRef.current?.querySelectorAll("button") ?? [];
+    [...buttons].find((b) => !b.disabled)?.focus();
+  }, [open ]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      const target = e.target as Node | null;
+      if (
+        target &&
+        !menuRef.current?.contains(target) &&
+        !triggerRef.current?.contains(target)
+      ) {
+        setOpen(false);
+        contextCloseRef.current?.();
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeAll(true);
+    }
+    function onScroll(e: Event) {
+      // Scrolls inside the menu (wheel over the list, keyboard focus moving
+      // rows into view) must not dismiss it; only outside scrolls and
+      // resizes close it.
+      if (e.type === "scroll" && e.target instanceof Node && menuRef.current?.contains(e.target)) {
+        return;
+      }
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open ]);
+
+  function moveFocus(target: HTMLElement, delta: 1 | -1) {
+    const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
+      (b) => !b.disabled
+    );
+    const idx = buttons.indexOf(target as HTMLButtonElement);
+    const next = buttons[(idx + delta + buttons.length) % buttons.length];
+    next?.focus();
+  }
+
+  function chooseSnooze(at: number | null, e: React.SyntheticEvent) {
+    if (bulkBusy || disabled) return;
+    resetVisibility();
+    closeAll(refocusForClick(e));
+    onSnooze(ids, at);
+  }
+
+  function chooseRhythm(value: string, e: React.SyntheticEvent) {
+    if (bulkBusy || disabled || rhythmDisabled || value === summary.rhythm) return;
+    closeAll(refocusForClick(e));
+    onRhythm(ids, value);
+  }
+
+  const anchor = targets.find((t) => t.id === anchorId) ?? targets[0];
+  const anchorUrl = anchor ? `https://github.com/${anchor.fullName}` : null;
+
+  function openAnchorRepo(e: React.SyntheticEvent) {
+    if (!anchorUrl) return;
+    resetVisibility();
+    closeAll(refocusForClick(e));
+    window.open(anchorUrl, "_blank", "noopener");
+  }
+
+  async function copyAllLinks(e: React.SyntheticEvent) {
+    const keyboard = refocusForClick(e);
+    resetVisibility();
+    const ok = await copyText(
+      targets.map((t) => `https://github.com/${t.fullName}`).join("\n")
+    );
+    closeAll(keyboard);
+    onCopied?.(ids, ok);
+  }
+
+  const shown = open || visible;
+
+  return (
+    <>
+      <HintTooltip label={`Actions for ${title}`}>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Actions for ${title}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          disabled={disabled}
+          style={{
+            ...triggerStyle,
+            opacity: shown ? 1 : 0,
+            pointerEvents: shown ? "auto" : "none",
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (open) closeAll();
+            else openMenu();
+          }}
+          className={cn(
+            "shrink-0 cursor-pointer rounded-md p-1.5 text-muted-foreground transition-opacity duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+            triggerClassName
+          )}
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
+        </button>
+      </HintTooltip>
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label={`Actions for ${title}`}
+              onKeyDown={(e) => {
+                const down = e.key === "ArrowDown" || e.key === "j";
+                const up = e.key === "ArrowUp" || e.key === "k";
+                if (down || up) {
+                  e.preventDefault();
+                  moveFocus(e.target as HTMLElement, down ? 1 : -1);
+                }
+              }}
+              className="fixed z-50 max-h-[80vh] overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-md"
+              style={{ top: pos.top, left: pos.left, width: 260 }}
+            >
+              <p aria-hidden="true" className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                {title}
+              </p>
+              <button
+                type="button"
+                role="menuitem"
+                aria-label={markAllDoneLabel}
+                aria-describedby={markAllDoneHintId}
+                disabled={markAllDoneDisabled || doneable === 0}
+                onClick={(e) => {
+                  resetVisibility();
+                  closeAll(refocusForClick(e));
+                  onMarkAllDone(ids);
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckCheck className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{markAllDoneLabel}</span>
+                  <span id={markAllDoneHintId} className="block truncate text-xs text-muted-foreground">{markAllDoneHint}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                aria-label={markAllReadLabel}
+                aria-describedby={markAllReadHintId}
+                disabled={markAllReadDisabled || readable === 0}
+                onClick={(e) => {
+                  resetVisibility();
+                  closeAll(refocusForClick(e));
+                  onMarkAllRead(ids);
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <MailOpen className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{markAllReadLabel}</span>
+                  <span id={markAllReadHintId} className="block truncate text-xs text-muted-foreground">{markAllReadHint}</span>
+                </span>
+              </button>
+              <p aria-hidden="true" className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                Rhythm{summary.rhythm && summary.rhythm !== "mixed" ? ` · ${rhythmLabel(summary.rhythm)}` : ""}
+              </p>
+              {summary.rhythm === "mixed" ? (
+                <p className="px-3 pb-1 text-xs text-muted-foreground">Mixed</p>
+              ) : null}
+              {RHYTHM_OPTIONS.map((o) => {
+                const current = o.value === summary.rhythm;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={current}
+                    disabled={bulkBusy || disabled || rhythmDisabled || current}
+                    onClick={(e) => chooseRhythm(o.value, e)}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+                      {current ? <Check className="h-4 w-4" /> : null}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                  </button>
+                );
+              })}
+              <p aria-hidden="true" className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                Snooze
+              </p>
+              {summary.snoozed !== "none" ? (
+                <p className="px-3 pb-1 text-xs text-muted-foreground">
+                  {summary.snoozed === "mixed" ? "Mixed" : "Snoozed"}
+                </p>
+              ) : null}
+              {presets.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  role="menuitem"
+                  disabled={bulkBusy || disabled}
+                  onClick={(e) => chooseSnooze(p.at, e)}
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Clock className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{p.label}</span>
+                </button>
+              ))}
+              {anySnoozed ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={bulkBusy || disabled}
+                  onClick={(e) => chooseSnooze(null, e)}
+                  className="flex w-full cursor-pointer items-center gap-2 border-t border-border/40 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="min-w-0 flex-1 truncate">Unsnooze all</span>
+                </button>
+              ) : null}
+              <p aria-hidden="true" className="px-3 pt-1.5 pb-0.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                Links
+              </p>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={openAnchorRepo}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">Open repo{anchor ? ` (${anchor.fullName})` : ""}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={copyAllLinks}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <Link2 className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">Copy {count} {count === 1 ? "link" : "links"}</span>
+              </button>
             </div>,
             document.body
           )

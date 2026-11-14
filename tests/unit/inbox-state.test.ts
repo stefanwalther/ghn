@@ -8,6 +8,8 @@ import {
   nextRepoAfterMarkDone,
   nextSelection,
   pollWindow,
+  rangeSelection,
+  summarizeRepoSelection,
   toggleAllSelection,
 } from "@/lib/inbox-state";
 
@@ -53,6 +55,127 @@ describe("selection", () => {
 
   test("selecting everything on an empty list clears the selection", () => {
     expect([...toggleAllSelection([], new Set(["a"]))]).toEqual([]);
+  });
+});
+
+describe("range selection", () => {
+  const visible = ["a", "b", "c", "d"];
+
+  test("null anchor behaves as a toggle of the target", () => {
+    expect([...rangeSelection(visible, null, "b", new Set(["a"]))]).toEqual(["a", "b"]);
+    expect([...rangeSelection(visible, null, "a", new Set(["a"]))]).toEqual([]);
+  });
+
+  test("shift-click extends a forward range from the anchor", () => {
+    expect([...rangeSelection(visible, "a", "c", new Set(["a"]))]).toEqual(["a", "b", "c"]);
+  });
+
+  test("shift-click extends a backward range from the anchor", () => {
+    expect([...rangeSelection(visible, "d", "b", new Set(["d"]))].sort()).toEqual(["b", "c", "d"]);
+  });
+
+  test("shift-click on the anchor changes nothing", () => {
+    expect([...rangeSelection(visible, "b", "b", new Set(["a", "b"]))]).toEqual(["a", "b"]);
+  });
+
+  test("range unions with the existing selection", () => {
+    expect([...rangeSelection(visible, "c", "d", new Set(["a"]))]).toEqual(["a", "c", "d"]);
+  });
+
+  test("target outside the visible list leaves the selection unchanged", () => {
+    expect([...rangeSelection(visible, "a", "zzz", new Set(["a"]))]).toEqual(["a"]);
+  });
+
+  test("anchor outside the visible list behaves as a toggle of the target", () => {
+    expect([...rangeSelection(visible, "zzz", "b", new Set(["a"]))]).toEqual(["a", "b"]);
+  });
+
+  test("range selection does not mutate the set it was given", () => {
+    const before = new Set(["a"]);
+    rangeSelection(visible, "a", "c", before);
+    expect([...before]).toEqual(["a"]);
+  });
+});
+
+describe("repo selection summary", () => {
+  const repos = [
+    { id: "a", main: 3, quiet: 1, isSnoozed: false, rhythm: "immediate" },
+    { id: "b", main: 0, quiet: 4, isSnoozed: true, rhythm: "weekly" },
+    { id: "c", main: 2, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+  ];
+
+  test("empty selection reports zero counts and no rhythm", () => {
+    expect(summarizeRepoSelection(repos, [])).toEqual({
+      ids: [],
+      pending: 0,
+      readable: 0,
+      rhythm: null,
+      snoozed: "none",
+    });
+  });
+
+  test("combined counts sum visible pending and readable totals", () => {
+    const summary = summarizeRepoSelection(repos, ["a", "c"]);
+    expect(summary.ids).toEqual(["a", "c"]);
+    expect(summary.pending).toBe(3 + 1 + 2);
+    expect(summary.readable).toBe(3 + 1 + 2);
+  });
+
+  test("explicit pending and readable fields win over visible totals", () => {
+    const withExplicit = [
+      { id: "a", main: 3, quiet: 1, pending: 10, readable: 7, isSnoozed: false },
+      { id: "c", main: 2, quiet: 0, pending: 0, readable: 0, isSnoozed: false },
+    ];
+    const summary = summarizeRepoSelection(withExplicit, ["a", "c"]);
+    expect(summary.pending).toBe(10);
+    expect(summary.readable).toBe(7);
+  });
+
+  test("unknown ids are ignored", () => {
+    const summary = summarizeRepoSelection(repos, ["a", "zzz"]);
+    expect(summary.ids).toEqual(["a"]);
+    expect(summary.pending).toBe(4);
+  });
+
+  test("agreeing rhythms report the common rhythm", () => {
+    expect(summarizeRepoSelection(repos, ["a", "c"]).rhythm).toBe("immediate");
+  });
+
+  test("missing rhythm info reports null rather than mixed", () => {
+    const noRhythm = repos.map((r) => ({
+      id: r.id,
+      main: r.main,
+      quiet: r.quiet,
+      isSnoozed: r.isSnoozed,
+    }));
+    expect(summarizeRepoSelection(noRhythm, ["a", "c"]).rhythm).toBeNull();
+  });
+
+  test("disagreeing rhythms report mixed", () => {
+    expect(summarizeRepoSelection(repos, ["a", "b"]).rhythm).toBe("mixed");
+  });
+
+  test("partially known agreeing rhythms report unknown, not common", () => {
+    const partial = [
+      { id: "a", main: 1, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "b", main: 1, quiet: 0, isSnoozed: false },
+    ];
+    expect(summarizeRepoSelection(partial, ["a", "b"]).rhythm).toBeNull();
+  });
+
+  test("partially known disagreeing rhythms report mixed", () => {
+    const partial = [
+      { id: "a", main: 1, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "b", main: 1, quiet: 0, isSnoozed: false, rhythm: "weekly" },
+      { id: "c", main: 1, quiet: 0, isSnoozed: false },
+    ];
+    expect(summarizeRepoSelection(partial, ["a", "b", "c"]).rhythm).toBe("mixed");
+  });
+
+  test("snooze reports none, all, or mixed", () => {
+    expect(summarizeRepoSelection(repos, ["a", "c"]).snoozed).toBe("none");
+    expect(summarizeRepoSelection(repos, ["b"]).snoozed).toBe("all");
+    expect(summarizeRepoSelection(repos, ["a", "b"]).snoozed).toBe("mixed");
   });
 });
 
@@ -224,6 +347,24 @@ describe("next repo after mark done", () => {
     expect(nextRepoAfterMarkDone(repos, "a", "a")).toBe("b");
   });
 
+  test("bulk done skips every emptied repository", () => {
+    expect(nextRepoAfterMarkDone(repos, "b", ["a", "b"])).toBe("c");
+    expect(nextRepoAfterMarkDone(repos, "c", ["b", "c"])).toBe("a");
+    expect(nextRepoAfterMarkDone(repos, "b", ["a", "b", "c"])).toBe("all");
+    expect(nextRepoAfterMarkDone(repos, "a", ["b", "c"])).toBeNull();
+  });
+
+  test("bulk done lands on the visual successor, not the old index", () => {
+    const five = [
+      { id: "a", main: 1, quiet: 0 },
+      { id: "b", main: 1, quiet: 0 },
+      { id: "c", main: 1, quiet: 0 },
+      { id: "d", main: 1, quiet: 0 },
+      { id: "e", main: 1, quiet: 0 },
+    ];
+    expect(nextRepoAfterMarkDone(five, "c", ["a", "c"])).toBe("d");
+  });
+
   test("selects the previous repo when the emptied one was last", () => {
     expect(nextRepoAfterMarkDone(repos, "c", "c")).toBe("b");
   });
@@ -276,6 +417,15 @@ describe("pending display intents", () => {
     ], "v1");
     expect(next.map((r) => r.id)).toEqual(["b"]);
     expect(next[0]?.isRead).toBe(1);
+  });
+
+  test("a repo-scoped intent with a non-repo action folds the id list", () => {
+    const next = applyPendingIntents(
+      base.map((r) => ({ ...r, isDone: 1 })),
+      [{ action: "unread", ids: ["a"], state: "done", repositoryId: "web", viewKey: "v1" }],
+      "v1"
+    );
+    expect(next.map((r) => r.id)).toEqual(["b"]);
   });
 
   test("intents from another view do not apply", () => {

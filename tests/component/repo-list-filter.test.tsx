@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FilterSidebar } from "@/components/inbox/filter-sidebar";
 import { CommandPalette } from "@/components/search/command-palette";
@@ -129,7 +129,7 @@ describe("FilterSidebar repository search", () => {
 
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Filter by other/docs" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 repositories");
+    expect(screen.getByText("1 of 3 repositories")).toBeInTheDocument();
   });
 
   test("clearing restores every repository", () => {
@@ -155,7 +155,9 @@ describe("FilterSidebar repository search", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Filter repositories" }), {
       target: { value: "zzz-no-such-repo" },
     });
-    expect(screen.getByRole("status")).toHaveTextContent("No repositories match");
+    expect(
+      screen.getAllByRole("status").some((s) => s.textContent?.includes("No repositories match"))
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Clear the filter/ }));
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
   });
@@ -185,7 +187,443 @@ describe("FilterSidebar repository search", () => {
     });
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filter by other/docs" })).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("No repositories match")).not.toBeInTheDocument();
+  });
+});
+
+describe("FilterSidebar multi-select", () => {
+  function renderSidebar(overrides = {}) {
+    const props = {
+      types: typeFacets,
+      activeType: "all",
+      repos: repoFacets,
+      activeRepo: "all",
+      onType: vi.fn(),
+      onRepo: vi.fn(),
+      ...overrides,
+    };
+    render(<FilterSidebar {...props} />);
+    return props;
+  }
+
+  function row(name: string) {
+    return screen.getByRole("button", { name: `Filter by ${name}` });
+  }
+
+  test("ctrl-click toggles selection without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("ctrl-click again deselects the row", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("shift-click extends a range from the anchor in display order", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("acme/api"), { shiftKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    expect(row("acme/api")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("plain click clears the selection and filters as today", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).toHaveBeenCalledWith("other--docs");
+  });
+
+  test("escape clears the selection without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.keyDown(row("acme/web"), { key: "Escape" });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("clicking empty sidebar space clears the selection without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(screen.getByLabelText("Repository filters"));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("shift-arrow extends a range from the anchor", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    row("acme/web").focus();
+    fireEvent.keyDown(row("acme/web"), { key: "ArrowDown", shiftKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("FilterSidebar bulk menu", () => {
+  function renderBulkSidebar(overrides = {}) {
+    const props = {
+      types: typeFacets,
+      activeType: "all",
+      repos: repoFacets,
+      activeRepo: "all",
+      onType: vi.fn(),
+      onRepo: vi.fn(),
+      onSnooze: vi.fn(),
+      onRhythm: vi.fn(),
+      onBulkSnooze: vi.fn(),
+      onBulkRhythm: vi.fn(),
+      onBulkDone: vi.fn(),
+      onBulkRead: vi.fn(),
+      onBulkCopied: vi.fn(),
+      ...overrides,
+    };
+    render(<FilterSidebar {...props} />);
+    return props;
+  }
+
+  function row(name: string) {
+    return screen.getByRole("button", { name: `Filter by ${name}` });
+  }
+
+  function selectTwo() {
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+  }
+
+  test("right-click on a selected row opens one menu for the whole selection", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+  });
+
+  test("choosing a snooze preset fans out to every selected repository", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^In 1 hour/ }));
+    expect(props.onBulkSnooze).toHaveBeenCalledTimes(1);
+    const [ids, at] = props.onBulkSnooze.mock.calls[0];
+    expect([...ids].sort()).toEqual(["acme--web", "other--docs"]);
+    expect(typeof at).toBe("number");
+  });
+
+  test("disagreeing rhythms show as mixed", () => {
+    const repos = [
+      { id: "acme--web", fullName: "acme/web", main: 3, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "other--docs", fullName: "other/docs", main: 2, quiet: 0, isSnoozed: false, rhythm: "weekly" },
+    ];
+    renderBulkSidebar({ repos });
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByText("Mixed")).toBeInTheDocument();
+  });
+
+  test("all-snoozed selections name the snoozed state, mixed names mixed", () => {
+    const repos = [
+      { id: "acme--web", fullName: "acme/web", main: 3, quiet: 0, isSnoozed: true },
+      { id: "acme--api", fullName: "acme/api", main: 0, quiet: 4, isSnoozed: true },
+    ];
+    renderBulkSidebar({ repos });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    expect(
+      screen.getByRole("menu", { name: "Actions for 1 repository" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Snoozed")).toBeInTheDocument();
+  });
+
+  test("right-click on an unselected row clears the selection and targets one repo", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/api"));
+    expect(
+      screen.getByRole("menu", { name: "Actions for acme/api" })
+    ).toBeInTheDocument();
+    expect(props.onBulkSnooze).not.toHaveBeenCalled();
+  });
+
+  test("trigger button opens the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    const triggers = screen.getAllByRole("button", { name: "Actions for 2 repositories" });
+    expect(triggers).toHaveLength(2);
+    fireEvent.click(triggers[0]!);
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+  });
+
+  test("rhythm, done, and read entries fan out to the whole selection", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Weekly" }));
+    expect(props.onBulkRhythm).toHaveBeenCalledTimes(1);
+    expect(props.onBulkRhythm.mock.calls[0]).toEqual([["acme--web", "other--docs"], "weekly"]);
+
+    fireEvent.contextMenu(row("acme/web"));
+    const reopened = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(reopened).toBeInTheDocument();
+    fireEvent.click(within(reopened).getByRole("menuitem", { name: "Mark all as done (5)" }));
+    expect(props.onBulkDone).toHaveBeenCalledTimes(1);
+    expect(props.onBulkDone.mock.calls[0]).toEqual([["acme--web", "other--docs"]]);
+
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as read (5)" }));
+    expect(props.onBulkRead).toHaveBeenCalledTimes(1);
+    expect(props.onBulkRead.mock.calls[0]).toEqual([["acme--web", "other--docs"]]);
+  });
+
+  test("copy joins every selected link and open targets the anchor row", async () => {
+    const props = renderBulkSidebar();
+    const writeSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText: writeSpy },
+      configurable: true,
+    });
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      selectTwo();
+      fireEvent.contextMenu(row("other/docs"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy 2 links" }));
+      await waitFor(() => {
+        expect(writeSpy).toHaveBeenCalledWith(
+          "https://github.com/acme/web\nhttps://github.com/other/docs"
+        );
+      });
+      expect(props.onBulkCopied).toHaveBeenCalledWith(["acme--web", "other--docs"], true);
+
+      fireEvent.contextMenu(row("other/docs"));
+      fireEvent.click(screen.getByRole("menuitem", { name: /Open repo/ }));
+      expect(openSpy).toHaveBeenCalledWith("https://github.com/other/docs", "_blank", "noopener");
+    } finally {
+      vi.unstubAllGlobals();
+      openSpy.mockRestore();
+    }
+  });
+
+  test("unsnooze appears when any selected repo is snoozed", () => {
+    const props = renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("acme/api"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unsnooze all" }));
+    expect(props.onBulkSnooze).toHaveBeenCalledTimes(1);
+    expect(props.onBulkSnooze.mock.calls[0]).toEqual([["acme--web", "acme--api"], null]);
+  });
+
+  test("escape closes the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+    fireEvent.keyDown(document.documentElement, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("escape on the trigger moves focus to the row before clearing", () => {
+    const props = renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 1 repository" })).toBeInTheDocument();
+    fireEvent.keyDown(document.documentElement, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Actions for 1 repository" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(document.activeElement).toBe(row("acme/web"));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("selection count is announced as it changes", () => {
+    renderBulkSidebar();
+    // Mounted from the start so the first selection is announced reliably.
+    const live = screen.getByRole("status");
+    expect(live).toBeEmptyDOMElement();
+    const r = row("acme/web");
+    fireEvent.click(r, { ctrlKey: true });
+    expect(live).toHaveTextContent("1 repository selected");
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(live).toHaveTextContent("2 repositories selected");
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    expect(live).toHaveTextContent("1 repository selected");
+  });
+
+  test("menu keystrokes never reach the row selection", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    const done = within(menu).getByRole("menuitem", { name: "Mark all as done (5)" });
+    done.focus();
+    // Shift+Arrow on the open menu must not reshape the row selection.
+    fireEvent.keyDown(done, { key: "ArrowDown", shiftKey: true });
+    expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    // Escape closes the menu but keeps the selection behind it.
+    fireEvent.keyDown(done, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("2 repositories selected");
+  });
+
+  test("single-repo updates disable bulk snooze and rhythm entries", () => {
+    renderBulkSidebar({ snoozeDisabled: true });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(within(menu).getByRole("menuitem", { name: /^In 1 hour/ })).toBeDisabled();
+    expect(within(menu).getByRole("menuitemradio", { name: "Weekly" })).toBeDisabled();
+  });
+
+  test("partially known rhythm keeps the known choice enabled", () => {
+    const repos = [
+      { id: "acme--web", fullName: "acme/web", main: 3, quiet: 0, isSnoozed: false, rhythm: "immediate" },
+      { id: "other--docs", fullName: "other/docs", main: 2, quiet: 0, isSnoozed: false },
+    ];
+    renderBulkSidebar({ repos });
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(within(menu).getByRole("menuitemradio", { name: "Immediate" })).toBeEnabled();
+    expect(within(menu).queryByText("Mixed")).not.toBeInTheDocument();
+  });
+
+  test("arrow keys move focus between combined entries", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    const done = within(menu).getByRole("menuitem", { name: "Mark all as done (5)" });
+    const read = within(menu).getByRole("menuitem", { name: "Mark all as read (5)" });
+    done.focus();
+    fireEvent.keyDown(done, { key: "ArrowDown" });
+    expect(read).toHaveFocus();
+    fireEvent.keyDown(read, { key: "ArrowUp" });
+    expect(done).toHaveFocus();
+  });
+
+  test("clicking outside closes the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("scrolling closes the combined menu", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  test("scrolling inside the combined menu keeps it open", () => {
+    renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    fireEvent.scroll(menu);
+    expect(screen.getByRole("menu", { name: "Actions for 2 repositories" })).toBeInTheDocument();
+  });
+
+  test("ctrl-shift-click extends the range without moving the anchor", () => {
+    renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    // Display order is regular rows then snoozed rows, so a range from the
+    // anchor to the snoozed row spans all three; a plain toggle would not.
+    fireEvent.click(row("acme/api"), { ctrlKey: true, shiftKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    expect(row("acme/api")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("hidden rows keep their selection across collapse and search", () => {
+    renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse repository filters" }));
+    expect(screen.queryByRole("button", { name: "Filter by acme/web" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand repository filters" }));
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("bulk actions include selections hidden by the search box", () => {
+    const props = renderBulkSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Filter repositories" }), {
+      target: { value: "web" },
+    });
+    expect(screen.queryByRole("button", { name: "Filter by other/docs" })).not.toBeInTheDocument();
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^In 1 hour/ }));
+    expect(props.onBulkSnooze).toHaveBeenCalledTimes(1);
+    expect(props.onBulkSnooze.mock.calls[0][0]).toEqual(["acme--web", "other--docs"]);
+  });
+
+  test("escape on the trigger after menu close clears the selection", () => {
+    const props = renderBulkSidebar();
+    selectTwo();
+    fireEvent.contextMenu(row("acme/web"));
+    fireEvent.keyDown(document.documentElement, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    const trigger = screen.getAllByRole("button", { name: "Actions for 2 repositories" })[0]!;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("busy targets disable bulk triage entries", () => {
+    renderBulkSidebar({ busyRepoIds: new Set(["acme--web"]) });
+    selectTwo();
+    fireEvent.contextMenu(row("other/docs"));
+    const menu = screen.getByRole("menu", { name: "Actions for 2 repositories" });
+    expect(within(menu).getByRole("menuitem", { name: "Mark all as done (5)" })).toBeDisabled();
+    expect(within(menu).getByRole("menuitem", { name: "Mark all as read (5)" })).toBeDisabled();
+  });
+
+  test("shift-arrow does not reach outer key handlers", () => {
+    const onOuterKeyDown = vi.fn();
+    render(
+      <div onKeyDown={onOuterKeyDown}>
+        <FilterSidebar
+          types={typeFacets}
+          activeType="all"
+          repos={repoFacets}
+          activeRepo="all"
+          onType={vi.fn()}
+          onRepo={vi.fn()}
+          onBulkSnooze={vi.fn()}
+          onBulkRhythm={vi.fn()}
+          onBulkDone={vi.fn()}
+          onBulkRead={vi.fn()}
+        />
+      </div>
+    );
+    const target = screen.getByRole("button", { name: "Filter by acme/web" });
+    fireEvent.click(target, { ctrlKey: true });
+    target.focus();
+    fireEvent.keyDown(target, { key: "ArrowDown", shiftKey: true });
+    expect(onOuterKeyDown).not.toHaveBeenCalled();
+    fireEvent.keyDown(target, { key: "ArrowDown" });
+    expect(onOuterKeyDown).toHaveBeenCalledTimes(1);
   });
 });
 
