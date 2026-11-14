@@ -12,7 +12,7 @@ import {
   markThreadDone,
   markThreadRead,
   probeConnection,
-  resolveSubjectHtmlUrl,
+  resolveSubject,
   setSubscriptionIgnored,
   type GhThread,
 } from "@/lib/github";
@@ -504,83 +504,22 @@ describe("fetchCheckSummary", () => {
   });
 });
 
-describe("resolveSubjectHtmlUrl", () => {
-  // A thread without a subject api url falls back to the repository's own
-  // page.
-  test("a thread without a subject api url falls back to the repository page", async () => {
-    const url = await resolveSubjectHtmlUrl(
-      "token",
-      thread({ subjectApiUrl: "" }),
-      new Map()
-    );
-    expect(url).toBe("https://github.com/acme/web");
-  });
-
-  // A repository without a page of its own falls back to the repository
-  // name.
-  test("a repository without a page falls back to its name", async () => {
-    const url = await resolveSubjectHtmlUrl(
-      "token",
-      thread({ subjectApiUrl: "", repoHtmlUrl: "", repoFullName: "acme/web" }),
-      new Map()
-    );
-    expect(url).toBe("https://github.com/acme/web");
-  });
-
-  // A subject api url that does not point at a pull request or an issue
-  // falls back to the repository's own page.
-  test("a subject api url without a number falls back to the repository page", async () => {
-    const url = await resolveSubjectHtmlUrl(
-      "token",
-      thread({ subjectApiUrl: "https://api.github.com/repos/acme/web" }),
-      new Map()
-    );
-    expect(url).toBe("https://github.com/acme/web");
-  });
-
-  // A rejected subject request falls back to the pull request's own page,
-  // which the subject api url already identifies.
-  test("a rejected subject request falls back to the pull request page", async () => {
+describe("resolveSubject failures", () => {
+  test.each([
+    { subjectApiUrl: "" },
+    { subjectApiUrl: "", repoHtmlUrl: "" },
+    { subjectApiUrl: "https://api.github.com/repos/acme/web" },
+  ])("falls back to the repository page for %j", async (overrides) => {
     stubFetch(() => new Response("{}", { status: 404 }));
-    const cache = new Map<string, string>();
-    const url = await resolveSubjectHtmlUrl("token", thread(), cache);
-    expect(url).toBe("https://github.com/acme/web/pull/12");
-    expect(cache.get("https://api.github.com/repos/acme/web/pulls/12")).toBe(
-      "https://github.com/acme/web/pull/12"
-    );
-  });
-
-  // An unreachable endpoint falls back the same way.
-  test("an unreachable endpoint falls back to the pull request page", async () => {
-    stubFetch(() => {
-      throw new Error("connection refused");
+    expect(await resolveSubject("token", thread(overrides))).toEqual({
+      ok: false, url: "https://github.com/acme/web", state: null, merged: null,
     });
-    const url = await resolveSubjectHtmlUrl("token", thread(), new Map());
-    expect(url).toBe("https://github.com/acme/web/pull/12");
   });
 
-  // The resolved url is remembered, so the subject is only looked up once.
-  test("the resolved url is remembered", async () => {
-    const calls = stubFetch(() => json({ html_url: "https://github.com/acme/web/pull/12" }));
-    const cache = new Map<string, string>();
-    const first = await resolveSubjectHtmlUrl("token", thread(), cache);
-    const second = await resolveSubjectHtmlUrl("token", thread(), cache);
-    expect(first).toBe("https://github.com/acme/web/pull/12");
-    expect(second).toBe("https://github.com/acme/web/pull/12");
-    expect(calls).toHaveLength(1);
-  });
-
-  // The merged flag and the state of the subject are recorded for the
-  // filters that need them.
-  test("the merged flag and the state are recorded", async () => {
-    stubFetch(() =>
-      json({ html_url: "https://github.com/acme/web/pull/12", merged: true, state: "closed" })
-    );
-    const github = await import("@/lib/github");
-    await resolveSubjectHtmlUrl("token", thread(), new Map());
-    expect(github.readPrMerged("https://api.github.com/repos/acme/web/pulls/12")).toBe(true);
-    expect(github.readSubjectState("https://api.github.com/repos/acme/web/pulls/12")).toBe(
-      "closed"
-    );
+  test("a network error returns unknown state and the derived PR page", async () => {
+    stubFetch(() => { throw new Error("connection refused"); });
+    expect(await resolveSubject("token", thread())).toEqual({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    });
   });
 });

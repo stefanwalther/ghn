@@ -527,3 +527,69 @@ describe("a repeated sync", () => {
     expect(paths).toContain("/notifications");
   });
 });
+
+describe("US2 subject freshness in one server process (SC-006)", () => {
+  function advanceThreads(pass: number) {
+    standIn.setThreads(buildThreads(standIn.url).map((thread) => ({
+      ...thread, updated_at: new Date(NOW + pass * 120_000).toISOString(),
+    })));
+    process.env.GHN_NOW = String(NOW + pass * 120_000);
+  }
+
+  async function row(id: string) {
+    return (await db.select().from(notifications).where(eq(notifications.id, id)))[0];
+  }
+
+  test("a tracked PR becomes merged on the next incremental sync", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11", state: "open", merged: false });
+    await sync();
+    expect(await row("t_001")).toMatchObject({ subjectState: "open", prMerged: 0 });
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11", state: "closed", merged: true });
+    advanceThreads(1);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+
+    // Keep this repository in the main flow so its Merged facet is visible.
+    await db.update(repositories).set({ rhythm: "immediate", nextDueAt: null }).where(eq(repositories.id, "acme--web"));
+    const { GET } = await import("@/app/api/notifications/route");
+    const response = await GET(new Request("http://localhost/api/notifications?type=merged&state=all"));
+    const body = await response.json();
+    expect(body.facets.types.find((t: { value: string }) => t.value === "merged").count).toBe(1);
+    expect(body.mainFlow).toEqual(expect.arrayContaining([expect.objectContaining({ id: "t_001", prMerged: true, subjectState: "closed" })]));
+  });
+
+  test("a closed issue becomes open on the next incremental sync", async () => {
+    const path = "/repos/test-user/mine/issues/3";
+    standIn.setSubject(path, { html_url: "https://github.com/test-user/mine/issues/3", state: "closed" });
+    await sync();
+    expect(await row("t_002")).toMatchObject({ subjectState: "closed", prMerged: 0 });
+    standIn.setSubject(path, { html_url: "https://github.com/test-user/mine/issues/3", state: "open" });
+    advanceThreads(1);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_002")).toMatchObject({ subjectState: "open", prMerged: 0 });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+  });
+
+  test("a failed subject fetch keeps known values and retries on a later update", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    await sync();
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11-new", state: "open", merged: false });
+    standIn.setScenario(path, { status: 500 });
+    advanceThreads(1);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_001")).toMatchObject({
+      subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/11",
+    });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+    standIn.setScenario(path, null);
+    advanceThreads(2);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_001")).toMatchObject({
+      subjectState: "open", prMerged: 0, sourceUrl: "https://github.com/acme/web/pull/11-new",
+    });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(3);
+  });
+});

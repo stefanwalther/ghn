@@ -26,7 +26,9 @@ function thread(overrides: Partial<GhThread> = {}): GhThread {
   };
 }
 
-const resolveUrl = async () => "https://github.com/acme/web/pull/12";
+const resolve = async () => ({
+  ok: true, url: "https://github.com/acme/web/pull/12", state: "open", merged: false,
+});
 
 describe("the due date backfill", () => {
   // A repository that already has a due date is left alone, and a
@@ -69,7 +71,7 @@ describe("the seed migration", () => {
   // A database that holds no seed rows has nothing to migrate.
   test("a database without seed rows has nothing to migrate", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "9001" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "9001" })], null, 1792000001000, resolve);
 
     const result = await migrateSeedToLive(db);
     expect(result.deletedSeed).toBe(0);
@@ -81,7 +83,7 @@ describe("the empty repository prune", () => {
   // A repository that still holds notifications is kept.
   test("a repository that still holds notifications is kept", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "9002" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "9002" })], null, 1792000001000, resolve);
 
     const result = await pruneEmptyRepositories(db);
     expect(result.pruned).toBe(0);

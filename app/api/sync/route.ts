@@ -9,7 +9,7 @@ import {
   markThreadDone,
   markThreadRead,
   probeConnection,
-  resolveSubjectHtmlUrl,
+  resolveSubject,
   setSubscriptionIgnored,
 } from "@/lib/github";
 import {
@@ -21,7 +21,6 @@ import {
   pruneEmptyRepositories,
   readSyncState,
   reapplyPendingReads,
-  sharedUrlCache,
   upsertThreads,
   writeSyncState,
 } from "@/lib/sync";
@@ -192,13 +191,12 @@ export async function POST(request: Request) {
     });
   }
 
-  const cache = sharedUrlCache();
   const summary = await upsertThreads(
     db,
     threads,
     probe.viewerLogin,
     now,
-    (t) => resolveSubjectHtmlUrl(token, t, cache)
+    (t) => resolveSubject(token, t)
   );
   // Upsert recomputes isRead from the remote unread flag, which would revert
   // a locally-read row whose PATCH is still queued. Restore those while the

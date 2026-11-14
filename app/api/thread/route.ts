@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { notifications } from "@/db/schema";
-import { fetchCheckSummary, fetchDependabotAlert, fetchRelease, fetchSubjectContent, fetchThread, fetchThreadComments, fetchWorkflowRuns, getStoredToken, isReleaseApiUrl, parseBranchFromTitle, parseDependabotAlertCoords, parsePullCoords, parseRepoCoords, releaseApiUrlFromHtml, resolveSubjectHtmlUrl, subjectApiUrlFromHtml, subjectCommentsUrlFromHtml } from "@/lib/github";
+import { fetchCheckSummary, fetchDependabotAlert, fetchRelease, fetchSubjectContent, fetchThread, fetchThreadComments, fetchWorkflowRuns, getStoredToken, isReleaseApiUrl, parseBranchFromTitle, parseDependabotAlertCoords, parsePullCoords, parseRepoCoords, releaseApiUrlFromHtml, resolveSubject, subjectApiUrlFromHtml, subjectCommentsUrlFromHtml } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +55,8 @@ export async function GET(request: Request) {
       // thread to recover the subject url, then persist the fixed sourceUrl.
       const fetched = await fetchThread(token, row.id);
       if (fetched.ok && fetched.data?.subjectApiUrl) {
-        const html = await resolveSubjectHtmlUrl(token, fetched.data, new Map());
+        const snapshot = await resolveSubject(token, fetched.data);
+        const html = snapshot.url;
         const api = subjectApiUrlFromHtml(html);
         if (api && api.includes("/dependabot/alerts/")) {
           resolvedApi = api;

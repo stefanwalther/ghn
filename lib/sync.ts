@@ -2,8 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { notifications, repositories, syncState, writebackQueue } from "@/db/schema";
 import type { Db } from "@/db/client";
 import { computeNextDueAt } from "@/lib/digest";
-import type { GhThread } from "@/lib/github";
-import { readPrMerged, readSubjectState } from "@/lib/github";
+import type { GhThread, SubjectSnapshot } from "@/lib/github";
 
 export function repoIdForFullName(fullName: string): string {
   return fullName.toLowerCase().replace(/\//g, "--");
@@ -36,12 +35,6 @@ export async function readSyncStatus(db: Db, nowMs = Date.now()): Promise<SyncSt
   const stale =
     lastSyncAt !== null && nowMs - lastSyncAt > 2 * pollIntervalSecs * 1000;
   return { lastSyncAt, pollIntervalSecs, stale };
-}
-
-const urlCache = new Map<string, string>();
-
-export function clearUrlCache(): void {
-  urlCache.clear();
 }
 
 async function ensureRepository(
@@ -143,7 +136,7 @@ export async function upsertThreads(
   threads: GhThread[],
   viewerLogin: string | null,
   now: number,
-  resolveUrl: (thread: GhThread) => Promise<string>
+  resolve: (thread: GhThread) => Promise<SubjectSnapshot>
 ): Promise<UpsertSummary> {
   // Paginated GitHub responses can repeat the same thread id on large first
   // syncs. Dedupe by id up front (freshest updatedAt wins) so the insert loop
@@ -175,26 +168,27 @@ export async function upsertThreads(
   });
   const resolved = await mapWithLimit(toResolve, 12, async ({ thread }) => ({
     id: thread.id,
-    url: await resolveUrl(thread),
+    snapshot: await resolve(thread),
   }));
-  const urlById = new Map(resolved.map((r) => [r.id, r.url]));
+  const snapshotById = new Map(resolved.map((r) => [r.id, r.snapshot]));
   for (const { thread, repoId } of pending) {
     const row = existingById.get(thread.id);
+    const snapshot = snapshotById.get(thread.id);
     if (!row) {
       await db.insert(notifications).values({
         id: thread.id,
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
-        subjectState: readSubjectState(thread.subjectApiUrl),
+        subjectState: snapshot?.ok ? snapshot.state : null,
         reason: thread.reason,
         createdAt: thread.updatedAt,
         githubUpdatedAt: thread.updatedAt,
         isRead: thread.unread ? 0 : 1,
         isDone: 0,
         localUnread: 0,
-        prMerged: readPrMerged(thread.subjectApiUrl) ? 1 : 0,
-        sourceUrl: urlById.get(thread.id) ?? "",
+        prMerged: thread.subjectType === "PullRequest" && snapshot?.ok && snapshot.merged === true ? 1 : 0,
+        sourceUrl: snapshot?.url ?? "",
       });
       upserted += 1;
       continue;
@@ -202,7 +196,6 @@ export async function upsertThreads(
     if (row.isDone === 1) {
       continue;
     }
-    const changed = (row.githubUpdatedAt ?? 0) < thread.updatedAt;
     const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
     await db
       .update(notifications)
@@ -210,27 +203,21 @@ export async function upsertThreads(
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
-        subjectState: urlById.has(thread.id)
-          ? readSubjectState(thread.subjectApiUrl)
-          : (row.subjectState ?? null),
+        subjectState: snapshot?.ok ? (snapshot.state ?? row.subjectState) : row.subjectState,
         reason: thread.reason,
         createdAt: thread.updatedAt,
         githubUpdatedAt: thread.updatedAt,
         isRead,
-        prMerged: urlById.has(thread.id)
-          ? readPrMerged(thread.subjectApiUrl) ? 1 : 0
-          : (row.prMerged ?? 0),
-        sourceUrl: changed ? (urlById.get(thread.id) ?? row.sourceUrl) : row.sourceUrl,
+        prMerged: snapshot?.ok
+          ? thread.subjectType === "PullRequest" && snapshot.merged === true ? 1 : 0
+          : row.prMerged,
+        sourceUrl: snapshot?.ok ? snapshot.url : row.sourceUrl,
       })
       .where(eq(notifications.id, thread.id));
     upserted += 1;
   }
   const discoveredRepos = seenRepos.size;
   return { upserted, discoveredRepos, seenRepoIds: [...seenRepos] };
-}
-
-export function sharedUrlCache(): Map<string, string> {
-  return urlCache;
 }
 
 export async function applyRemoteDone(
