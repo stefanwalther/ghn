@@ -1983,6 +1983,86 @@ describe("sidebar multi-select bulk fan-out", () => {
     ).toHaveLength(0);
   });
 
+  test("narrowing filters omit the visible/quiet split from the done dialog", async () => {
+    nav.params = new URLSearchParams("type=pull_request");
+    const narrowedPayload = {
+      ...notificationsPayload,
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 1, quiet: 0, pendingAll: 30, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) return Response.json(narrowedPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by acme/web" }), {
+      ctrlKey: true,
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+    const menu = await screen.findByRole("menu", { name: "Actions for 1 repository" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (30)" }));
+
+    // The repo-wide total counts items the narrowed view hides, so the
+    // difference is not quiet items; the dialog shows the total without a
+    // split instead of a wrong breakdown.
+    expect(
+      await screen.findByRole("alertdialog", { name: /Mark 30 as done/ })
+    ).toHaveTextContent("Removes 30 items from the inbox");
+    expect(screen.getByRole("alertdialog").textContent).not.toContain("quiet");
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+  });
+
+  test("the all view omits the visible/quiet split from the done dialog", async () => {
+    nav.params = new URLSearchParams("state=all");
+    const allPayload = {
+      ...notificationsPayload,
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 27, quiet: 8, pendingAll: 30, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications")) return Response.json(allPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter by acme/web" }), {
+      ctrlKey: true,
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Filter by acme/web" }));
+    const menu = await screen.findByRole("menu", { name: "Actions for 1 repository" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (30)" }));
+
+    // The all view folds already-done rows into facet main, so the split
+    // would describe rows the action never marks done; the dialog shows
+    // the total without a breakdown instead.
+    expect(
+      await screen.findByRole("alertdialog", { name: /Mark 30 as done/ })
+    ).toHaveTextContent("Removes 30 items from the inbox");
+    expect(screen.getByRole("alertdialog").textContent).not.toContain("quiet");
+    expect(callsTo(fetchMock, "/api/notifications/bulk")).toHaveLength(0);
+  });
+
   test("bulk done skips repos with nothing pending", async () => {
     nav.params = new URLSearchParams("repo=acme--api");
     const zeroPayload = {
@@ -2268,6 +2348,62 @@ describe("sidebar multi-select bulk fan-out", () => {
     expect(alert).toHaveTextContent(
       "Partially applied for acme/web: 1 marked done, 1 queued for retry (network)."
     );
+    expect(alert.textContent).not.toMatch(/queued for retry.*queued for retry/);
+  });
+
+  test("bulk done keeps a partial quiet repository out of the hidden summary", async () => {
+    const quietGroup = {
+      repositoryId: "acme--web",
+      repositoryName: "acme/web",
+      rhythm: "weekly",
+      nextDueAt: Date.parse("2026-01-22T09:00:00Z"),
+      nextDueLabel: "in 7 days",
+      pendingCount: 3,
+      isSnoozed: false,
+      snoozeLabel: "Not snoozed",
+    };
+    const quietPayload = {
+      ...notificationsPayload,
+      collapsedSection: [quietGroup],
+      facets: {
+        types: notificationsPayload.facets.types,
+        repos: [
+          { id: "acme--web", fullName: "acme/web", main: 0, quiet: 3, isSnoozed: false },
+          { id: "acme--api", fullName: "acme/api", main: 1, quiet: 0, isSnoozed: false },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.includes("/api/notifications/bulk")) {
+        const body = JSON.parse(String(init?.body)) as { repositoryId?: string };
+        if (body.repositoryId === "acme--web") {
+          return Response.json({ updated: 2, action: "done", remote: "partial", queued: 1, error: "network" });
+        }
+        return Response.json({ updated: 1, action: "done" });
+      }
+      if (url.includes("/api/notifications")) return Response.json(quietPayload);
+      if (url.includes("/api/connection")) return Response.json({ connected: true });
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    selectWebAndApi();
+    const menu = openBulkMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Mark all as done (4)" }));
+
+    // The partial repository still has a queued quiet item, so the hidden
+    // summary covers only fully settled repositories; web's state lives on
+    // the per-repo partial line, reported once.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Partially applied for acme/web: 2 marked done, 1 queued for retry (network)."
+    );
+    expect(alert.textContent).not.toContain("hidden pending items");
     expect(alert.textContent).not.toMatch(/queued for retry.*queued for retry/);
   });
 
