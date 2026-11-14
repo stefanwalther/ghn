@@ -592,13 +592,19 @@ function InboxView() {
     // not clobber a filter change the user made while it ran.
     const startFilters = filters;
     // Totals use repo-wide counts so narrowing filters cannot undercount
-    // what the action will mark done. The visible split below still
-    // describes the current view.
+    // what the action will mark done. The visible split only describes the
+    // current view while type and age stay unfiltered (see splitExact).
     let total = 0;
     let main = 0;
     for (const id of ids) total += pendingOf(id);
     for (const id of ids) main += repoFacets.find((r) => r.id === id)?.main ?? 0;
-    const quiet = Math.max(0, total - main);
+    // The visible/quiet split is only exact when the view covers every
+    // not-done row the same way the repo-wide total does. Facets ignore the
+    // repo filter, but a narrowed type or age filter hides rows the action
+    // still marks done, so the difference would mislabel them as quiet;
+    // omit the split when the counts cannot be trusted.
+    const splitExact = filters.type === "all" && filters.age === "all";
+    const quiet = splitExact ? Math.max(0, total - main) : 0;
     if (!opts?.confirmed && total > BULK_CONFIRM_THRESHOLD) {
       setConfirmDone({ repositoryIds: ids, total, main, quiet });
       return;
@@ -710,10 +716,15 @@ function InboxView() {
       (n, b) => n + (b?.remote === "background" && typeof b?.updated === "number" ? b.updated : 0),
       0
     );
-    // Hidden counts describe only repos that actually completed; failed
-    // repos keep their quiet items and must not appear as marked done.
+    // Hidden counts describe only repos that fully settled: failed repos
+    // keep their quiet items, and a partial repo still has queued quiet
+    // items, so neither may appear as marked done here. Partial state is
+    // reported on the per-repo line instead.
+    const partialIds = new Set(partialPairs.map((p) => p.id));
     const hiddenPending = collapsed
-      .filter((g) => succeeded.includes(g.repositoryId))
+      .filter(
+        (g) => succeeded.includes(g.repositoryId) && !partialIds.has(g.repositoryId)
+      )
       .reduce((n, g) => n + g.pendingCount, 0);
     const hiddenRepoName =
       succeeded.length === 1
