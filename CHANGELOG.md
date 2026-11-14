@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.10.0...ghn-v0.11.0) (2026-11-14)
+
+
+### Features
+
+* **inbox:** multi-select repositories with bulk context menu ([#138](https://github.com/stefanwalther/ghn/issues/138)) ([4163f80](https://github.com/stefanwalther/ghn/commit/4163f802244d91ac38c5ddfff42d79714992e06b))
+
 ## [0.10.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.9.1...ghn-v0.10.0) (2026-11-08)
 
 
