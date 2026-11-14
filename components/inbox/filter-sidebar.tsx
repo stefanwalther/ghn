@@ -461,7 +461,7 @@ export function FilterSidebar({
     onRepo(activeRepo === repo.id ? "all" : repo.id);
   }
 
-  /** Escape clears; Shift+Arrow extends a range and moves focus. */
+  /** Escape clears; modified Space/Enter toggles; Shift+Arrow ranges. */
   function handleRowKeyDown(repo: RepoFacet, e: React.KeyboardEvent) {
     // Menus portal to document.body but stay in this React tree, so their
     // keystrokes bubble here. The menu owns its keys: without this guard an
@@ -479,6 +479,28 @@ export function FilterSidebar({
         }
       }
       clearSelection();
+      return;
+    }
+    // Modified Space/Enter on the row button toggles explicitly: native
+    // activation synthesizes a click whose modifier flags some browsers
+    // may drop, and that click would land in the plain branch, clearing
+    // the selection and switching the filter instead of toggling.
+    // preventDefault cancels the native activation so the toggle cannot
+    // fire twice; menu triggers keep their own activation.
+    if (
+      (e.target as HTMLElement | null)?.closest?.("[data-repo-row]") &&
+      (e.key === "Enter" || e.key === " ") &&
+      (e.metaKey || e.ctrlKey)
+    ) {
+      e.preventDefault();
+      setSelected((prev) =>
+        nextSelection(
+          displayIds.map((id) => ({ id })),
+          prev,
+          repo.id
+        )
+      );
+      setAnchorId(repo.id);
       return;
     }
     if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {

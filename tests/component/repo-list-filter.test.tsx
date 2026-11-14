@@ -226,6 +226,41 @@ describe("FilterSidebar multi-select", () => {
     expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("ctrl-Enter on a focused row toggles it without filtering", () => {
+    const props = renderSidebar();
+    fireEvent.keyDown(row("acme/web"), { key: "Enter", ctrlKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(props.onRepo).not.toHaveBeenCalled();
+  });
+
+  test("ctrl-Space on a focused row toggles it", () => {
+    renderSidebar();
+    fireEvent.keyDown(row("acme/web"), { key: " ", ctrlKey: true });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("modified Enter toggles alongside a kept selection", () => {
+    renderSidebar();
+    fireEvent.click(row("acme/web"), { ctrlKey: true });
+    fireEvent.click(row("other/docs"), { ctrlKey: true });
+    fireEvent.keyDown(row("acme/api"), { key: "Enter", metaKey: true });
+    expect(row("acme/api")).toHaveAttribute("aria-pressed", "true");
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+    expect(row("other/docs")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.keyDown(row("acme/api"), { key: "Enter", metaKey: true });
+    expect(row("acme/api")).toHaveAttribute("aria-pressed", "false");
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("modified keys off the row button never toggle it", () => {
+    renderSidebar();
+    fireEvent.keyDown(row("acme/web").parentElement as HTMLElement, {
+      key: "Enter",
+      metaKey: true,
+    });
+    expect(row("acme/web")).toHaveAttribute("aria-pressed", "false");
+  });
+
   test("shift-click extends a range from the anchor in display order", () => {
     renderSidebar();
     fireEvent.click(row("acme/web"), { ctrlKey: true });
