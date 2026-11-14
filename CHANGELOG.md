@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/stefanwalther/ghn/compare/ghn-v0.11.0...ghn-v0.11.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **inbox:** scope the done split to exact views ([#144](https://github.com/stefanwalther/ghn/issues/144)) ([60a1e00](https://github.com/stefanwalther/ghn/commit/60a1e00ea3b890c5fbeff452b985331737c926f9))
+
 ## [0.11.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.10.0...ghn-v0.11.0) (2026-11-14)
 
 
