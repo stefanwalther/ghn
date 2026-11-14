@@ -46,6 +46,8 @@ import {
 import {
   parseInboxFilters,
   serializeInboxFilters,
+  loadInboxFilters,
+  saveInboxFilters,
   loadLastOpened,
   saveLastOpened,
   FILTER_DEFAULT_WIDTH,
@@ -121,6 +123,43 @@ function InboxView() {
     setSidebarWidth(loadFilterWidth());
     setSidebarReady(true);
   }, []);
+
+  // Remembered filters: a bare entry (empty query) restores the last
+  // explicit set via replace so shared links keep working. Every explicit
+  // navigation overwrites memory, including clears back to defaults.
+  const filterRestoreOnceRef = React.useRef(false);
+  const filterPersistInitRef = React.useRef(false);
+  React.useEffect(() => {
+    if (filterRestoreOnceRef.current) return;
+    filterRestoreOnceRef.current = true;
+    try {
+      if (searchParams.toString() !== "") return;
+      const stored = loadInboxFilters();
+      if (!stored) return;
+      const serialized = serializeInboxFilters(stored);
+      if (!serialized) return;
+      router.replace(`/${serialized}`, { scroll: false });
+    } catch {
+      // fail open: URL defaults render as today
+    }
+  }, [router, searchParams]);
+
+  React.useEffect(() => {
+    try {
+      const raw = searchParams.toString();
+      // Skip only the very first bare render so we never clobber memory
+      // with defaults before the restore above runs. Later empties are
+      // explicit clears and must overwrite memory with defaults.
+      if (!filterPersistInitRef.current) {
+        filterPersistInitRef.current = true;
+        if (raw === "") return;
+      }
+      saveInboxFilters(filters);
+    } catch {
+      // ignore private-mode failures
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   function resizeSidebarTo(clientX: number): void {
     const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
@@ -258,6 +297,11 @@ function InboxView() {
   const refresh = sync.refresh;
 
   function setFilters(next: Filters) {
+    try {
+      saveInboxFilters(next);
+    } catch {
+      // ignore private-mode failures; URL remains canonical
+    }
     router.replace(`/${serializeInboxFilters(next)}`, { scroll: false });
   }
 

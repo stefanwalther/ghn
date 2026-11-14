@@ -2,9 +2,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   DRAWER_DEFAULT_WIDTH,
   DRAWER_MAX_WIDTH,
+  INBOX_FILTERS_KEY,
+  isDefaultInboxFilters,
   loadDrawerWidth,
+  loadInboxFilters,
   loadLastOpened,
   saveDrawerWidth,
+  saveInboxFilters,
   saveLastOpened,
 } from "@/lib/view-state";
 
@@ -129,5 +133,69 @@ describe("the stored drawer width", () => {
       },
     });
     expect(() => saveDrawerWidth(700)).not.toThrow();
+  });
+});
+
+describe("the remembered inbox filters", () => {
+  test("a full filter set round-trips", () => {
+    setGlobal("localStorage", fakeStorage());
+    saveInboxFilters({ repo: "acme/web", state: "unread", type: "pull_request", age: "7d" });
+    expect(loadInboxFilters()).toEqual({
+      repo: "acme/web",
+      state: "unread",
+      type: "pull_request",
+      age: "7d",
+    });
+    expect(isDefaultInboxFilters({ repo: "all", state: "unread", type: "all", age: "all" })).toBe(true);
+    expect(
+      isDefaultInboxFilters({ repo: "acme/web", state: "unread", type: "all", age: "all" })
+    ).toBe(false);
+  });
+
+  test("missing storage means no remembered filters", () => {
+    setGlobal("localStorage", fakeStorage());
+    expect(loadInboxFilters()).toBeNull();
+  });
+
+  test("corrupt JSON falls back to no filters", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(INBOX_FILTERS_KEY, "{oops");
+    expect(loadInboxFilters()).toBeNull();
+  });
+
+  test("wrong version is ignored", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({ version: 999, filters: { repo: "x", state: "all", type: "all", age: "all" } })
+    );
+    expect(loadInboxFilters()).toBeNull();
+  });
+
+  test("invalid fields fall back per-field", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({
+        version: 1,
+        filters: { repo: "", state: "bogus", type: "", age: "bogus" },
+      })
+    );
+    expect(loadInboxFilters()).toEqual({ repo: "all", state: "unread", type: "all", age: "all" });
+  });
+
+  test("throwing storage fails open", () => {
+    setGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("private mode");
+      },
+      setItem: () => {
+        throw new Error("private mode");
+      },
+    });
+    expect(loadInboxFilters()).toBeNull();
+    expect(() =>
+      saveInboxFilters({ repo: "acme/web", state: "all", type: "all", age: "all" })
+    ).not.toThrow();
   });
 });

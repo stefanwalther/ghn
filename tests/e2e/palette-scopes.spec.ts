@@ -210,6 +210,9 @@ test.describe("palette search scopes", () => {
     await expect(page).toHaveURL(/\?state=done$/);
 
     // Fresh inbox so the age assertion reads exact rows, not an intersection.
+    // Filter memory restores the last set on bare visits, so clear it here
+    // to keep this assertion on defaults.
+    await page.evaluate(() => localStorage.clear());
     await page.goto("/");
     await openPalette(page);
     const fresh = page.getByRole("combobox", { name: /Search threads/ });
