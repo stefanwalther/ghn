@@ -101,6 +101,58 @@ export const FILTER_MIN_WIDTH = 200;
 export const FILTER_MAX_WIDTH = 480;
 export const FILTER_DEFAULT_WIDTH = 256;
 
+export const INBOX_FILTERS_KEY = "ghn:inbox-filters";
+export const INBOX_FILTERS_VERSION = 1;
+
+export function isDefaultInboxFilters(filters: InboxFilters): boolean {
+  return (
+    filters.repo === "all" &&
+    filters.state === "unread" &&
+    filters.type === "all" &&
+    filters.age === "all"
+  );
+}
+
+export function loadInboxFilters(): InboxFilters | null {
+  try {
+    const raw = localStorage.getItem(INBOX_FILTERS_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      (parsed as { version?: unknown }).version !== INBOX_FILTERS_VERSION
+    ) {
+      return null;
+    }
+    const f = (parsed as { filters?: unknown }).filters;
+    if (typeof f !== "object" || f === null) return null;
+    const rec = f as Record<string, unknown>;
+    const repoRaw = typeof rec.repo === "string" && rec.repo.trim() !== "" ? rec.repo : "all";
+    const stateRaw = rec.state === "all" || rec.state === "done" ? rec.state : "unread";
+    const typeRaw =
+      typeof rec.type === "string" && rec.type.trim() !== "" ? rec.type : "all";
+    const ageRaw =
+      typeof rec.age === "string" && (AGES as string[]).includes(rec.age)
+        ? (rec.age as AgeFilter)
+        : "all";
+    return { repo: repoRaw, state: stateRaw, type: typeRaw, age: ageRaw };
+  } catch {
+    return null;
+  }
+}
+
+export function saveInboxFilters(filters: InboxFilters): void {
+  try {
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({ version: INBOX_FILTERS_VERSION, filters })
+    );
+  } catch {
+    // ignore private-mode failures
+  }
+}
+
 export function clampFilterWidth(px: number): number {
   if (!Number.isFinite(px)) return FILTER_DEFAULT_WIDTH;
   return Math.min(FILTER_MAX_WIDTH, Math.max(FILTER_MIN_WIDTH, Math.round(px)));
