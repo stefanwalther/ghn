@@ -61,12 +61,65 @@ describe("GET /api/version", () => {
     });
     expect(typeof body.current).toBe("string");
     expect(typeof body.releaseUrl).toBe("string");
+    // Backward compat: absent notes coerce to null.
+    expect(body.releaseName).toBeNull();
+    expect(body.releaseBody).toBeNull();
+    expect(body.publishedAt).toBeNull();
+  });
+
+  test("a release with notes projects the success variant", async () => {
+    standIn.setScenario("/repos/stefanwalther/ghn/releases/latest", {
+      status: 200,
+      body: {
+        tag_name: "v9.9.9",
+        html_url: "https://github.com/stefanwalther/ghn/releases/tag/v9.9.9",
+        name: "ghn-v9.9.9",
+        body: "## Features\n\n* **inbox:** stuff\n",
+        published_at: "2026-11-14T12:00:00Z",
+      },
+    });
+    const { status, body } = await version();
+    expect(status).toBe(200);
+    expect(body).toMatchObject({
+      latest: "9.9.9",
+      updateAvailable: true,
+      releaseName: "ghn-v9.9.9",
+      releaseBody: "## Features\n\n* **inbox:** stuff\n",
+      publishedAt: "2026-11-14T12:00:00Z",
+    });
+  });
+
+  test("empty notes coerce to null but keep the update", async () => {
+    standIn.setScenario("/repos/stefanwalther/ghn/releases/latest", {
+      status: 200,
+      body: {
+        tag_name: "v9.9.9",
+        html_url: "https://github.com/stefanwalther/ghn/releases/tag/v9.9.9",
+        name: "   ",
+        body: "   ",
+        published_at: "not-a-date",
+      },
+    });
+    const { body } = await version();
+    expect(body).toMatchObject({
+      latest: "9.9.9",
+      updateAvailable: true,
+      releaseName: null,
+      releaseBody: null,
+      publishedAt: null,
+    });
   });
 
   test("without releases the route stays quiet", async () => {
     standIn.setScenario("/repos/stefanwalther/ghn/releases/latest", { status: 404 });
     const { body } = await version();
-    expect(body).toMatchObject({ updateAvailable: false, latest: null });
+    expect(body).toMatchObject({
+      updateAvailable: false,
+      latest: null,
+      releaseName: null,
+      releaseBody: null,
+      publishedAt: null,
+    });
   });
 
   test("the disabled check never contacts the release endpoint", async () => {
@@ -78,6 +131,9 @@ describe("GET /api/version", () => {
     });
     const { body } = await version();
     expect(body).toMatchObject({ updateAvailable: false });
+    expect(body.releaseName).toBeNull();
+    expect(body.releaseBody).toBeNull();
+    expect(body.publishedAt).toBeNull();
     expect(standIn.requests).toHaveLength(0);
   });
 });

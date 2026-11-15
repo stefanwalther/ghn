@@ -8,7 +8,8 @@ import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 /**
  * Sidebar footer version. Shows the running version, and when the release
- * check finds a newer tag the badge gains an update dot; the popover with
+ * check finds a newer tag the badge gains an update dot plus the latest
+ * number on one line; the popover with
  * the exact commands for a source or Docker install opens only on click,
  * never on its own. The badge stays so the update can be revisited.
  */
@@ -55,15 +56,15 @@ export function VersionIndicator() {
           type="button"
           onClick={() => setOpen(true)}
           aria-label={`New ghn version ${info.latest} available, running ${info.current}. Open the update dialog.`}
-          className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
         <span>v{info.current}</span>
-        <span className="relative flex h-2 w-2" aria-hidden>
+        <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
         </span>
         <span className="font-medium text-amber-600 dark:text-amber-400">
-          v{info.latest} available
+          v{info.latest}
         </span>
         </button>
       </HintTooltip>
@@ -72,6 +73,9 @@ export function VersionIndicator() {
           current={info.current}
           latest={info.latest ?? ""}
           releaseUrl={info.releaseUrl}
+          releaseName={info.releaseName ?? null}
+          releaseBody={info.releaseBody ?? null}
+          publishedAt={info.publishedAt ?? null}
           onClose={close}
         />
       ) : null}

@@ -4,6 +4,8 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Markdown } from "@/components/inbox/markdown";
+import { GITHUB_REPO_URL } from "@/lib/app-meta";
 import { copyText } from "@/lib/clipboard";
 import { useDialogFocus } from "@/lib/dialog-focus";
 
@@ -19,15 +21,28 @@ interface UpdatePopoverProps {
   current: string;
   latest: string;
   releaseUrl: string;
+  releaseName?: string | null;
+  releaseBody?: string | null;
+  publishedAt?: string | null;
   onClose: () => void;
 }
 
 /**
  * Update popover anchored above the sidebar version badge. The reader is a
  * developer running ghn from source or Docker, so the panel shows the exact
- * commands for both instead of a generic "please update".
+ * commands for both instead of a generic "please update". The "What's
+ * included" section renders the release notes inline so the user can decide
+ * without opening GitHub.
  */
-export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePopoverProps) {
+export function UpdatePopover({
+  current,
+  latest,
+  releaseUrl,
+  releaseName,
+  releaseBody,
+  publishedAt,
+  onClose,
+}: UpdatePopoverProps) {
   const [copied, setCopied] = React.useState<"source" | "docker" | null>(null);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   useDialogFocus(dialogRef);
@@ -52,6 +67,19 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
     }, 1500);
   }
 
+  const trimmedName = typeof releaseName === "string" ? releaseName.trim() : "";
+  const hasName = trimmedName.length > 0;
+  const trimmedBody = typeof releaseBody === "string" ? releaseBody : "";
+  const hasBody = trimmedBody.trim().length > 0;
+  const publishedDate =
+    typeof publishedAt === "string" && publishedAt.trim()
+      ? new Date(publishedAt.trim())
+      : null;
+  const hasDate =
+    publishedDate !== null && !Number.isNaN(publishedDate.getTime())
+      ? publishedDate.toLocaleString()
+      : null;
+
   // Portaled to document.body: this popover renders inside the sticky app
   // sidebar, whose stacking context traps the fixed backdrop below
   // sibling main-column content (filter rows painted over the dialog).
@@ -64,7 +92,7 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
         role="dialog"
         aria-modal="true"
         aria-label="Update available"
-        className="absolute bottom-16 left-4 w-[calc(100%_-_2rem)] max-w-md rounded-lg bg-card p-6 shadow-md"
+        className="absolute bottom-16 left-4 max-h-[calc(100dvh-6rem)] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto rounded-lg bg-card p-6 shadow-md"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -80,6 +108,28 @@ export function UpdatePopover({ current, latest, releaseUrl, onClose }: UpdatePo
         <p className="mt-2 text-sm text-muted-foreground">
           This install runs v{current}. v{latest} is out.
         </p>
+        <div className="mt-4">
+          <h3 className="text-sm font-medium">What&apos;s included in v{latest}</h3>
+          {hasName || hasDate ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {hasName ? <span>{trimmedName}</span> : null}
+              {hasName && hasDate ? " · " : null}
+              {hasDate ? <span>Published {hasDate}</span> : null}
+            </p>
+          ) : null}
+          {hasBody ? (
+            <div
+              data-testid="update-notes"
+              className="mt-2 max-h-[40dvh] min-h-24 overflow-y-auto rounded-md border border-input bg-background p-3"
+            >
+              <Markdown text={trimmedBody} repositoryUrl={GITHUB_REPO_URL} />
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No release notes for this version.
+            </p>
+          )}
+        </div>
         <div className="mt-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium">Source checkout</h3>
