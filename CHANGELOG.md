@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/stefanwalther/ghn/compare/ghn-v0.11.1...ghn-v0.11.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* **inbox:** toggle rows on modified Space/Enter ([#148](https://github.com/stefanwalther/ghn/issues/148)) ([2045797](https://github.com/stefanwalther/ghn/commit/2045797696f3923d9e47519e2302e944260b2266))
+
 ## [0.11.1](https://github.com/stefanwalther/ghn/compare/ghn-v0.11.0...ghn-v0.11.1) (2026-11-14)
 
 
