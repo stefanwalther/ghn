@@ -53,7 +53,7 @@ A user returns with localStorage missing, blocked (private mode), corrupt, or ho
 **Acceptance Scenarios**:
 
 1. **Given** localStorage holds invalid JSON or blocked access throws, **When** the user opens `/` bare, **Then** the inbox shows defaults and remains fully interactive.
-2. **Given** stored age/state/type values outside the known enums, **When** the user opens `/` bare, **Then** each invalid field falls back to its default (`all`, except state falls back to `unread`).
+2. **Given** stored age/state values outside the known enums, or stored type/repo values that are non-string or blank, **When** the user opens `/` bare, **Then** each invalid field falls back to its default (`all`, except state falls back to `unread`).
 3. **Given** a stored repo id with no matching facet, **When** the inbox loads, **Then** the repo filter still pre-selects the stored id text (deep-link semantics) but the list shows the empty state for that repo rather than crashing; picking another repo recovers.
 
 ---
@@ -61,7 +61,7 @@ A user returns with localStorage missing, blocked (private mode), corrupt, or ho
 ### Edge Cases
 
 - What happens when localStorage is unavailable (private mode, quota, disabled)? Reads return null, writes are swallowed; inbox behaves as today with URL-only filters.
-- How are partial query strings handled (e.g. only `?repo=x`)? Explicit params win per-field; missing fields fall back to stored values first, then defaults. A bare `/` (empty query) uses the full stored set.
+- How are partial query strings handled (e.g. only `?repo=x`)? A non-empty query is fully explicit: listed params apply and omitted fields use URL defaults (`all`, except state `unread`). Only a bare `/` (empty query) uses the full stored set.
 - What happens when the stored repo no longer exists? The filter still applies (same as typing an unknown `?repo=` today); facets simply show zero counts and the empty state explains it.
 - Does back/forward navigation re-trigger a restore? No. Restore runs once on bare entry; in-session history navigation uses the URL as today and each URL change re-saves.
 - Does this change server state, API, or DB? No. Pure client preference, same pattern as `ghn:filter-width` and `ghn:filter-sections`.

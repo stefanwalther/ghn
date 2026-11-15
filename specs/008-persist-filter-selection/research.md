@@ -19,7 +19,7 @@
 **Rationale**: Constitution principle III says filters live in the URL. Storage never overrides an explicit address, so shared/bookmarked links keep working. This matches how `parseInboxFilters`/`serializeInboxFilters` already treat missing params as defaults, except defaults now come from storage on bare entry.
 
 **Alternatives considered**:
-- Merge per-field (explicit repo + stored age): rejected for v1 as surprising; spec pins full-set restore on bare entry and full explicit render otherwise. Partial query strings (rare, only via hand-edit) fall back per-field to stored then defaults for robustness, but UI always writes full sets so the distinction is invisible in practice.
+- Merge per-field (explicit repo + stored age): rejected for v1 as surprising; spec pins full-set restore on bare entry and full explicit render otherwise. Partial query strings (rare, only via hand-edit) use URL defaults for omitted fields; only a bare entry reads storage. UI always writes full sets so the distinction is invisible in practice.
 - `router.push` for restore: rejected, restore must not create a history entry; `router.replace` with `scroll: false` matches existing `setFilters`.
 
 ## Decision 3: Validation reuses URL parsing

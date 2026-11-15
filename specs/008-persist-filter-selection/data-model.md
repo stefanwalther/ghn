@@ -38,5 +38,5 @@ Unchanged shape. Only the *source of defaults* on bare entry changes: stored set
 
 - `state`: `raw === "all" || raw === "done" ? raw : "unread"`.
 - `age`: `AGES.includes(raw) ? raw : "all"`.
-- `repo`/`type`: `params.get(...) || stored || "all"`, trimmed, non-empty.
+- `repo`/`type`: `params.get(...) || "all"`, trimmed, non-empty (URL defaults; stored values apply only on bare entry, never merged per-field).
 - Storage access wrapped in try/catch returning null/void on throw (private-mode parity with `loadFilterWidth`).
