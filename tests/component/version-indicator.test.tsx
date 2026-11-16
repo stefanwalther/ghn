@@ -12,6 +12,19 @@ const UPDATE = {
   latest: "9.9.9",
   updateAvailable: true,
   releaseUrl: "https://github.com/stefanwalther/ghn/releases/tag/v9.9.9",
+  releaseName: null,
+  releaseBody: null,
+  publishedAt: null,
+};
+
+const UPDATE_WITH_NOTES = {
+  current: APP_VERSION,
+  latest: "9.9.9",
+  updateAvailable: true,
+  releaseUrl: "https://github.com/stefanwalther/ghn/releases/tag/v9.9.9",
+  releaseName: "ghn-v9.9.9",
+  releaseBody: "## Features\n\n* **inbox:** stuff\n\nSee #1 and https://example.com/x\n\n`code`\n",
+  publishedAt: "2026-11-14T12:00:00Z",
 };
 
 const CURRENT = {
@@ -251,5 +264,111 @@ describe("VersionIndicator", () => {
       expect(screen.getByText(`v${APP_VERSION}`)).toBeInTheDocument();
     });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  test("renders inline release notes with title, date, and markdown", async () => {
+    stubVersion(UPDATE_WITH_NOTES);
+
+    render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Update available" });
+
+    expect(
+      within(dialog).getByRole("heading", { name: /what's included/i })
+    ).toBeInTheDocument();
+    expect(dialog.textContent).toContain("ghn-v9.9.9");
+    expect(dialog.textContent).toContain("2026");
+    // Markdown body renders readably (list item, code, link).
+    expect(dialog.textContent).toContain("inbox:");
+    expect(dialog.textContent).toContain("stuff");
+    expect(dialog.textContent).toContain("code");
+    // Version line, commands, and fallback link stay present.
+    expect(dialog.textContent).toContain(`This install runs v${APP_VERSION}.`);
+    expect(
+      within(dialog).getByRole("link", { name: "View release notes for v9.9.9" })
+    ).toBeInTheDocument();
+  });
+
+  test("shows an empty state when release notes are missing", async () => {
+    stubVersion(UPDATE);
+
+    render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Update available" });
+
+    expect(
+      within(dialog).getByText("No release notes for this version.")
+    ).toBeInTheDocument();
+    expect(dialog.textContent).toContain(`This install runs v${APP_VERSION}.`);
+    expect(dialog.querySelectorAll("pre")).toHaveLength(2);
+  });
+
+  test("omits missing title and date silently", async () => {
+    stubVersion({
+      ...UPDATE_WITH_NOTES,
+      releaseName: null,
+      publishedAt: null,
+    });
+
+    render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Update available" });
+
+    // Falls back to the tag line and omits the date, but keeps notes + actions.
+    expect(dialog.textContent).toContain("v9.9.9");
+    expect(dialog.textContent).not.toContain("Published");
+    expect(dialog.textContent).toContain("stuff");
+    expect(
+      within(dialog).getByRole("link", { name: "View release notes for v9.9.9" })
+    ).toBeInTheDocument();
+  });
+
+  test("caps long release notes in a scroll container", async () => {
+    const longBody = Array.from(
+      { length: 40 },
+      (_, i) => `## Section ${i + 1}\n\nChange ${i + 1}\n`
+    ).join("\n");
+    stubVersion({ ...UPDATE_WITH_NOTES, releaseBody: longBody });
+
+    render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Update available" });
+
+    const scroller = dialog.querySelector(
+      "[data-testid='update-notes']"
+    ) as HTMLElement | null;
+    expect(scroller).not.toBeNull();
+    expect(scroller).toHaveClass("overflow-y-auto");
+    expect(scroller?.className ?? "").toMatch(/max-h-\[/);
+    // Commands and close actions stay reachable.
+    expect(dialog.querySelectorAll("pre")).toHaveLength(2);
+    expect(
+      within(dialog).getByRole("button", { name: "Not now" })
+    ).toBeInTheDocument();
+  });
+
+  test("strips unsafe HTML from release notes", async () => {
+    stubVersion({
+      ...UPDATE_WITH_NOTES,
+      releaseBody: "Safe\n\n<script>alert('xss')</script>\n",
+    });
+
+    render(<VersionIndicator />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /new ghn version/i })
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Update available" });
+
+    expect(dialog.textContent).toContain("Safe");
+    expect(dialog.querySelector("script")).toBeNull();
+    expect(dialog.textContent).not.toContain("alert('xss')");
   });
 });

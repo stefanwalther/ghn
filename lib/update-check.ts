@@ -12,6 +12,9 @@ export interface UpdateInfo {
   updateAvailable: boolean;
   releaseUrl: string;
   checkedAt: string;
+  releaseName: string | null;
+  releaseBody: string | null;
+  publishedAt: string | null;
 }
 
 let cached: { at: number; info: UpdateInfo } | null = null;
@@ -39,7 +42,30 @@ function fallbackInfo(now: number): UpdateInfo {
     updateAvailable: false,
     releaseUrl: `${GITHUB_REPO_URL}/releases`,
     checkedAt: new Date(now).toISOString(),
+    releaseName: null,
+    releaseBody: null,
+    publishedAt: null,
   };
+}
+
+function coerceReleaseName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function coerceReleaseBody(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return value.trim() ? value : null;
+}
+
+function coercePublishedAt(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const time = Date.parse(trimmed);
+  if (Number.isNaN(time)) return null;
+  return trimmed;
 }
 
 export async function getUpdateInfo(
@@ -74,7 +100,14 @@ export async function getUpdateInfo(
       cached = { at: now, info };
       return info;
     }
-    const payload = (await res.json()) as { tag_name?: unknown; html_url?: unknown };
+    const payload = (await res.json()) as {
+      tag_name?: unknown;
+      html_url?: unknown;
+      name?: unknown;
+      body?: unknown;
+      published_at?: unknown;
+      created_at?: unknown;
+    };
     const tag = typeof payload.tag_name === "string" ? normalizeVersionTag(payload.tag_name) : "";
     const releaseUrl =
       typeof payload.html_url === "string" && payload.html_url
@@ -85,12 +118,21 @@ export async function getUpdateInfo(
       cached = { at: now, info };
       return info;
     }
+    const publishedRaw =
+      typeof payload.published_at === "string" && payload.published_at.trim()
+        ? payload.published_at
+        : typeof payload.created_at === "string"
+          ? payload.created_at
+          : null;
     const info: UpdateInfo = {
       current: APP_VERSION,
       latest: tag,
       updateAvailable: isNewerVersion(APP_VERSION, tag),
       releaseUrl,
       checkedAt: new Date(now).toISOString(),
+      releaseName: coerceReleaseName(payload.name),
+      releaseBody: coerceReleaseBody(payload.body),
+      publishedAt: coercePublishedAt(publishedRaw),
     };
     cached = { at: now, info };
     return info;
