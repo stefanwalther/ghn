@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.11.2...ghn-v0.12.0) (2026-11-16)
+
+
+### Features
+
+* **inbox:** remember filter selection in localStorage ([#149](https://github.com/stefanwalther/ghn/issues/149)) ([8f5463b](https://github.com/stefanwalther/ghn/commit/8f5463b4e35f2b3e16e058902a2f5411e1c2bd1b))
+* **update:** show release notes inline in the update dialog ([#151](https://github.com/stefanwalther/ghn/issues/151)) ([64631e4](https://github.com/stefanwalther/ghn/commit/64631e40e7170435799c5e219f94bc50f66fb141))
+
 ## [0.11.2](https://github.com/stefanwalther/ghn/compare/ghn-v0.11.1...ghn-v0.11.2) (2026-11-14)
 
 
