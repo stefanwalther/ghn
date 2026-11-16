@@ -4,7 +4,7 @@ import {
   fetchSubjectContent,
   fetchThreadComments,
   listNotifications,
-  resolveSubjectHtmlUrl,
+  resolveSubject,
   type GhThread,
 } from "@/lib/github";
 
@@ -346,18 +346,17 @@ describe("the subject url fallback", () => {
   // subject api url identifies.
   test("a payload without a page falls back to the pull request page", async () => {
     stubFetch(() => json({ merged: false, state: "open" }));
-    const url = await resolveSubjectHtmlUrl("token", thread(), new Map());
-    expect(url).toBe("https://github.com/acme/web/pull/12");
+    const url = await resolveSubject("token", thread());
+    expect(url.url).toBe("https://github.com/acme/web/pull/12");
   });
 
   // An issue falls back to the issue page, not to the pull request one.
   test("an issue falls back to the issue page", async () => {
     stubFetch(() => new Response("{}", { status: 404 }));
-    const url = await resolveSubjectHtmlUrl(
+    const url = await resolveSubject(
       "token",
-      thread({ subjectApiUrl: "https://api.github.com/repos/acme/web/issues/34" }),
-      new Map()
+      thread({ subjectApiUrl: "https://api.github.com/repos/acme/web/issues/34" })
     );
-    expect(url).toBe("https://github.com/acme/web/issues/34");
+    expect(url.url).toBe("https://github.com/acme/web/issues/34");
   });
 });

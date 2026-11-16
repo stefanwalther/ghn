@@ -32,12 +32,14 @@ function thread(overrides: Partial<GhThread> = {}): GhThread {
   };
 }
 
-const resolveUrl = async () => "https://github.com/acme/web/pull/12";
+const resolve = async () => ({
+  ok: true, url: "https://github.com/acme/web/pull/12", state: "open", merged: false,
+});
 
 describe("thread-to-row mapping", () => {
   test("stores raw reason verbatim and inverts unread", async () => {
     const db = createMemoryDb().db;
-    const summary = await upsertThreads(db, [thread({ reason: "state_change" })], null, 1792000001000, resolveUrl);
+    const summary = await upsertThreads(db, [thread({ reason: "state_change" })], null, 1792000001000, resolve);
     expect(summary.upserted).toBe(1);
     const rows = await db.select().from(schema.notifications);
     expect(rows).toHaveLength(1);
@@ -49,7 +51,7 @@ describe("thread-to-row mapping", () => {
 
   test("read threads map to isRead 1 with updated_at as sort key", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "1002", unread: false })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "1002", unread: false })], null, 1792000001000, resolve);
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1002"));
     expect(rows[0]?.isRead).toBe(1);
     expect(rows[0]?.createdAt).toBe(1792000000000);
@@ -64,7 +66,7 @@ describe("thread-to-row mapping", () => {
       [thread({ id: "1003", subjectTitle: "x".repeat(250) })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1003"));
     expect(rows[0]?.subject).toHaveLength(200);
@@ -73,7 +75,7 @@ describe("thread-to-row mapping", () => {
 
   test("explicit local unread survives sync of a remotely read thread", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "1004" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "1004" })], null, 1792000001000, resolve);
     await db
       .update(schema.notifications)
       .set({ isDone: 0, isRead: 0, localUnread: 1 })
@@ -83,7 +85,7 @@ describe("thread-to-row mapping", () => {
       [thread({ id: "1004", unread: false, updatedAt: 1792000002000 })],
       null,
       1792000003000,
-      resolveUrl
+      resolve
     );
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1004"));
     expect(rows[0]?.isRead).toBe(0);
@@ -92,12 +94,12 @@ describe("thread-to-row mapping", () => {
 
   test("locally done rows stay done when the thread is still present", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "1005" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "1005" })], null, 1792000001000, resolve);
     await db
       .update(schema.notifications)
       .set({ isDone: 1, isRead: 1 })
       .where(eq(schema.notifications.id, "1005"));
-    await upsertThreads(db, [thread({ id: "1005" })], null, 1792000002000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "1005" })], null, 1792000002000, resolve);
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "1005"));
     expect(rows[0]?.isDone).toBe(1);
   });
@@ -111,7 +113,7 @@ describe("duplicate thread ids", () => {
       [thread({ id: "1006" }), thread({ id: "1006" })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     expect(summary.upserted).toBe(1);
     const rows = await db
@@ -131,7 +133,7 @@ describe("duplicate thread ids", () => {
       ],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db
       .select()
@@ -190,7 +192,7 @@ describe("first-sync migration", () => {
       ],
       "me",
       now,
-      resolveUrl
+      resolve
     );
     expect(summary.discoveredRepos).toBe(2);
     const repos = await db.select().from(schema.repositories);
@@ -243,7 +245,7 @@ describe("first-sync migration", () => {
       [thread({ id: "2003", repoFullName: "vendor/slow-dep", repoOwnerLogin: "vendor" })],
       "me",
       1792000001000,
-      resolveUrl
+      resolve
     );
     const repos = await db.select().from(schema.repositories);
     expect(repos).toHaveLength(1);
@@ -251,7 +253,7 @@ describe("first-sync migration", () => {
   });
   test("prunes repositories left with zero notification rows", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "4001", repoFullName: "a/kept" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "4001", repoFullName: "a/kept" })], null, 1792000001000, resolve);
     await db.insert(schema.repositories).values({
       id: "stale--repo",
       fullName: "stale/repo",
@@ -368,9 +370,8 @@ describe("merged-status capture", () => {
         [thread({ id: "5001", subjectApiUrl: apiUrl })],
         null,
         1792000001000,
-        (t) => github.resolveSubjectHtmlUrl("token", t, new Map())
+        (t) => github.resolveSubject("token", t)
       );
-      expect(github.readPrMerged(apiUrl)).toBe(true);
       const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "5001"));
       expect(rows[0]?.prMerged).toBe(1);
     } finally {
@@ -395,7 +396,7 @@ describe("merged-status capture", () => {
         [thread({ id: "5002", subjectApiUrl: apiUrl })],
         null,
         1792000001000,
-        (t) => github.resolveSubjectHtmlUrl("token", t, new Map())
+        (t) => github.resolveSubject("token", t)
       );
       const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "5002"));
       expect(rows[0]?.prMerged).toBe(0);
@@ -442,7 +443,7 @@ describe("seed shape", () => {
 describe("remote-done propagation", () => {
   test("threads absent from a full pass become done", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "3001" }), thread({ id: "3002" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "3001" }), thread({ id: "3002" })], null, 1792000001000, resolve);
     const result = await applyRemoteDone(db, new Set(["3001"]), new Set());
     expect(result.markedDone).toBe(1);
     const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.id, "3002"));
@@ -451,7 +452,7 @@ describe("remote-done propagation", () => {
 
   test("queued threads and seed rows are excluded from remote-done", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "3003" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "3003" })], null, 1792000001000, resolve);
     await db.insert(schema.notifications).values({
       id: "n_009",
       repositoryId: "acme--web",
@@ -473,7 +474,7 @@ describe("remote-done propagation", () => {
 
   test("locally revived unread rows survive remote-done", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ id: "3004" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "3004" })], null, 1792000001000, resolve);
     await db
       .update(schema.notifications)
       .set({ isDone: 0, isRead: 0, localUnread: 1 })

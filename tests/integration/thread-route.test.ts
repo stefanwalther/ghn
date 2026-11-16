@@ -265,6 +265,73 @@ describe("GET /api/thread", () => {
   });
 });
 
+describe("GET /api/thread Dependabot URL repair", () => {
+  test("repairs a legacy repository URL through the subject snapshot", async () => {
+    const id = "alert_legacy";
+    const path = "/repos/acme/web/dependabot/alerts/34";
+    const htmlUrl = "https://github.com/acme/web/security/dependabot/34";
+    await db.insert(notifications).values({
+      id,
+      repositoryId: "acme--web",
+      subject: "Upgrade vulnerable dependency",
+      subjectType: "RepositoryDependabotAlertsThread",
+      subjectState: null,
+      reason: "security_alert",
+      createdAt: NOW,
+      isRead: 0,
+      isDone: 0,
+      sourceUrl: "https://github.com/acme/web",
+    });
+    standIn.setThreads([{
+      id,
+      unread: true,
+      reason: "security_alert",
+      updated_at: new Date(NOW).toISOString(),
+      subject: {
+        title: "Upgrade vulnerable dependency",
+        type: "RepositoryDependabotAlertsThread",
+        url: `${standIn.url}${path}`,
+      },
+      repository: {
+        full_name: "acme/web",
+        html_url: "https://github.com/acme/web",
+        owner: { login: "acme" },
+      },
+      url: `${standIn.url}/notifications/threads/${id}`,
+    }]);
+    standIn.setScenario(path, {
+      status: 200,
+      body: {
+        number: 34,
+        state: "open",
+        html_url: htmlUrl,
+        dependency: { package: { ecosystem: "npm", name: "example-package" } },
+      },
+    });
+
+    const { GET } = await import("@/app/api/thread/route");
+    const response = await GET(new Request(`http://localhost/api/thread?id=${id}`));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      content: null,
+      alert: { number: 34, state: "open", htmlUrl, packageName: "example-package" },
+    });
+    const rows = await db.select().from(notifications).where(eq(notifications.id, id));
+    expect(rows[0]).toMatchObject({ sourceUrl: htmlUrl, subjectState: null, prMerged: 0 });
+    expect(standIn.requests.map((request) => request.path)).toEqual([
+      `/notifications/threads/${id}`,
+      path,
+      path,
+    ]);
+
+    // A subsequent open uses the repaired URL without fetching the thread.
+    const nextResponse = await GET(new Request(`http://localhost/api/thread?id=${id}`));
+    expect(nextResponse.status).toBe(200);
+    expect(standIn.requests.filter((request) => request.path === `/notifications/threads/${id}`)).toHaveLength(1);
+    expect(blocked).toEqual([]);
+  });
+});
+
 describe("GET /api/thread for releases", () => {
   const RELEASE_PAYLOAD = {
     tag_name: "v9.9.9",
@@ -615,6 +682,58 @@ describe("POST /api/thread/sync", () => {
     expect(rows[0]?.githubUpdatedAt).toBe(Date.parse("2026-01-15T11:30:00Z"));
     expect(rows[0]?.isRead).toBe(0);
     expect(rows[0]?.isDone).toBe(0);
+    expect(blocked).toEqual([]);
+  });
+
+  test("a failed subject refresh preserves the last successful per-thread snapshot", async () => {
+    standIn.setThreads([{
+      id: "n_001",
+      unread: false,
+      reason: "review_requested",
+      updated_at: "2026-01-15T11:30:00Z",
+      subject: {
+        title: "Fix flaky login redirect",
+        type: "PullRequest",
+        url: `${standIn.url}/repos/acme/web/pulls/1`,
+      },
+      repository: {
+        full_name: "acme/web",
+        html_url: "https://github.com/acme/web",
+        owner: { login: "acme" },
+      },
+      url: `${standIn.url}/notifications/threads/n_001`,
+    }]);
+    const htmlUrl = "https://github.com/acme/web/pull/1#discussion";
+    standIn.setSubject("/repos/acme/web/pulls/1", {
+      html_url: htmlUrl, state: "closed", merged: true,
+    });
+    expect((await syncThread({ id: "n_001" })).status).toBe(200);
+
+    standIn.setScenario("/repos/acme/web/pulls/1", { status: 500 });
+    standIn.setThreads([{
+      id: "n_001",
+      unread: false,
+      reason: "review_requested",
+      updated_at: "2026-01-15T11:45:00Z",
+      subject: {
+        title: "Fix flaky login redirect",
+        type: "PullRequest",
+        url: `${standIn.url}/repos/acme/web/pulls/1`,
+      },
+      repository: {
+        full_name: "acme/web",
+        html_url: "https://github.com/acme/web",
+        owner: { login: "acme" },
+      },
+      url: `${standIn.url}/notifications/threads/n_001`,
+    }]);
+    const refreshed = await syncThread({ id: "n_001" });
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.item).toMatchObject({
+      subjectState: "closed", prMerged: true, sourceUrl: htmlUrl,
+    });
+    const rows = await db.select().from(notifications).where(eq(notifications.id, "n_001"));
+    expect(rows[0]).toMatchObject({ subjectState: "closed", prMerged: 1, sourceUrl: htmlUrl });
     expect(blocked).toEqual([]);
   });
 

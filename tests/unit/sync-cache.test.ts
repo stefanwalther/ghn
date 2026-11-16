@@ -1,14 +1,12 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createMemoryDb } from "../support/db-client.node";
 import * as schema from "@/db/schema";
 import {
-  clearUrlCache,
   markRepoUnreachable,
-  sharedUrlCache,
   upsertThreads,
 } from "@/lib/sync";
-import type { GhThread } from "@/lib/github";
+import { resolveSubject, type GhThread } from "@/lib/github";
 
 function thread(overrides: Partial<GhThread> = {}): GhThread {
   return {
@@ -27,24 +25,33 @@ function thread(overrides: Partial<GhThread> = {}): GhThread {
   };
 }
 
-const resolveUrl = async () => "https://github.com/acme/web/pull/12";
+const resolve = async () => ({
+  ok: true, url: "https://github.com/acme/web/pull/12", state: "open", merged: false,
+});
 
-describe("the shared url cache", () => {
-  // The sync and the thread fetch share one cache, so a thread is only
-  // looked up once per run.
-  test("the cache is the same map every time it is asked for", () => {
-    expect(sharedUrlCache()).toBe(sharedUrlCache());
+afterEach(() => vi.unstubAllGlobals());
+
+describe("subject freshness across calls", () => {
+  test("two calls for one thread fetch the subject twice", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(Response.json({ state: "open", merged: false }))
+      .mockResolvedValueOnce(Response.json({ state: "closed", merged: true }));
+    vi.stubGlobal("fetch", fetch);
+    expect(await resolveSubject("token", thread())).toMatchObject({ ok: true, state: "open", merged: false });
+    expect(await resolveSubject("token", thread())).toMatchObject({ ok: true, state: "closed", merged: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  // Clearing it throws away what the run resolved, so a fresh run starts
-  // from nothing.
-  test("clearing the cache empties it", () => {
-    const cache = sharedUrlCache();
-    cache.set("https://api.github.com/repos/acme/web/pulls/12", "https://github.com/acme/web/pull/12");
-    expect(cache.size).toBeGreaterThan(0);
-
-    clearUrlCache();
-    expect(sharedUrlCache().size).toBe(0);
+  test("a failed fetch returns unknown state and a later call retries", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 500 }))
+      .mockResolvedValueOnce(Response.json({ state: "closed", merged: true }));
+    vi.stubGlobal("fetch", fetch);
+    expect(await resolveSubject("token", thread())).toEqual({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    });
+    expect(await resolveSubject("token", thread())).toMatchObject({ ok: true, state: "closed", merged: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -53,7 +60,7 @@ describe("unreachable repositories", () => {
   // instead of showing an empty list.
   test("a repository that cannot be reached is marked unreachable", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread()], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread()], null, 1792000001000, resolve);
 
     await markRepoUnreachable(db, "acme--web");
     const rows = await db
@@ -66,10 +73,10 @@ describe("unreachable repositories", () => {
   // When the repository answers again, the mark is lifted.
   test("a repository that answers again is un-marked on the next sync", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread()], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread()], null, 1792000001000, resolve);
     await markRepoUnreachable(db, "acme--web");
 
-    await upsertThreads(db, [thread({ id: "8002" })], null, 1792000002000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "8002" })], null, 1792000002000, resolve);
     const rows = await db
       .select()
       .from(schema.repositories)
@@ -88,7 +95,7 @@ describe("threads without a repository", () => {
       [thread({ id: "8003", repoFullName: "" })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
 
     expect(summary.upserted).toBe(0);

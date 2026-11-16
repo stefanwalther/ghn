@@ -335,17 +335,6 @@ export async function checkRepoExists(token: string, fullName: string): Promise<
   }
 }
 
-const prMergedByApiUrl = new Map<string, boolean>();
-const subjectStateByApiUrl = new Map<string, string | null>();
-
-export function readPrMerged(subjectApiUrl: string): boolean {
-  return prMergedByApiUrl.get(subjectApiUrl) === true;
-}
-
-export function readSubjectState(subjectApiUrl: string): string | null {
-  return subjectStateByApiUrl.get(subjectApiUrl) ?? null;
-}
-
 export function subjectApiUrlFromHtml(htmlUrl: string): string | null {
   const dependabot = htmlUrl.match(
     /^https:\/\/github\.com\/([^/]+\/[^/]+)\/security\/dependabot\/(\d+)/
@@ -889,38 +878,37 @@ export async function fetchCheckSummary(
   }
 }
 
-export async function resolveSubjectHtmlUrl(
+export interface SubjectSnapshot {
+  ok: boolean;
+  url: string;
+  state: string | null;
+  merged: boolean | null;
+}
+
+export async function resolveSubject(
   token: string,
-  thread: GhThread,
-  cache: Map<string, string>
-): Promise<string> {  if (!thread.subjectApiUrl) return deriveFallbackUrl(thread);
-  const cached = cache.get(thread.subjectApiUrl);
-  if (cached) return cached;
+  thread: GhThread
+): Promise<SubjectSnapshot> {
+  const fallback: SubjectSnapshot = {
+    ok: false,
+    url: deriveFallbackUrl(thread),
+    state: null,
+    merged: null,
+  };
+  if (!thread.subjectApiUrl) return fallback;
   try {
     const res = await fetch(thread.subjectApiUrl, { headers: baseHeaders(token) });
-    if (!res.ok) {
-      const fallback = deriveFallbackUrl(thread);
-      cache.set(thread.subjectApiUrl, fallback);
-      return fallback;
-    }
-    const payload = (await res.json()) as {
-      html_url?: unknown;
-      merged?: unknown;
-      state?: unknown;
+    if (!res.ok) return fallback;
+    const body: unknown = await res.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) return fallback;
+    const payload = body as { html_url?: unknown; merged?: unknown; state?: unknown };
+    return {
+      ok: true,
+      url: typeof payload.html_url === "string" ? payload.html_url : fallback.url,
+      state: typeof payload.state === "string" ? payload.state : null,
+      merged: thread.subjectType === "PullRequest" ? payload.merged === true : null,
     };
-    const url = typeof payload.html_url === "string" ? payload.html_url : deriveFallbackUrl(thread);
-    cache.set(thread.subjectApiUrl, url);
-    if (thread.subjectType === "PullRequest") {
-      prMergedByApiUrl.set(thread.subjectApiUrl, payload.merged === true);
-    }
-    subjectStateByApiUrl.set(
-      thread.subjectApiUrl,
-      typeof payload.state === "string" ? payload.state : null
-    );
-    return url;
   } catch {
-    const fallback = deriveFallbackUrl(thread);
-    cache.set(thread.subjectApiUrl, fallback);
     return fallback;
   }
 }

@@ -4,9 +4,7 @@ import { notifications } from "@/db/schema";
 import {
   fetchThread,
   getStoredToken,
-  readPrMerged,
-  readSubjectState,
-  resolveSubjectHtmlUrl,
+  resolveSubject,
 } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
@@ -39,21 +37,24 @@ export async function POST(request: Request) {
     );
   }
   const thread = fetched.data;
-  const url = await resolveSubjectHtmlUrl(token, thread, new Map());
+  const snapshot = await resolveSubject(token, thread);
   const changed = (row.githubUpdatedAt ?? 0) < thread.updatedAt;
+  const subjectState = snapshot.ok ? (snapshot.state ?? row.subjectState) : row.subjectState;
+  const prMerged = snapshot.ok ? snapshot.merged === true : row.prMerged === 1;
+  const sourceUrl = snapshot.ok && changed ? snapshot.url : row.sourceUrl;
   const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
   await db
     .update(notifications)
     .set({
       subject: thread.subjectTitle.slice(0, 200) || "Untitled",
       subjectType: thread.subjectType,
-      subjectState: readSubjectState(thread.subjectApiUrl),
+      subjectState,
       reason: thread.reason,
       createdAt: thread.updatedAt,
       githubUpdatedAt: thread.updatedAt,
       isRead,
-      prMerged: readPrMerged(thread.subjectApiUrl) ? 1 : 0,
-      sourceUrl: changed ? url : row.sourceUrl,
+      prMerged: prMerged ? 1 : 0,
+      sourceUrl,
     })
     .where(eq(notifications.id, id));
   return NextResponse.json({
@@ -62,12 +63,12 @@ export async function POST(request: Request) {
       id: thread.id,
       subject: thread.subjectTitle.slice(0, 200) || "Untitled",
       subjectType: thread.subjectType,
-      subjectState: readSubjectState(thread.subjectApiUrl),
+      subjectState,
       reason: thread.reason,
-      prMerged: readPrMerged(thread.subjectApiUrl),
+      prMerged,
       createdAt: thread.updatedAt,
       isRead,
-      sourceUrl: changed ? url : row.sourceUrl,
+      sourceUrl,
     },
   });
 }
