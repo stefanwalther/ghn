@@ -154,4 +154,31 @@ describe("PullRequestActions", () => {
     expect(screen.getByRole("button", { name: "Squash and merge" })).toBeDisabled();
     expect(screen.getByText(/It unlocks automatically/)).toBeInTheDocument();
   });
+
+  test("enable auto-merge fires with one press", async () => {
+    const calls = stubActions();
+    renderWithQuery(
+      <PullRequestActions {...baseProps} checksState="failure" />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Enable auto-merge" }));
+    await waitFor(() =>
+      expect(calls).toEqual([{ id: "n_001", action: "enable_auto_merge", method: "squash" }])
+    );
+    expect(await screen.findByText(/Auto-merge enabled/)).toBeInTheDocument();
+  });
+
+  test("close from the menu fires after arming", async () => {
+    const calls = stubActions();
+    renderWithQuery(<PullRequestActions {...baseProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "More pull request actions" }));
+    const menu = await screen.findByRole("menu");
+    const close = within(menu).getByRole("menuitem", { name: "Close without merging" });
+    fireEvent.click(close);
+    expect(calls).toEqual([]);
+    fireEvent.click(
+      await within(menu).findByRole("menuitem", { name: "Confirm close without merging?" })
+    );
+    await waitFor(() => expect(calls).toEqual([{ id: "n_001", action: "close" }]));
+    expect(await screen.findByText("Closed.")).toBeInTheDocument();
+  });
 });

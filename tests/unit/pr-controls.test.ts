@@ -133,4 +133,17 @@ describe("resolvePullPrimaryControl", () => {
   test("a clean pull request needs no reason", () => {
     expect(mergeUnavailableReason(input())).toBeNull();
   });
+
+  test("an armed auto-merge reads as merged", () => {
+    expect(resolvePullPrimaryControl(input({ autoMergeEnabled: true }))).toEqual({
+      kind: "merged",
+    });
+  });
+
+  test("no repository settings still offer a plain merge", () => {
+    expect(resolvePullPrimaryControl(input({ settings: null }))).toEqual({
+      kind: "merge",
+      method: "squash",
+    });
+  });
 });

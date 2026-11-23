@@ -195,7 +195,7 @@ export function PullRequestActions({
     mutation.isPending ||
     control.kind === "merged" ||
     control.kind === "closed" ||
-    blockedReason !== null;
+    (control.kind === "merge" && blockedReason !== null);
 
   const entries: MenuEntry[] = [];
   if (isOpen && draft !== true) {
