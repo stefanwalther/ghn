@@ -40,6 +40,7 @@ export interface StandIn {
   requests: StandInRequest[];
   setThreads(threads: StandInThread[]): void;
   setSubject(path: string, payload: unknown): void;
+  setReviews(payload: unknown[]): void;
   setScenario(path: string, scenario: Scenario | null): void;
   setRateLimit(limit: number, used: number, remaining: number, reset: number): void;
   reset(): void;
@@ -72,6 +73,7 @@ export async function startGitHubStandIn(
   const scenarios = new Map<string, Scenario>();
   const subjects = new Map<string, unknown>();
   const requests: StandInRequest[] = [];
+  let reviewsPayload: unknown[] = [];
 
   function rateLimitHeaders(override?: number): Record<string, string> {
     return {
@@ -106,9 +108,20 @@ export async function startGitHubStandIn(
       state: "open",
       draft: false,
       merged: false,
+      mergeable: true,
+      mergeable_state: "clean",
+      merged_by: null,
+      merge_commit_sha: null,
+      base: { ref: "main", sha: "base0123456789abcdef0123456789abcdef" },
+      head: { ref: "fix-login", sha: "0123456789abcdef0123456789abcdef01234567" },
+      additions: 10,
+      deletions: 2,
+      changed_files: 1,
+      labels: [],
+      node_id: "PR_test_node_1",
+      requested_reviewers: [],
       user: { login: viewerLogin },
       html_url: `https://github.com/${owner ?? "acme"}/${repo ?? "web"}/${webKind}/${number ?? "1"}`,
-      head: { sha: "0123456789abcdef0123456789abcdef01234567" },
     };
   }
 
@@ -246,6 +259,32 @@ export async function startGitHubStandIn(
 
         if (path === "/graphql" && method === "POST") {
           const requested = safeParse(body);
+          const query = (requested as { query?: unknown })?.query;
+          const queryText = typeof query === "string" ? query : "";
+          if (queryText.includes("enablePullRequestAutoMerge")) {
+            reply(200, {
+              data: { enablePullRequestAutoMerge: { clientMutationId: null } },
+            });
+            return;
+          }
+          if (queryText.includes("disablePullRequestAutoMerge")) {
+            reply(200, {
+              data: { disablePullRequestAutoMerge: { clientMutationId: null } },
+            });
+            return;
+          }
+          if (queryText.includes("markPullRequestReadyForReview")) {
+            reply(200, {
+              data: { markPullRequestReadyForReview: { clientMutationId: null } },
+            });
+            return;
+          }
+          if (queryText.includes("convertPullRequestToDraft")) {
+            reply(200, {
+              data: { convertPullRequestToDraft: { clientMutationId: null } },
+            });
+            return;
+          }
           const variables = (requested as { variables?: { login?: string; from?: string; to?: string } })
             ?.variables;
           if (variables?.from && variables?.to) {
@@ -278,6 +317,11 @@ export async function startGitHubStandIn(
             name: repoMatch[2],
             full_name: `${repoMatch[1]}/${repoMatch[2]}`,
             owner: { login: repoMatch[1] },
+            allow_merge_commit: true,
+            allow_squash_merge: true,
+            allow_rebase_merge: true,
+            allow_auto_merge: true,
+            default_branch: "main",
           });
           return;
         }
@@ -337,10 +381,47 @@ export async function startGitHubStandIn(
           return;
         }
 
+        const mergeMatch = path.match(
+          /^\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/merge$/
+        );
+        if (mergeMatch && method === "PUT") {
+          const requested = safeParse(body) as { merge_method?: unknown };
+          reply(200, {
+            merged: true,
+            message: "Pull Request successfully merged",
+            sha: "merged0123456789abcdef0123456789abcdef",
+            method: requested?.merge_method ?? "squash",
+          });
+          return;
+        }
+
+        const reviewsMatch = path.match(
+          /^\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/reviews$/
+        );
+        if (reviewsMatch && method === "GET") {
+          reply(200, reviewsPayload);
+          return;
+        }
+
+        const refMatch = path.match(/^\/repos\/([^/]+)\/([^/]+)\/git\/refs\/heads\/(.+)$/);
+        if (refMatch && method === "DELETE") {
+          reply(204, undefined);
+          return;
+        }
+
         const subjectMatch = path.match(
           /^\/repos\/([^/]+)\/([^/]+)\/(pulls|issues)\/(\d+)/
         );
         if (subjectMatch) {
+          if (method === "PATCH") {
+            const requested = safeParse(body) as { state?: unknown };
+            const subject = defaultSubject(path) as Record<string, unknown>;
+            reply(200, {
+              ...subject,
+              state: typeof requested?.state === "string" ? requested.state : subject.state,
+            });
+            return;
+          }
           reply(200, defaultSubject(path));
           return;
         }
@@ -365,6 +446,9 @@ export async function startGitHubStandIn(
     setSubject(path: string, payload: unknown) {
       subjects.set(path, payload);
     },
+    setReviews(payload: unknown[]) {
+      reviewsPayload = payload;
+    },
     setScenario(path: string, scenario: Scenario | null) {
       if (scenario === null) scenarios.delete(path);
       else scenarios.set(path, scenario);
@@ -377,6 +461,7 @@ export async function startGitHubStandIn(
       rateLimit = options.rateLimit ?? DEFAULT_RATE_LIMIT;
       scenarios.clear();
       subjects.clear();
+      reviewsPayload = [];
       requests.length = 0;
     },
     close: async () => {

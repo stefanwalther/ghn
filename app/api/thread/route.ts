@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { notifications } from "@/db/schema";
-import { fetchCheckSummary, fetchDependabotAlert, fetchRelease, fetchSubjectContent, fetchThread, fetchThreadComments, fetchWorkflowRuns, getStoredToken, isReleaseApiUrl, parseBranchFromTitle, parseDependabotAlertCoords, parsePullCoords, parseRepoCoords, releaseApiUrlFromHtml, resolveSubjectHtmlUrl, subjectApiUrlFromHtml, subjectCommentsUrlFromHtml } from "@/lib/github";
+import { fetchCheckSummary, fetchDependabotAlert, fetchPullRequestExtra, fetchRelease, fetchRepoMergeSettings, fetchSubjectContent, fetchThread, fetchThreadComments, fetchWorkflowRuns, getStoredToken, isReleaseApiUrl, parseBranchFromTitle, parseDependabotAlertCoords, parsePullCoords, parseRepoCoords, releaseApiUrlFromHtml, resolveSubjectHtmlUrl, subjectApiUrlFromHtml, subjectCommentsUrlFromHtml } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
 
@@ -117,5 +117,12 @@ export async function GET(request: Request) {
     coords && content.headSha
       ? await fetchCheckSummary(token, { ...coords, sha: content.headSha })
       : null;
-  return NextResponse.json({ ...content, comments, checks });
+  if (!coords) {
+    return NextResponse.json({ ...content, comments, checks });
+  }
+  const [extra, repoSettings] = await Promise.all([
+    fetchPullRequestExtra(token, apiUrl),
+    fetchRepoMergeSettings(token, { owner: coords.owner, repo: coords.repo }),
+  ]);
+  return NextResponse.json({ ...content, comments, checks, pull: extra, repoSettings });
 }

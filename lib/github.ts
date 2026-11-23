@@ -924,3 +924,324 @@ export async function resolveSubjectHtmlUrl(
     return fallback;
   }
 }
+
+export type PullMergeMethod = "merge" | "squash" | "rebase";
+
+export const PULL_MERGE_METHOD_LABELS: Record<PullMergeMethod, string> = {
+  merge: "Merge",
+  squash: "Squash and merge",
+  rebase: "Rebase and merge",
+};
+
+export interface RepoMergeSettings {
+  allowMergeCommit: boolean;
+  allowSquashMerge: boolean;
+  allowRebaseMerge: boolean;
+  allowAutoMerge: boolean | null;
+  defaultBranch: string | null;
+}
+
+export function allowedMergeMethods(settings: RepoMergeSettings): PullMergeMethod[] {
+  const methods: PullMergeMethod[] = [];
+  if (settings.allowMergeCommit) methods.push("merge");
+  if (settings.allowSquashMerge) methods.push("squash");
+  if (settings.allowRebaseMerge) methods.push("rebase");
+  return methods;
+}
+
+export async function fetchRepoMergeSettings(
+  token: string,
+  input: { owner: string; repo: string; apiBase?: string }
+): Promise<RepoMergeSettings | null> {
+  try {
+    const base = input.apiBase ?? apiBase();
+    const res = await fetch(`${base}/repos/${input.owner}/${input.repo}`, {
+      headers: baseHeaders(token),
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as {
+      allow_merge_commit?: unknown;
+      allow_squash_merge?: unknown;
+      allow_rebase_merge?: unknown;
+      allow_auto_merge?: unknown;
+      default_branch?: unknown;
+    };
+    return {
+      allowMergeCommit: payload.allow_merge_commit === true,
+      allowSquashMerge: payload.allow_squash_merge === true,
+      allowRebaseMerge: payload.allow_rebase_merge === true,
+      allowAutoMerge:
+        typeof payload.allow_auto_merge === "boolean" ? payload.allow_auto_merge : null,
+      defaultBranch:
+        typeof payload.default_branch === "string" ? payload.default_branch : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export type PullReviewVerdict = "approved" | "changes_requested" | "pending" | "none";
+
+export interface PullRequestExtra {
+  mergeable: boolean | null;
+  mergeableState: string | null;
+  mergedByLogin: string | null;
+  mergeCommitSha: string | null;
+  baseRef: string | null;
+  baseSha: string | null;
+  headRef: string | null;
+  headSha: string | null;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
+  labels: string[];
+  nodeId: string | null;
+  reviewVerdict: PullReviewVerdict;
+  approvals: number;
+  changesRequested: number;
+  requestedReviewers: string[];
+}
+
+function asStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    const login = (entry as { login?: unknown } | null | undefined)?.login;
+    if (typeof login === "string" && login) out.push(login);
+  }
+  return out;
+}
+
+export async function fetchPullRequestExtra(
+  token: string,
+  apiUrl: string
+): Promise<PullRequestExtra | null> {
+  try {
+    const headers = baseHeaders(token);
+    const res = await fetch(apiUrl, { headers });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as {
+      mergeable?: unknown;
+      mergeable_state?: unknown;
+      merged_by?: unknown;
+      merge_commit_sha?: unknown;
+      base?: unknown;
+      head?: unknown;
+      additions?: unknown;
+      deletions?: unknown;
+      changed_files?: unknown;
+      labels?: unknown;
+      node_id?: unknown;
+      requested_reviewers?: unknown;
+    };
+    const base = payload.base as { ref?: unknown; sha?: unknown } | null | undefined;
+    const head = payload.head as { ref?: unknown; sha?: unknown; label?: unknown } | null | undefined;
+    const labels = Array.isArray(payload.labels)
+      ? payload.labels.flatMap((l) =>
+          typeof (l as { name?: unknown }).name === "string"
+            ? [(l as { name: string }).name]
+            : []
+        )
+      : [];
+    const headRef = typeof head?.ref === "string" ? head.ref : null;
+
+    let reviewVerdict: PullReviewVerdict = "none";
+    let approvals = 0;
+    let changesRequested = 0;
+    try {
+      const reviewsRes = await fetch(`${apiUrl}/reviews`, { headers });
+      if (reviewsRes.ok) {
+        const reviews = (await reviewsRes.json()) as Array<{
+          user?: unknown;
+          state?: unknown;
+        }>;
+        if (Array.isArray(reviews) && reviews.length > 0) {
+          const latestByUser = new Map<string, string>();
+          for (const review of reviews) {
+            const login = (review.user as { login?: unknown } | null | undefined)?.login;
+            const state = typeof review.state === "string" ? review.state : "";
+            if (typeof login !== "string" || !login) continue;
+            if (state === "APPROVED" || state === "CHANGES_REQUESTED") {
+              latestByUser.set(login, state);
+            } else if (!latestByUser.has(login)) {
+              latestByUser.set(login, "COMMENTED");
+            }
+          }
+          const states = [...latestByUser.values()];
+          approvals = states.filter((s) => s === "APPROVED").length;
+          changesRequested = states.filter((s) => s === "CHANGES_REQUESTED").length;
+          reviewVerdict =
+            changesRequested > 0
+              ? "changes_requested"
+              : approvals > 0
+                ? "approved"
+                : states.length > 0
+                  ? "pending"
+                  : "none";
+        }
+      }
+    } catch {
+      // Reviews are advisory; the pull payload below still stands on its own.
+    }
+
+    return {
+      mergeable: typeof payload.mergeable === "boolean" ? payload.mergeable : null,
+      mergeableState:
+        typeof payload.mergeable_state === "string" ? payload.mergeable_state : null,
+      mergedByLogin:
+        typeof (payload.merged_by as { login?: unknown } | null | undefined)?.login ===
+        "string"
+          ? (payload.merged_by as { login: string }).login
+          : null,
+      mergeCommitSha:
+        typeof payload.merge_commit_sha === "string" ? payload.merge_commit_sha : null,
+      baseRef: typeof base?.ref === "string" ? base.ref : null,
+      baseSha: typeof base?.sha === "string" ? base.sha : null,
+      headRef,
+      headSha: typeof head?.sha === "string" ? head.sha : null,
+      additions: typeof payload.additions === "number" ? payload.additions : null,
+      deletions: typeof payload.deletions === "number" ? payload.deletions : null,
+      changedFiles: typeof payload.changed_files === "number" ? payload.changed_files : null,
+      labels,
+      nodeId: typeof payload.node_id === "string" ? payload.node_id : null,
+      reviewVerdict,
+      approvals,
+      changesRequested,
+      requestedReviewers: asStringList(payload.requested_reviewers),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function graphql(
+  token: string,
+  query: string,
+  variables: Record<string, unknown>
+): Promise<{ data?: unknown; errors?: Array<{ message?: unknown }> } | null> {
+  try {
+    const res = await fetch(apiBases().graphqlUrl, {
+      method: "POST",
+      headers: { ...baseHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as { data?: unknown; errors?: Array<{ message?: unknown }> };
+  } catch {
+    return null;
+  }
+}
+
+export interface PullMutationResult {
+  ok: boolean;
+  message?: string;
+}
+
+function mutationOk(
+  result: { data?: unknown; errors?: Array<{ message?: unknown }> } | null,
+  field: string
+): PullMutationResult {
+  const data = result?.data as Record<string, { clientMutationId?: unknown }> | undefined;
+  if (data?.[field]) return { ok: true };
+  const message = result?.errors?.[0]?.message;
+  return {
+    ok: false,
+    message: typeof message === "string" ? message : "The mutation was rejected.",
+  };
+}
+
+export async function mergePullRequest(
+  token: string,
+  input: { owner: string; repo: string; number: number; method: PullMergeMethod }
+): Promise<PullMutationResult & { sha?: string }> {
+  try {
+    const res = await fetch(
+      `${apiBase()}/repos/${input.owner}/${input.repo}/pulls/${input.number}/merge`,
+      {
+        method: "PUT",
+        headers: { ...baseHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ merge_method: input.method }),
+      }
+    );
+    const payload = (await res.json().catch(() => null)) as {
+      merged?: unknown;
+      message?: unknown;
+      sha?: unknown;
+    } | null;
+    if (res.ok && payload?.merged === true) {
+      return {
+        ok: true,
+        sha: typeof payload.sha === "string" ? payload.sha : undefined,
+      };
+    }
+    return {
+      ok: false,
+      message:
+        typeof payload?.message === "string" ? payload.message : `Merge failed (${res.status}).`,
+    };
+  } catch {
+    return { ok: false, message: "The merge request did not reach GitHub." };
+  }
+}
+
+export async function setPullRequestAutoMerge(
+  token: string,
+  input: { nodeId: string; method?: PullMergeMethod; disable?: boolean }
+): Promise<PullMutationResult> {
+  const mutation = input.disable
+    ? "mutation($id:ID!){ disablePullRequestAutoMerge(input:{pullRequestId:$id}){ clientMutationId } }"
+    : "mutation($id:ID!,$method:PullRequestMergeMethod!){ enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:$method}){ clientMutationId } }";
+  const method = (input.method ?? "squash").toUpperCase();
+  const result = await graphql(token, mutation, { id: input.nodeId, method });
+  return mutationOk(result, input.disable ? "disablePullRequestAutoMerge" : "enablePullRequestAutoMerge");
+}
+
+export async function updatePullRequestState(
+  token: string,
+  input: { owner: string; repo: string; number: number; state: "open" | "closed" }
+): Promise<PullMutationResult> {
+  try {
+    const res = await fetch(
+      `${apiBase()}/repos/${input.owner}/${input.repo}/pulls/${input.number}`,
+      {
+        method: "PATCH",
+        headers: { ...baseHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ state: input.state }),
+      }
+    );
+    if (res.ok) return { ok: true };
+    return { ok: false, message: `State update failed (${res.status}).` };
+  } catch {
+    return { ok: false, message: "The state update did not reach GitHub." };
+  }
+}
+
+export async function markPullRequestReady(
+  token: string,
+  input: { nodeId: string; draft?: boolean }
+): Promise<PullMutationResult> {
+  const mutation = input.draft
+    ? "mutation($id:ID!){ convertPullRequestToDraft(input:{pullRequestId:$id}){ clientMutationId } }"
+    : "mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ clientMutationId } }";
+  const result = await graphql(token, mutation, { id: input.nodeId });
+  return mutationOk(
+    result,
+    input.draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview"
+  );
+}
+
+export async function deleteBranch(
+  token: string,
+  input: { owner: string; repo: string; branch: string }
+): Promise<PullMutationResult> {
+  try {
+    const res = await fetch(
+      `${apiBase()}/repos/${input.owner}/${input.repo}/git/refs/heads/${encodeURIComponent(input.branch)}`,
+      { method: "DELETE", headers: baseHeaders(token) }
+    );
+    if (res.ok || res.status === 422) return { ok: true };
+    return { ok: false, message: `Branch deletion failed (${res.status}).` };
+  } catch {
+    return { ok: false, message: "The branch deletion did not reach GitHub." };
+  }
+}

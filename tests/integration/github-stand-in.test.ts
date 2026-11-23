@@ -144,6 +144,11 @@ describe("stand-in endpoint inventory", () => {
         name: "web",
         full_name: "acme/web",
         owner: { login: "acme" },
+        allow_merge_commit: true,
+        allow_squash_merge: true,
+        allow_rebase_merge: true,
+        allow_auto_merge: true,
+        default_branch: "main",
       });
     });
   });
@@ -159,7 +164,10 @@ describe("stand-in endpoint inventory", () => {
       expect(pullBody.state).toBe("open");
       expect(pullBody.merged).toBe(false);
       expect(pullBody.html_url).toBe("https://github.com/acme/web/pull/12");
-      expect(pullBody.head).toEqual({ sha: "0123456789abcdef0123456789abcdef01234567" });
+      expect(pullBody.head).toEqual({
+        ref: "fix-login",
+        sha: "0123456789abcdef0123456789abcdef01234567",
+      });
 
       const issue = await fetch(`${standIn.url}/repos/acme/web/issues/34`, {
         headers: authHeaders(),
