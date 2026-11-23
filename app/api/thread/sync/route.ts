@@ -39,36 +39,43 @@ export async function POST(request: Request) {
   const thread = fetched.data;
   const snapshot = await resolveSubject(token, thread);
   const changed = (row.githubUpdatedAt ?? 0) < thread.updatedAt;
-  const subjectState = snapshot.ok ? (snapshot.state ?? row.subjectState) : row.subjectState;
-  const prMerged = snapshot.ok ? snapshot.merged === true : row.prMerged === 1;
-  const sourceUrl = snapshot.ok && changed ? snapshot.url : row.sourceUrl;
   const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
-  await db
+  const [updated] = await db
     .update(notifications)
     .set({
       subject: thread.subjectTitle.slice(0, 200) || "Untitled",
       subjectType: thread.subjectType,
-      subjectState,
       reason: thread.reason,
       createdAt: thread.updatedAt,
       githubUpdatedAt: thread.updatedAt,
       isRead,
-      prMerged: prMerged ? 1 : 0,
-      sourceUrl,
+      ...(snapshot.ok ? {
+        subjectState: snapshot.state ?? row.subjectState,
+        prMerged: snapshot.merged === true ? 1 : 0,
+        sourceUrl: changed ? snapshot.url : row.sourceUrl,
+      } : {}),
     })
-    .where(eq(notifications.id, id));
+    .where(eq(notifications.id, id))
+    .returning({
+      subjectState: notifications.subjectState,
+      prMerged: notifications.prMerged,
+      sourceUrl: notifications.sourceUrl,
+    });
+  if (!updated) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   return NextResponse.json({
     gone: false,
     item: {
       id: thread.id,
       subject: thread.subjectTitle.slice(0, 200) || "Untitled",
       subjectType: thread.subjectType,
-      subjectState,
+      subjectState: updated.subjectState,
       reason: thread.reason,
-      prMerged,
+      prMerged: updated.prMerged === 1,
       createdAt: thread.updatedAt,
       isRead,
-      sourceUrl,
+      sourceUrl: updated.sourceUrl,
     },
   });
 }

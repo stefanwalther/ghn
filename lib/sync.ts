@@ -203,15 +203,15 @@ export async function upsertThreads(
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
-        subjectState: snapshot?.ok ? (snapshot.state ?? row.subjectState) : row.subjectState,
         reason: thread.reason,
         createdAt: thread.updatedAt,
         githubUpdatedAt: thread.updatedAt,
         isRead,
-        prMerged: snapshot?.ok
-          ? thread.subjectType === "PullRequest" && snapshot.merged === true ? 1 : 0
-          : row.prMerged,
-        sourceUrl: snapshot?.ok ? snapshot.url : row.sourceUrl,
+        ...(snapshot?.ok ? {
+          subjectState: snapshot.state ?? row.subjectState,
+          prMerged: thread.subjectType === "PullRequest" && snapshot.merged === true ? 1 : 0,
+          sourceUrl: snapshot.url,
+        } : {}),
       })
       .where(eq(notifications.id, thread.id));
     upserted += 1;

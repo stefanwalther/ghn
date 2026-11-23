@@ -202,6 +202,26 @@ describe("the thread upsert", () => {
     });
   });
 
+  test("a failed snapshot preserves subject fields updated while resolving", async () => {
+    const db = createMemoryDb().db;
+    await seedRow(db);
+
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => {
+      await db.update(schema.notifications).set({
+        subjectState: "closed",
+        prMerged: 1,
+        sourceUrl: "https://github.com/acme/web/pull/12#merged",
+      }).where(eq(schema.notifications.id, "t1"));
+      return { ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null };
+    });
+
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "closed",
+      prMerged: 1,
+      sourceUrl: "https://github.com/acme/web/pull/12#merged",
+    });
+  });
+
   test("a new row with a failed snapshot stores unknown state and the fallback URL", async () => {
     const db = createMemoryDb().db;
     await upsertThreads(db, [thread()], null, 1792000001000, async () => ({

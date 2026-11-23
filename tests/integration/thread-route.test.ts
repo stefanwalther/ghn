@@ -737,6 +737,60 @@ describe("POST /api/thread/sync", () => {
     expect(blocked).toEqual([]);
   });
 
+  test("a failed subject refresh preserves and returns a snapshot updated while fetching", async () => {
+    await db.update(notifications).set({ subjectState: "open", prMerged: 0 })
+      .where(eq(notifications.id, "n_001"));
+    standIn.setThreads([{
+      id: "n_001",
+      unread: false,
+      reason: "review_requested",
+      updated_at: "2026-01-15T11:30:00Z",
+      subject: {
+        title: "Fix flaky login redirect",
+        type: "PullRequest",
+        url: `${standIn.url}/repos/acme/web/pulls/1`,
+      },
+      repository: {
+        full_name: "acme/web",
+        html_url: "https://github.com/acme/web",
+        owner: { login: "acme" },
+      },
+      url: `${standIn.url}/notifications/threads/n_001`,
+    }]);
+    standIn.setScenario("/repos/acme/web/pulls/1", { status: 500 });
+    const guardedFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const response = await guardedFetch(input, init);
+      if (urlOf(input) === `${standIn.url}/repos/acme/web/pulls/1`) {
+        await db.update(notifications).set({
+          subjectState: "closed",
+          prMerged: 1,
+          sourceUrl: "https://github.com/acme/web/pull/1#merged",
+        }).where(eq(notifications.id, "n_001"));
+      }
+      return response;
+    });
+
+    try {
+      const refreshed = await syncThread({ id: "n_001" });
+      expect(refreshed.status).toBe(200);
+      const rows = await db.select().from(notifications).where(eq(notifications.id, "n_001"));
+      expect.soft(rows[0]).toMatchObject({
+        subjectState: "closed",
+        prMerged: 1,
+        sourceUrl: "https://github.com/acme/web/pull/1#merged",
+      });
+      expect(refreshed.body.item).toMatchObject({
+        subjectState: "closed",
+        prMerged: true,
+        sourceUrl: "https://github.com/acme/web/pull/1#merged",
+      });
+      expect(blocked).toEqual([]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   test("a locally unread notification stays unread", async () => {
     await db
       .update(notifications)
