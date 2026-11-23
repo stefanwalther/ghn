@@ -18,6 +18,8 @@ import {
   parseWorkflowNameFromTitle,
 } from "@/lib/github";
 import { useThreadDetails, type ThreadDetails } from "@/lib/queries";
+import { PullRequestActions } from "@/components/inbox/pr-actions";
+import type { PullRequestExtra, RepoMergeSettings } from "@/lib/github";
 import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
@@ -111,19 +113,31 @@ export function ItemDrawer({
     runs: WorkflowRun[];
     alert: DependabotAlertDetails | null;
     release: ReleaseDetails | null;
+    pull: PullRequestExtra | null;
+    repoSettings: RepoMergeSettings | null;
   }>(() => {
     const data = detailsQuery.data;
-    if (!data) return { content: null, runs: [], alert: null, release: null };
+    if (!data)
+      return { content: null, runs: [], alert: null, release: null, pull: null, repoSettings: null };
     if (data.alert) {
       return {
         content: null,
         runs: Array.isArray(data.runs) ? data.runs : [],
         alert: data.alert,
         release: null,
+        pull: null,
+        repoSettings: null,
       };
     }
     if (data.release) {
-      return { content: null, runs: [], alert: null, release: data.release };
+      return {
+        content: null,
+        runs: [],
+        alert: null,
+        release: data.release,
+        pull: null,
+        repoSettings: null,
+      };
     }
     if ("content" in data && data.content === null) {
       return {
@@ -131,9 +145,18 @@ export function ItemDrawer({
         runs: Array.isArray(data.runs) ? data.runs : [],
         alert: null,
         release: null,
+        pull: null,
+        repoSettings: null,
       };
     }
-    return { content: data as ThreadDetails, runs: [], alert: null, release: null };
+    return {
+      content: data as ThreadDetails,
+      runs: [],
+      alert: null,
+      release: null,
+      pull: data.pull ?? null,
+      repoSettings: data.repoSettings ?? null,
+    };
   }, [detailsQuery.data]);
   const raw = derived;
   // While the new thread loads, ignore placeholder (previous thread) data so
@@ -142,6 +165,8 @@ export function ItemDrawer({
   const runs = loadingThread ? [] : raw.runs;
   const alert = loadingThread ? null : raw.alert;
   const release = loadingThread ? null : raw.release;
+  const pull = loadingThread ? null : raw.pull;
+  const repoSettings = loadingThread ? null : raw.repoSettings;
   const [width, setWidth] = React.useState<number>(() => loadDrawerWidth());
   const draggingRef = React.useRef(false);
   const scrollRef = React.useRef<HTMLElement>(null);
@@ -459,6 +484,28 @@ export function ItemDrawer({
                 {content.authorLogin ? `${content.authorLogin} · ` : ""}
                 {content.state ?? ""}
               </p>
+              {item.subjectType === "PullRequest" && pull ? (
+                <p className="text-xs text-muted-foreground">
+                  {[
+                    pull.baseRef && pull.headRef
+                      ? `${pull.baseRef} ← ${pull.headRef}`
+                      : null,
+                    pull.additions !== null && pull.deletions !== null
+                      ? `+${pull.additions} −${pull.deletions}${pull.changedFiles !== null ? ` · ${pull.changedFiles} files` : ""}`
+                      : null,
+                    pull.reviewVerdict === "approved"
+                      ? `Approved${pull.approvals > 1 ? ` (${pull.approvals})` : ""}`
+                      : pull.reviewVerdict === "changes_requested"
+                        ? "Changes requested"
+                        : pull.requestedReviewers.length > 0
+                          ? `Awaiting review: ${pull.requestedReviewers.join(", ")}`
+                          : null,
+                    ...(pull.labels.length > 0 ? pull.labels : []),
+                  ]
+                    .filter((part): part is string => part !== null)
+                    .join(" · ") || null}
+                </p>
+              ) : null}
               {content.body ? (
                 <Markdown text={content.body} repositoryUrl={repositoryUrl} />
               ) : (
@@ -482,6 +529,18 @@ export function ItemDrawer({
             </>
           ) : null}
         </div>
+        {item.subjectType === "PullRequest" && contentState === "ready" && content ? (
+          <PullRequestActions
+            itemId={item.id}
+            sourceUrl={item.sourceUrl}
+            state={content.state ?? null}
+            merged={content.merged ?? null}
+            draft={content.draft ?? null}
+            checksState={content.checks?.state ?? null}
+            pull={pull}
+            repoSettings={repoSettings}
+          />
+        ) : null}
       </aside>
     </div>
   );

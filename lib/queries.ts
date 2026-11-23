@@ -4,7 +4,9 @@ import * as React from "react";
 import type {
   CheckSummary,
   DependabotAlertDetails,
+  PullRequestExtra,
   ReleaseDetails,
+  RepoMergeSettings,
   SubjectContent,
   ThreadComment,
   WorkflowRun,
@@ -115,6 +117,8 @@ export type ThreadDetailsResponse = ThreadDetails & {
   runs?: WorkflowRun[];
   alert?: DependabotAlertDetails | null;
   release?: ReleaseDetails | null;
+  pull?: PullRequestExtra | null;
+  repoSettings?: RepoMergeSettings | null;
 };
 
 /** Same URL shape as the hand-rolled loader, so routes and caches line up. */
