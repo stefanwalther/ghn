@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, inboxNotificationIds, inboxRows, test } from "./fixtures";
 
 /**
@@ -44,6 +44,24 @@ function palette(page: Page) {
   return page.getByRole("dialog", { name: "Search and commands" });
 }
 
+/**
+ * Fills the palette and waits for the expected hit before the caller
+ * presses Enter or clicks. The palette loads threads and repos over the
+ * network after it opens, so acting immediately after fill races the
+ * fetch and flakes under load.
+ */
+async function fillAndWaitForOption(
+  page: Page,
+  box: Locator,
+  text: string,
+  name: RegExp
+) {
+  await box.fill(text);
+  await expect(
+    palette(page).getByRole("option", { name }).first()
+  ).toBeVisible();
+}
+
 test.describe("palette search scopes", () => {
   test("empty palette shows commands, threads, repos, and scope tabs", async ({ page }) => {
     await page.goto("/");
@@ -61,7 +79,7 @@ test.describe("palette search scopes", () => {
   test("Enter on a thread opens it in the drawer", async ({ page }) => {
     await page.goto("/");
     const box = await openPalette(page);
-    await box.fill("flaky");
+    await fillAndWaitForOption(page, box, "flaky", /Fix flaky login redirect/);
 
     await page.keyboard.press("Enter");
 
@@ -78,7 +96,7 @@ test.describe("palette search scopes", () => {
     await expect(page.getByRole("option", { name: /Fix flaky login redirect/ })).toHaveCount(0);
 
     const box = await openPalette(page);
-    await box.fill("flaky");
+    await fillAndWaitForOption(page, box, "flaky", /Fix flaky login redirect/);
     await palette(page).getByRole("option", { name: /Fix flaky login redirect/ }).first().click();
 
     const drawer = page.getByRole("dialog", { name: "Preview drawer" });
@@ -90,7 +108,7 @@ test.describe("palette search scopes", () => {
   test("Shift+Enter on a thread filters the inbox to its repository", async ({ page }) => {
     await page.goto("/");
     const box = await openPalette(page);
-    await box.fill("flaky");
+    await fillAndWaitForOption(page, box, "flaky", /Fix flaky login redirect/);
 
     await page.keyboard.press("Shift+Enter");
 
@@ -134,7 +152,7 @@ test.describe("palette search scopes", () => {
   test("qualifier completion fills repo: and keeps the palette open", async ({ page }) => {
     await page.goto("/");
     const box = await openPalette(page);
-    await box.fill("r");
+    await fillAndWaitForOption(page, box, "r", /^repo:/);
 
     await page.keyboard.press("Enter");
 
