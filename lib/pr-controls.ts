@@ -67,9 +67,6 @@ export function resolvePullPrimaryControl(input: PullControlInput): PullPrimaryC
 export function mergeUnavailableReason(input: PullControlInput): string | null {
   const control = resolvePullPrimaryControl(input);
   if (control.kind !== "merge") return null;
-  if (input.extra?.mergeable === false || input.extra?.mergeableState === "dirty") {
-    return "This branch has conflicts with the base. Resolve them first.";
-  }
   if (input.checksState === "failure" || input.checksState === "error") {
     return "Required checks are failing. Fix them or enable auto-merge.";
   }

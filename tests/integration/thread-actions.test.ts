@@ -237,6 +237,38 @@ describe("POST /api/thread/actions", () => {
     expect(gql?.body).toContain("markPullRequestReadyForReview");
   });
 
+  test("convert to draft uses the pull node id over graphql", async () => {
+    const { status, body } = await postAction({ id: "n_001", action: "convert_to_draft" });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    const gql = standIn.requests.find((r) => r.path === "/graphql");
+    expect(gql?.body).toContain("convertPullRequestToDraft");
+  });
+
+  test("delete branch removes the head ref", async () => {
+    const { status, body } = await postAction({ id: "n_001", action: "delete_branch" });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    const del = standIn.requests.find(
+      (r) => r.path === "/repos/acme/web/git/refs/heads/fix-login"
+    );
+    expect(del?.method).toBe("DELETE");
+  });
+
+  test("a rejected state update surfaces as a failure", async () => {
+    standIn.setScenario("/repos/acme/web/pulls/1", { status: 500, body: {} });
+    const { status, body } = await postAction({ id: "n_001", action: "close" });
+    expect(status).toBe(502);
+    expect(body.ok).toBe(false);
+  });
+
+  test("a rejected graphql mutation surfaces as a failure", async () => {
+    standIn.setScenario("/graphql", { status: 500, body: {} });
+    const { status, body } = await postAction({ id: "n_001", action: "enable_auto_merge" });
+    expect(status).toBe(502);
+    expect(body.ok).toBe(false);
+  });
+
   test("delete-branch refuses the default branch", async () => {
     standIn.setSubject("/repos/acme/web/pulls/1", {
       title: "Fix flaky login redirect",
