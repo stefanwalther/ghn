@@ -8,10 +8,10 @@ export const queryKeys = {
   notifications: (filters: InboxFilters, limit?: number | null) =>
     [
       "notifications",
-      filters.repo,
-      filters.state,
-      filters.type,
-      filters.age,
+      [...filters.repos].sort(),
+      [...filters.states].sort(),
+      [...filters.types].sort(),
+      [...filters.ages].sort(),
       limit ?? null,
     ] as const,
   repositories: () => ["repositories"] as const,

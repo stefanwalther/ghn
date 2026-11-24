@@ -216,16 +216,17 @@ export function useBulkAction(filters: InboxFilters) {
         previous.mainFlow,
         vars.ids,
         vars.action,
-        filters.state
+        filters.states
       );
       // Facet counts only change when rows leave the current state view:
-      // done/unsubscribe out of unread, unread out of done. All other
-      // combos keep counts until the refetch confirms.
+      // done/unsubscribe out of unread-only, unread out of done-only.
+      const isUnreadOnly =
+        filters.states.includes("unread") && !filters.states.includes("done");
+      const isDoneOnly =
+        filters.states.includes("done") && !filters.states.includes("unread");
       const removesFromView =
-        (vars.action === "done" || vars.action === "unsubscribe") &&
-        filters.state === "unread";
-      const restoresFromDone =
-        vars.action === "unread" && filters.state === "done";
+        (vars.action === "done" || vars.action === "unsubscribe") && isUnreadOnly;
+      const restoresFromDone = vars.action === "unread" && isDoneOnly;
       let next: NotificationsResponse = { ...previous, mainFlow: nextMainFlow };
       if (removesFromView || restoresFromDone) {
         const removed = previous.mainFlow.filter((item) => idsSet.has(item.id));
@@ -294,14 +295,16 @@ export function useMarkRepoDone(filters: InboxFilters) {
       await client.cancelQueries({ queryKey: key });
       const previous = client.getQueryData<NotificationsResponse>(key);
       if (!previous) return { previous };
-      // Done rows stay put in the done view and are marked in place in the
-      // all view, matching the confirmed server state. Only the unread view
-      // removes rows.
-      const leavesView = filters.state !== "done" && filters.state !== "all";
+      // Done rows stay put in the done-only view and are marked in place
+      // when both states show, matching the confirmed server state. Only
+      // the unread-only view removes rows.
+      const isUnreadOnly =
+        filters.states.includes("unread") && !filters.states.includes("done");
+      const leavesView = isUnreadOnly;
       const removed = leavesView
         ? previous.mainFlow.filter((item) => item.repositoryId === vars.repositoryId)
         : [];
-      const nextMainFlow = applyRepoAction(previous.mainFlow, vars.repositoryId, "done", filters.state);
+      const nextMainFlow = applyRepoAction(previous.mainFlow, vars.repositoryId, "done", filters.states);
       const nextTypes = previous.facets.types.map((facet) => {
         if (facet.value === "all") {
           return { ...facet, count: Math.max(0, facet.count - removed.length) };
@@ -374,7 +377,7 @@ export function useMarkRepoRead(filters: InboxFilters) {
       if (!previous) return { previous };
       const next: NotificationsResponse = {
         ...previous,
-        mainFlow: applyRepoAction(previous.mainFlow, vars.repositoryId, "read", filters.state),
+        mainFlow: applyRepoAction(previous.mainFlow, vars.repositoryId, "read", filters.states),
         collapsedSection: (previous.collapsedSection ?? []).map((group) =>
           group.repositoryId === vars.repositoryId
             ? { ...group, unreadCount: 0 }

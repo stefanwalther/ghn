@@ -124,6 +124,7 @@ export function NotificationList({
   showHints,
   syncingIds,
   activeRepo,
+  activeRepos,
   onToggle,
   onToggleAll,
   onQuickSelect,
@@ -136,7 +137,8 @@ export function NotificationList({
   focusedId?: string;
   showHints: boolean;
   syncingIds?: Set<string>;
-  activeRepo?: string;
+  activeRepo?: string | string[];
+  activeRepos?: string[];
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onQuickSelect: (reason: string) => void;
@@ -144,6 +146,12 @@ export function NotificationList({
   onOpen: (item: InboxItem) => void;
   hideToolbar?: boolean;
 }) {
+  const repoSet: Set<string> | null =
+    activeRepos !== undefined
+      ? new Set(activeRepos)
+      : activeRepo === undefined || activeRepo === "all"
+        ? null
+        : new Set(Array.isArray(activeRepo) ? activeRepo : [activeRepo]);
   return (
     <div className="overflow-hidden rounded-lg bg-card shadow-sm">
       {hideToolbar ? null : (
@@ -163,7 +171,7 @@ export function NotificationList({
             checked={selected.has(item.id)}
             focused={focusedId === item.id}
             syncing={syncingIds?.has(item.id) ?? false}
-            isRepoSelected={activeRepo != null && activeRepo !== "all" && activeRepo === item.repositoryId}
+            isRepoSelected={repoSet !== null && repoSet.has(item.repositoryId)}
             onToggle={onToggle}
             onMenuAction={onMenuAction}
             onOpen={onOpen}

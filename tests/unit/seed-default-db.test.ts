@@ -15,6 +15,9 @@ afterEach(() => {
 describe("the seeder without an injected database", () => {
   // The seeder used from the command line uses the application's own
   // database, which the environment seam points at.
+  // Seeding writes a 200-row database to disk, so this test gets an
+  // explicit timeout: under a loaded full-suite run it can exceed the
+  // 5s default and flake.
   test("the seeder uses the database the environment points at", async () => {
     const path = join(tmpdir(), `ghn-seed-default-${process.pid}.db`);
     saved = process.env[KEY];
@@ -32,5 +35,5 @@ describe("the seeder without an injected database", () => {
       rmSync(`${path}-wal`, { force: true });
       rmSync(`${path}-shm`, { force: true });
     }
-  });
+  }, 15_000);
 });

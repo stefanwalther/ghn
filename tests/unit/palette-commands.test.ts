@@ -179,7 +179,7 @@ describe("palette filter dimensions", () => {  test("state and age entries carry
 
   test("dimension entries show the current filter values", () => {
     const entries = dimensionEntries(
-      { repo: "acme--web", state: "unread", type: "release", age: "7d" },
+      { repos: ["acme--web"], states: ["unread"], types: ["release"], ages: ["7d"] },
       [{ id: "acme--web", fullName: "acme/web" }],
       [{ value: "release", label: "Release" }]
     );
@@ -195,7 +195,7 @@ describe("palette filter dimensions", () => {  test("state and age entries carry
 
   test("dimension entries fall back to ids when nothing matches", () => {
     const entries = dimensionEntries(
-      { repo: "all", state: "all", type: "all", age: "all" },
+      { repos: [], states: ["unread", "done"], types: [], ages: [] },
       [],
       []
     );

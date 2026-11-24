@@ -142,7 +142,7 @@ export function CommandPalette() {
   // Shared cache entries: no per-open fetches while fresh. Queries stay
   // idle until the palette opens.
   const threadsQuery = useNotifications(
-    { repo: "all", state: "all", type: "all", age: "all" },
+    { repos: [], states: ["unread", "done"], types: [], ages: [] },
     { limit: 400, enabled: open }
   );
   const reposQuery = useRepositories({ enabled: open });
@@ -228,7 +228,7 @@ export function CommandPalette() {
     try {
       return parseInboxFilters(new URLSearchParams(search));
     } catch {
-      return { repo: "all", state: "unread", type: "all", age: "all" };
+      return { repos: [], states: ["unread"], types: [], ages: [] };
     }
   }, [search]);
 
@@ -398,14 +398,45 @@ export function CommandPalette() {
       requestAnimationFrame(() => inputRef.current?.focus());
       return;
     }
-    // Inbox filter values preserve every other active filter.
+    // Inbox filter values preserve every other active filter. Type and
+    // age toggle into their multi-select sets; "all" clears the group.
+    // State "all" means both states; picking the active single state
+    // again resets to the unread default.
     if (a.type === "filter") {
       close();
       try {
         const current = parseInboxFilters(new URLSearchParams(window.location.search));
-        router.push(
-          `/${serializeInboxFilters({ ...current, [a.field]: a.value } as InboxFilters)}`
-        );
+        if (a.field === "type") {
+          if (a.value === "all") {
+            router.push(`/${serializeInboxFilters({ ...current, types: [] })}`);
+          } else {
+            const next = current.types.includes(a.value)
+              ? current.types.filter((v) => v !== a.value)
+              : [...current.types, a.value].sort();
+            router.push(`/${serializeInboxFilters({ ...current, types: next })}`);
+          }
+        } else if (a.field === "age") {
+          if (a.value === "all") {
+            router.push(`/${serializeInboxFilters({ ...current, ages: [] })}`);
+          } else {
+            const next = current.ages.includes(a.value as never)
+              ? current.ages.filter((v) => v !== a.value)
+              : [...current.ages, a.value as never].sort();
+            router.push(`/${serializeInboxFilters({ ...current, ages: next as never[] } as InboxFilters)}`);
+          }
+        } else {
+          const next =
+            a.value === "all"
+              ? (["unread", "done"] as const)
+              : ([a.value] as unknown as InboxFilters["states"]);
+          const toggled =
+            next.length === 1 &&
+            current.states.length === 1 &&
+            current.states[0] === next[0]
+              ? (["unread"] as InboxFilters["states"])
+              : (next as InboxFilters["states"]);
+          router.push(`/${serializeInboxFilters({ ...current, states: toggled })}`);
+        }
       } catch {
         router.push("/");
       }
@@ -478,7 +509,7 @@ export function CommandPalette() {
           const current = parseInboxFilters(
             new URLSearchParams(window.location.search)
           );
-          router.push(`/${serializeInboxFilters({ ...current, repo: "all" })}`);
+          router.push(`/${serializeInboxFilters({ ...current, repos: [] })}`);
         } catch {
           router.push("/");
         }

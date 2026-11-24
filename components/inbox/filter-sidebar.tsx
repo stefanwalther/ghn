@@ -283,9 +283,11 @@ export function FilterSidebar({
   onRepoFilterChange,
 }: {
   types: TypeFacet[];
-  activeType: string;
+  /** Single "all"/value for backward compat, or a multi-select list (empty = all). */
+  activeType: string | string[];
   repos: RepoFacet[];
-  activeRepo: string;
+  /** Single "all"/id for backward compat, or a multi-select list (empty = all). */
+  activeRepo: string | string[];
   onType: (type: string) => void;
   onRepo: (repo: string) => void;
   onSnooze?: (id: string, snoozedUntil: number | null) => void;
@@ -358,14 +360,36 @@ export function FilterSidebar({
     });
   }
 
-  const activeTypeLabel = types.find((t) => t.value === activeType)?.label;
-  const activeRepoName = repos.find((r) => r.id === activeRepo)?.fullName;
+  const activeTypeList: string[] = Array.isArray(activeType)
+    ? activeType
+    : activeType === "all"
+      ? []
+      : [activeType];
+  const activeRepoList: string[] = Array.isArray(activeRepo)
+    ? activeRepo
+    : activeRepo === "all"
+      ? []
+      : [activeRepo];
+  const activeRepoSet = new Set(activeRepoList);
+  const activeTypeSet = new Set(activeTypeList);
+  const activeTypeLabel =
+    activeTypeList.length === 1
+      ? types.find((t) => t.value === activeTypeList[0])?.label
+      : activeTypeList.length > 1
+        ? `${activeTypeList.length} selected`
+        : undefined;
+  const activeRepoName =
+    activeRepoList.length === 1
+      ? repos.find((r) => r.id === activeRepoList[0])?.fullName
+      : activeRepoList.length > 1
+        ? `${activeRepoList.length} selected`
+        : undefined;
   // Badge shows main, so visibility follows main/quiet only. readable and
   // pendingAll stay for the row actions (Mark all read/done) but must not
-  // keep a 0-badge row in the list. The active repo stays pinned so the
+  // keep a 0-badge row in the list. Every active repo stays pinned so the
   // current filter never vanishes from under the user.
   const visibleRepos = repos.filter(
-    (r) => r.id === activeRepo || r.main > 0 || r.quiet > 0
+    (r) => activeRepoSet.has(r.id) || r.main > 0 || r.quiet > 0
   );
   // Same fuzzy engine as the command palette, so a palette query handed
   // off here behaves identically. Scope qualifiers (`repo:`, `type:`…)
@@ -379,11 +403,11 @@ export function FilterSidebar({
       )
     : visibleRepos;
   const listedRepos =
-    activeRepo !== "all" && trimmedQuery
-      ? searchedRepos.some((r) => r.id === activeRepo)
+    activeRepoList.length > 0 && trimmedQuery
+      ? searchedRepos.some((r) => activeRepoSet.has(r.id))
         ? searchedRepos
         : [
-            ...visibleRepos.filter((r) => r.id === activeRepo),
+            ...visibleRepos.filter((r) => activeRepoSet.has(r.id)),
             ...searchedRepos,
           ]
       : searchedRepos;
@@ -397,7 +421,12 @@ export function FilterSidebar({
     ...(collapsed.repos ? [] : regularRepos),
     ...(collapsed.snoozed ? [] : snoozedRepos),
   ].map((r) => r.id);
-  const activeSnoozedName = snoozedRepos.find((r) => r.id === activeRepo)?.fullName;
+  const activeSnoozedName =
+    activeRepoList.length === 1
+      ? snoozedRepos.find((r) => r.id === activeRepoList[0])?.fullName
+      : activeRepoList.length > 1
+        ? `${activeRepoList.length} selected`
+        : undefined;
   // Resolved bulk context for the combined menu. Members cover the whole
   // selection by repository identity (visible members in display order,
   // hidden members appended in facet order) so search-hidden selections
@@ -458,7 +487,10 @@ export function FilterSidebar({
       return;
     }
     clearSelection();
-    onRepo(activeRepo === repo.id ? "all" : repo.id);
+    // Plain click toggles the repo in the multi-select inbox filter.
+    // The parent removes an active repo or adds an inactive one; "All"
+    // clears via its own button.
+    onRepo(repo.id);
   }
 
   /** Escape clears; modified Space/Enter toggles; Shift+Arrow ranges. */
@@ -548,7 +580,7 @@ export function FilterSidebar({
         >
           <span className="min-w-0 truncate text-left">
             Filters
-            {collapsed.types && activeType !== "all" && activeTypeLabel
+            {collapsed.types && activeTypeList.length > 0 && activeTypeLabel
               ? ` · ${activeTypeLabel}`
               : ""}
           </span>
@@ -565,7 +597,7 @@ export function FilterSidebar({
           {(() => {
             const allFacet = types.find((t) => t.value === "all");
             const rest = types.filter((t) => t.value !== "all");
-            const allActive = activeType === "all";
+            const allActive = activeTypeList.length === 0;
             return (
               <>
                 <SidebarButton
@@ -577,13 +609,13 @@ export function FilterSidebar({
                   <Badge variant="muted">{allFacet?.count ?? 0}</Badge>
                 </SidebarButton>
                 {rest.map((t) => {
-                  const active = activeType === t.value;
+                  const active = activeTypeSet.has(t.value);
                   return (
                     <SidebarButton
                       key={t.value}
                       active={active}
                       label={`Filter by ${t.label}`}
-                      onClick={() => onType(active ? "all" : t.value)}
+                      onClick={() => onType(t.value)}
                     >
                       <span className="truncate">{t.label}</span>
                       <Badge variant="muted">{t.count}</Badge>
@@ -606,7 +638,7 @@ export function FilterSidebar({
         >
           <span className="min-w-0 truncate text-left">
             Repositories
-            {collapsed.repos && activeRepo !== "all" && activeRepoName
+            {collapsed.repos && activeRepoList.length > 0 && activeRepoName
               ? ` · ${activeRepoName}`
               : ""}
           </span>
@@ -660,7 +692,7 @@ export function FilterSidebar({
             </p>
           ) : null}
           <SidebarButton
-            active={activeRepo === "all"}
+            active={activeRepoList.length === 0}
             label="Show all repositories"
             onClick={() => onRepo("all")}
           >
@@ -673,7 +705,7 @@ export function FilterSidebar({
             <RepoFilterRow
               key={r.id}
               repo={r}
-              active={activeRepo === r.id}
+              active={activeRepoSet.has(r.id)}
               selected={selected.has(r.id)}
               bulk={bulk}
               onClearSelection={clearSelection}
@@ -730,7 +762,7 @@ export function FilterSidebar({
             <RepoFilterRow
               key={r.id}
               repo={r}
-              active={activeRepo === r.id}
+              active={activeRepoSet.has(r.id)}
               selected={selected.has(r.id)}
               bulk={bulk}
               onClearSelection={clearSelection}

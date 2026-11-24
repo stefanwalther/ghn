@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures";
 test.describe("inbox filter persistence", () => {
   test("restores the last filters on the next bare visit", async ({ page }) => {
     await page.goto("/?repo=acme--web&age=7d");
-    await expect(page.getByLabel("Filter by age")).toHaveValue("7d");
+    await expect(page.getByLabel("Filter by age Last 7 days")).toBeChecked();
     await expect(page).toHaveURL(/repo=acme--web/);
 
     const stored = await page.evaluate(() => localStorage.getItem("ghn:inbox-filters"));
@@ -16,7 +16,7 @@ test.describe("inbox filter persistence", () => {
     await page.goto("/");
     await expect(page).toHaveURL(/repo=acme--web/);
     await expect(page).toHaveURL(/age=7d/);
-    await expect(page.getByLabel("Filter by age")).toHaveValue("7d");
+    await expect(page.getByLabel("Filter by age Last 7 days")).toBeChecked();
   });
 
   test("an explicit URL wins and becomes the new memory", async ({ page }) => {
@@ -25,18 +25,37 @@ test.describe("inbox filter persistence", () => {
       localStorage.setItem(
         "ghn:inbox-filters",
         JSON.stringify({
-          version: 1,
-          filters: { repo: "acme--web", state: "unread", type: "all", age: "7d" },
+          version: 2,
+          filters: {
+            repos: ["acme--web"],
+            states: ["unread"],
+            types: [],
+            ages: ["7d"],
+          },
         })
       );
     });
     await page.goto("/?repo=acme--api&state=all");
     await expect(page).toHaveURL(/repo=acme--api/);
-    await expect(page.getByLabel("Filter by state", { exact: true })).toHaveValue("all");
+    await expect(page.getByLabel("Filter by state Done")).toBeChecked();
+    await expect(page.getByLabel("Filter by state Unread")).toBeChecked();
 
     await page.goto("/");
     await expect(page).toHaveURL(/repo=acme--api/);
-    await expect(page.getByLabel("Filter by state", { exact: true })).toHaveValue("all");
+    await expect(page.getByLabel("Filter by state Done")).toBeChecked();
+  });
+
+  test("restores multi-select defaults", async ({ page }) => {
+    await page.goto("/?repo=acme--web&repo=acme--api&type=mention&age=7d&age=30d");
+    await expect(page).toHaveURL(/repo=acme--web/);
+    await expect(page).toHaveURL(/repo=acme--api/);
+
+    await page.goto("/");
+    await expect(page).toHaveURL(/repo=acme--web/);
+    await expect(page).toHaveURL(/repo=acme--api/);
+    await expect(page).toHaveURL(/type=mention/);
+    await expect(page.getByLabel("Filter by age Last 7 days")).toBeChecked();
+    await expect(page.getByLabel("Filter by age Last 30 days")).toBeChecked();
   });
 
   test("corrupt memory falls back to defaults", async ({ page }) => {
@@ -46,7 +65,8 @@ test.describe("inbox filter persistence", () => {
     await page.goto("/");
     await expect(page).not.toHaveURL(/repo=/);
     await expect(page).not.toHaveURL(/age=/);
-    await expect(page.getByLabel("Filter by age")).toHaveValue("all");
+    await expect(page.getByLabel("Filter by state Unread")).toBeChecked();
+    await expect(page.getByLabel("Filter by state Done")).not.toBeChecked();
     await expect(page.getByRole("heading", { name: "Notifications", level: 1 })).toBeVisible();
   });
 });

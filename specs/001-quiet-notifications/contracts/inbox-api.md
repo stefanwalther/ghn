@@ -2,7 +2,9 @@
 
 **Base**: Next.js App Router Route Handlers, JSON only. All timestamps are unix ms.
 
-## GET /api/notifications?repo=<id|all>&state=<unread|all|done>&type=<reason|all>&age=<24h|48h|7d|14d|30d|year|older|all>
+## GET /api/notifications?repo=<id>&state=<unread|done>&type=<reason>&age=<24h|48h|7d|14d|30d|year|older>
+
+Every dimension is multi-select: repeat the param (`?repo=a&repo=b`) or comma-separate (`?repo=a,b`); matching is OR within a dimension and AND across dimensions. An omitted `repo`/`type`/`age` means no restriction; an omitted `state` defaults to `unread`. Legacy aliases stay valid: `?state=all` means both states, and `?repo=all` / `?type=all` / `?age=all` mean no restriction.
 
 Returns grouped inbox for the current digest clock.
 

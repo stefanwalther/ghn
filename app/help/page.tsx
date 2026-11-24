@@ -55,9 +55,9 @@ function SearchHelp() {
 function FilteringHelp() {
   return (
     <TipsList>
-      <Tip>Everything that shrinks the inbox lives in the sidebar: repository search, type buttons, and age and state dropdowns.</Tip>
+      <Tip>Everything that shrinks the inbox lives in the sidebar: repository search, type buttons, and age and state checkboxes. Every group is multi-select.</Tip>
       <Tip>The counts next to each filter show how many items match before you click.</Tip>
-      <Tip>Clicking the active filter again clears it back to all.</Tip>
+      <Tip>Click a filter again to remove it. Show all / All repositories clears the whole group back to all, and your last set is remembered for the next visit.</Tip>
       <Tip>Right-click a repository row (or open its <Kbd>···</Kbd> menu) to snooze it for an hour, a day, or a week. Unsnooze any time to bring it back.</Tip>
       <Tip>Snoozed repositories sit in their own section until the snooze ends.</Tip>
     </TipsList>

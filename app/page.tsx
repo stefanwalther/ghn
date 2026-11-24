@@ -56,6 +56,12 @@ import {
   clampFilterWidth,
   loadFilterWidth,
   saveFilterWidth,
+  displayState,
+  filtersEqual,
+  isAllStates,
+  isDoneOnly,
+  isUnreadOnly,
+  toggleInList,
   type InboxFilters as Filters,
 } from "@/lib/view-state";
 import { useQueryClient } from "@tanstack/react-query";
@@ -207,15 +213,20 @@ function InboxView() {
   );
   const collapsed = notifQuery.data?.collapsedSection ?? [];
   const quietTotal = collapsed.reduce((n, g) => n + g.pendingCount, 0);
-  // The quiet group matching the repo filter, if the filter points at a
-  // repo whose items are all still collapsed. Its panel explains where the
-  // items are instead of claiming everything is done.
+  // The quiet group matching the repo filter, when the filter names exactly
+  // one repo whose items are all still collapsed. With several repos the
+  // generic notice covers the set; with all repos it covers everything.
+  const matchingQuiet =
+    filters.repos.length === 0
+      ? collapsed
+      : collapsed.filter((g) => filters.repos.includes(g.repositoryId));
   const activeQuietGroup =
-    filters.repo === "all"
-      ? undefined
-      : collapsed.find((g) => g.repositoryId === filters.repo);
+    filters.repos.length === 1
+      ? matchingQuiet.find((g) => g.repositoryId === filters.repos[0])
+      : undefined;
   const showQuietNotice =
-    collapsed.length > 0 && (filters.repo === "all" || activeQuietGroup !== undefined);
+    collapsed.length > 0 &&
+    (filters.repos.length === 0 || matchingQuiet.length > 0);
   const typeFacets = notifQuery.data?.facets?.types ?? [];
   const repoFacets = notifQuery.data?.facets?.repos ?? [];
   const refreshing = notifQuery.isFetching && !notifQuery.isPending;
@@ -310,12 +321,20 @@ function InboxView() {
 
   function selectType(type: string) {
     setQuietView(false);
-    setFilters({ ...filters, type });
+    if (type === "all") {
+      setFilters({ ...filters, types: [] });
+      return;
+    }
+    setFilters({ ...filters, types: toggleInList(filters.types, type) });
   }
 
   function selectRepo(repo: string) {
     setQuietView(false);
-    setFilters({ ...filters, repo });
+    if (repo === "all") {
+      setFilters({ ...filters, repos: [] });
+      return;
+    }
+    setFilters({ ...filters, repos: toggleInList(filters.repos, repo) });
   }
 
   function showQuietDigests() {
@@ -365,7 +384,7 @@ function InboxView() {
     if (action === "select-repo") {
       setFilters({
         ...filters,
-        repo: filters.repo === item.repositoryId ? "all" : item.repositoryId,
+        repos: toggleInList(filters.repos, item.repositoryId),
       });
       return;
     }
@@ -425,7 +444,7 @@ function InboxView() {
     }
     // The displayed list folds this intent over the trusted snapshot until
     // the mutation confirms or fails. Rollback lives in the mutation cache.
-    const intent: PendingIntent = { action, ids: targets, state: filters.state, viewKey };
+    const intent: PendingIntent = { action, ids: targets, state: filters.states, viewKey };
     pendingRef.current = [...pendingRef.current, intent];
     setSelected(new Set());
     try {
@@ -651,9 +670,9 @@ function InboxView() {
     // rows; only the unread view shares the total's scope. Omit the split
     // when the counts cannot be trusted.
     const splitExact =
-      filters.type === "all" &&
-      filters.age === "all" &&
-      filters.state === "unread";
+      filters.types.length === 0 &&
+      filters.ages.length === 0 &&
+      isUnreadOnly(filters);
     const quiet = splitExact ? Math.max(0, total - main) : 0;
     if (!opts?.confirmed && total > BULK_CONFIRM_THRESHOLD) {
       setConfirmDone({ repositoryIds: ids, total, main, quiet });
@@ -676,7 +695,7 @@ function InboxView() {
     const intents: PendingIntent[] = ids.map((repositoryId) => ({
       action: "done",
       ids: targets.filter((t) => t.repositoryId === repositoryId).map((t) => t.id),
-      state: filters.state,
+      state: filters.states,
       repositoryId,
       viewKey,
     }));
@@ -839,37 +858,44 @@ function InboxView() {
         }
         if (parts.length > 0) say(parts.join(" "), failed.length > 0 || partialQueued > 0 ? "error" : "info");
       }
-      // The sidebar hides zero-item repos unless they are the active
-      // filter. When the active repo was just emptied, move the filter to
-      // the next visible repo (previous when last, "all" when none
-      // remain) so the emptied row disappears immediately instead of
-      // lingering until the next click. Only the unread view hides the
-      // repo: the "all" view keeps its done rows, and the done view
-      // disables this action. Runs on both the background and the
-      // foreground path: large background dones empty the repo too.
+      // The sidebar hides zero-item repos unless they are active
+      // filters. When every active repo was just emptied, clear to all so
+      // the emptied rows disappear immediately instead of lingering until
+      // the next click; when only some were emptied, drop those from the
+      // filter. Only the unread-only view hides the repo: the both-states
+      // view keeps its done rows, and the done-only view disables this
+      // action. Runs on both the background and the foreground path.
       // Navigation follows only succeeded repos, and never a filter the
-      // user changed while the batch ran. Every filter field counts: a
-      // newer type or age choice must block navigation just like a newer
-      // repository or state choice does.
+      // user changed while the batch ran. Every filter field counts.
       const liveFilters = filtersRef.current;
-      const filtersUnchanged =
-        liveFilters.repo === startFilters.repo &&
-        liveFilters.state === startFilters.state &&
-        liveFilters.type === startFilters.type &&
-        liveFilters.age === startFilters.age;
-      if (
-        liveFilters.state === "unread" &&
-        filtersUnchanged &&
-        succeeded.includes(liveFilters.repo)
-      ) {
-        const nextRepo = nextRepoAfterMarkDone(
-          repoFacets,
-          liveFilters.repo,
-          succeeded
-        );
-        if (nextRepo !== null) {
-          setFocusIdx(null);
-          setFilters({ ...liveFilters, repo: nextRepo });
+      const filtersUnchanged = filtersEqual(liveFilters, startFilters);
+      if (isUnreadOnly(liveFilters) && filtersUnchanged) {
+        const activeSet = new Set(liveFilters.repos);
+        const emptiedActive = succeeded.filter((id) => activeSet.has(id));
+        if (activeSet.size > 0 && emptiedActive.length > 0) {
+          if (liveFilters.repos.length === 1) {
+            const nextRepo = nextRepoAfterMarkDone(
+              repoFacets,
+              liveFilters.repos[0] as string,
+              succeeded
+            );
+            if (nextRepo !== null) {
+              setFocusIdx(null);
+              setFilters({
+                ...liveFilters,
+                repos: nextRepo === "all" ? [] : [nextRepo],
+              });
+            }
+          } else if (emptiedActive.length >= activeSet.size) {
+            setFocusIdx(null);
+            setFilters({ ...liveFilters, repos: [] });
+          } else {
+            const nextRepos = liveFilters.repos.filter((id) => !succeeded.includes(id));
+            setFocusIdx(null);
+            setFilters({ ...liveFilters, repos: nextRepos });
+          }
+        } else if (activeSet.size === 0) {
+          // No repo filter: nothing to navigate.
         }
       }
     } finally {
@@ -896,10 +922,10 @@ function InboxView() {
   }
 
   // Per-repo pending (busyRepoIds) replaced the global busy flag here, so
-  // this flag now carries only the done-view disable. OR it with the
+  // this flag now carries only the done-only disable. OR it with the
   // per-repo flag in the consumers: a plain ?? would let a present but
-  // empty pending set swallow the done-view disable.
-  const markAllDoneBusy = filters.state === "done";
+  // empty pending set swallow the done-only disable.
+  const markAllDoneBusy = isDoneOnly(filters);
 
   /** Marks every unread item of one or more repos read, with rollback on failure. */
   async function markRepoRead(repositoryIds: string | string[]) {
@@ -935,7 +961,7 @@ function InboxView() {
     const intents: PendingIntent[] = ids.map((repositoryId) => ({
       action: "read",
       ids: targets.filter((t) => t.repositoryId === repositoryId).map((t) => t.id),
-      state: filters.state,
+      state: filters.states,
       repositoryId,
       viewKey,
     }));
@@ -1348,9 +1374,9 @@ function InboxView() {
         <div>
           <h1 className="text-xl font-semibold">Notifications</h1>
           <p className="text-sm text-muted-foreground">
-            {filters.state === "done"
+            {isDoneOnly(filters)
               ? "Finished items. Mark anything unread to bring it back."
-              : filters.state === "all"
+              : isAllStates(filters)
                 ? "Every notification in one place. Digests stay collapsed until due."
                 : "Triage unread notifications. Digests stay collapsed until due."}
           </p>
@@ -1397,9 +1423,9 @@ function InboxView() {
         >
           <FilterSidebar
             types={typeFacets}
-            activeType={filters.type}
+            activeType={filters.types}
             repos={repoFacets}
-            activeRepo={filters.repo}
+            activeRepo={filters.repos}
             onType={selectType}
             onRepo={selectRepo}
             repoFilter={repoListFilter}
@@ -1594,7 +1620,7 @@ function InboxView() {
                 busy={updateRepo.isPending}
               />
             ) : (
-              <EmptyInbox state={filters.state} />
+              <EmptyInbox state={displayState(filters)} />
             )
           ) : null}
           {status === "ready" && !quietView && items.length > 0 ? (
@@ -1604,7 +1630,7 @@ function InboxView() {
           focusedId={focusIdx !== null ? items[focusIdx]?.id : undefined}
           showHints={showHints}
           syncingIds={syncingIds}
-          activeRepo={filters.repo}
+          activeRepos={filters.repos}
           onToggle={toggle}
           onToggleAll={toggleAll}
           onQuickSelect={quickSelect}
@@ -1628,7 +1654,7 @@ function InboxView() {
             />
           ) : null}
           {status === "ready" && quietView && collapsed.length === 0 ? (
-            <EmptyInbox state={filters.state} />
+            <EmptyInbox state={displayState(filters)} />
           ) : null}
         </div>
       </div>

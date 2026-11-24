@@ -256,29 +256,54 @@ test.describe("inbox filter", () => {
     await page.goto("/");
 
     for (const age of AGE_CASES) {
-      await page.getByLabel("Filter by age").selectOption(age.value);
+      // Reset to all time, then check only this age: age filters are
+      // multi-select checkboxes with an OR semantic, so single-age
+      // assertions need a clean set first.
+      await page.getByLabel("Filter by age All time").click();
+      await page.getByLabel(`Filter by age ${age.label}`).click();
 
       await expect(page).toHaveURL(new RegExp(`\\?age=${age.value}`));
       await expect(inboxRows(page)).toHaveCount(age.ids.length);
       expect(await inboxNotificationIds(page)).toEqual(age.ids);
     }
 
-    await page.getByLabel("Filter by age").selectOption("all");
+    await page.getByLabel("Filter by age All time").click();
     await expect(page).not.toHaveURL(/age=/);
     await expect(inboxRows(page)).toHaveCount(30);
     expect(await inboxNotificationIds(page)).toEqual(VISIBLE_IDS);
+  });
+
+  test("age filters combine with an OR semantic", async ({ page }) => {
+    await page.goto("/");
+
+    await page.getByLabel("Filter by age Last 24 hours").click();
+    await page.getByLabel("Filter by age Last 7 days").click();
+
+    await expect(page).toHaveURL(/age=24h/);
+    await expect(page).toHaveURL(/age=7d/);
+    // 7d is the wider bucket, so the union equals the 7d rows.
+    const seven = AGE_CASES.find((a) => a.value === "7d")!;
+    await expect(inboxRows(page)).toHaveCount(seven.ids.length);
   });
 
   test("narrows the list to the exact rows of every type filter", async ({ page }) => {
     await page.goto("/");
 
     for (const type of TYPE_CASES) {
+      await page.getByRole("button", { name: "Show all" }).click();
       await page.getByRole("button", { name: type.label }).click();
 
       await expect(page).toHaveURL(new RegExp(`\\?type=${type.value}`));
       await expect(inboxRows(page)).toHaveCount(type.ids.length);
       expect(await inboxNotificationIds(page)).toEqual(type.ids);
     }
+
+    // Two types combine: the union of both rows.
+    await page.getByRole("button", { name: "Show all" }).click();
+    await page.getByRole("button", { name: "Filter by Pull requests" }).click();
+    await page.getByRole("button", { name: "Filter by Merged" }).click();
+    await expect(page).toHaveURL(/type=merged/);
+    await expect(page).toHaveURL(/type=pull_request/);
   });
 
   test("narrows the list to the exact rows of every repository filter", async ({ page }) => {
@@ -303,27 +328,37 @@ test.describe("inbox filter", () => {
     ];
 
     for (const repo of cases) {
+      await page.getByRole("button", { name: "Show all repositories" }).click();
       await page.getByRole("button", { name: repo.label }).click();
 
       await expect(page).toHaveURL(new RegExp(`\\?repo=${repo.id}`));
       await expect(inboxRows(page)).toHaveCount(repo.ids.length);
       expect(await inboxNotificationIds(page)).toEqual(repo.ids);
     }
+
+    // Two repos combine: twenty rows instead of ten.
+    await page.getByRole("button", { name: "Show all repositories" }).click();
+    await page.getByRole("button", { name: "Filter by acme/web" }).click();
+    await page.getByRole("button", { name: "Filter by acme/api" }).click();
+    await expect(page).toHaveURL(/repo=acme--web/);
+    await expect(page).toHaveURL(/repo=acme--api/);
+    await expect(inboxRows(page)).toHaveCount(20);
   });
 
   test("switches the state filter between the open items and the done items", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByLabel("Filter by state", { exact: true }).selectOption("done");
+    await page.getByLabel("Filter by state Done").click();
+    await page.getByLabel("Filter by state Unread").click();
     await expect(page).toHaveURL(/\?state=done/);
     await expect(inboxRows(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Nothing finished yet" })).toBeVisible();
 
-    await page.getByLabel("Filter by state", { exact: true }).selectOption("all");
+    await page.getByLabel("Filter by state Unread").click();
     await expect(page).toHaveURL(/\?state=all/);
     await expect(inboxRows(page)).toHaveCount(30);
 
-    await page.getByLabel("Filter by state", { exact: true }).selectOption("unread");
+    await page.getByLabel("Filter by state Done").click();
     await expect(page).not.toHaveURL(/state=/);
     await expect(inboxRows(page)).toHaveCount(30);
   });

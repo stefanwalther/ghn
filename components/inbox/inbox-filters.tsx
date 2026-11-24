@@ -1,8 +1,13 @@
 "use client";
 
-import { Select } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AGE_FILTERS } from "@/lib/filters";
-import type { InboxFilters } from "@/lib/view-state";
+import { toggleAge, toggleState, type InboxFilters, type StateFilter } from "@/lib/view-state";
+
+const STATE_OPTIONS: { value: StateFilter; label: string }[] = [
+  { value: "unread", label: "Unread" },
+  { value: "done", label: "Done" },
+];
 
 export function InboxFilters({
   filters,
@@ -12,39 +17,62 @@ export function InboxFilters({
   onChange: (next: InboxFilters) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="text-xs text-muted-foreground" htmlFor="age-filter">
-        Age
-      </label>
-      <Select
-        id="age-filter"
-        value={filters.age}
-        onChange={(e) =>
-          onChange({ ...filters, age: e.target.value as InboxFilters["age"] })
-        }
-        aria-label="Filter by age"
-      >
-        {AGE_FILTERS.map((a) => (
-          <option key={a.value} value={a.value}>
-            {a.label}
-          </option>
-        ))}
-      </Select>
-      <label className="text-xs text-muted-foreground" htmlFor="state-filter">
-        State
-      </label>
-      <Select
-        id="state-filter"
-        value={filters.state}
-        onChange={(e) =>
-          onChange({ ...filters, state: e.target.value as InboxFilters["state"] })
-        }
-        aria-label="Filter by state"
-      >
-        <option value="unread">Unread</option>
-        <option value="all">All open</option>
-        <option value="done">Done</option>
-      </Select>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <fieldset className="flex flex-wrap items-center gap-2">
+        <legend className="sr-only">Filter by age</legend>
+        <span aria-hidden="true" className="text-xs text-muted-foreground">
+          Age
+        </span>
+        {AGE_FILTERS.map((a) => {
+          const checked =
+            a.value === "all" ? filters.ages.length === 0 : filters.ages.includes(a.value);
+          return (
+            <label
+              key={a.value}
+              className="flex cursor-pointer items-center gap-1.5 text-sm"
+            >
+              <Checkbox
+                checked={checked}
+                onChange={() =>
+                  onChange({
+                    ...filters,
+                    ages: toggleAge(filters.ages, a.value),
+                  })
+                }
+                aria-label={`Filter by age ${a.label}`}
+              />
+              <span className={checked ? "" : "text-muted-foreground"}>{a.label}</span>
+            </label>
+          );
+        })}
+      </fieldset>
+      <fieldset className="flex flex-wrap items-center gap-2">
+        <legend className="sr-only">Filter by state</legend>
+        <span aria-hidden="true" className="text-xs text-muted-foreground">
+          State
+        </span>
+        {STATE_OPTIONS.map((s) => {
+          const checked = filters.states.includes(s.value);
+          return (
+            <label
+              key={s.value}
+              className="flex cursor-pointer items-center gap-1.5 text-sm"
+            >
+              <Checkbox
+                checked={checked}
+                onChange={() =>
+                  onChange({
+                    ...filters,
+                    states: toggleState(filters.states, s.value),
+                  })
+                }
+                aria-label={`Filter by state ${s.label}`}
+              />
+              <span className={checked ? "" : "text-muted-foreground"}>{s.label}</span>
+            </label>
+          );
+        })}
+      </fieldset>
     </div>
   );
 }

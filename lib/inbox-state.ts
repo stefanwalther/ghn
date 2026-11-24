@@ -105,25 +105,53 @@ export function applyLocalAction<T extends ActionableItem>(
 }
 
 /**
+ * Normalizes the legacy single-value state ("unread", "done", "all") and
+ * the new multi-select arrays into set flags. "all" means both.
+ */
+function stateFlags(state: string | string[]): {
+  hasUnread: boolean;
+  hasDone: boolean;
+  isAll: boolean;
+  isDoneOnly: boolean;
+  isUnreadOnly: boolean;
+} {
+  const list = Array.isArray(state) ? state : [state];
+  const hasUnread = list.includes("unread");
+  const hasDone = list.includes("done");
+  const hasAll = list.includes("all");
+  const unread = hasUnread || hasAll;
+  const done = hasDone || hasAll;
+  return {
+    hasUnread: unread,
+    hasDone: done,
+    isAll: unread && done,
+    isDoneOnly: done && !unread,
+    isUnreadOnly: unread && !done,
+  };
+}
+/**
  * The state-aware optimistic list update shared by the local working copy
  * and the query cache so both stay in sync.
  *
+ * States is the multi-select set: ["unread"], ["done"], or both for all.
  * Mirrors applyLocalAction for the default unread view. Diverges only where
- * the filter demands it: marking done while viewing done is a no-op,
- * marking unread while viewing done removes the restored rows, and marking
- * done while viewing all marks the rows in place because the confirmed
- * server state keeps done rows in that view.
+ * the filter demands it: marking done while viewing done-only is a no-op,
+ * marking unread while viewing done-only removes the restored rows, and
+ * marking done while viewing both marks the rows in place because the
+ * confirmed server state keeps done rows in that view. The legacy "all"
+ * string maps to both states so old snapshots keep working.
  */
 export function applyOptimisticList<T extends ActionableItem>(
   items: T[],
   ids: string[],
   action: BulkAction,
-  state: string
+  state: string | string[]
 ): T[] {
+  const { isAll, isDoneOnly } = stateFlags(state);
   const targetSet = new Set(ids);
   if (action === "done" || action === "unsubscribe") {
-    if (state === "done") return items;
-    if (state === "all") {
+    if (isDoneOnly) return items;
+    if (isAll) {
       return items.map((item) =>
         targetSet.has(item.id) ? { ...item, isDone: 1, localUnread: false } : item
       );
@@ -135,7 +163,7 @@ export function applyOptimisticList<T extends ActionableItem>(
       targetSet.has(item.id) ? { ...item, isRead: 1 } : item
     );
   }
-  if (state === "done") {
+  if (isDoneOnly) {
     return items.filter((item) => !targetSet.has(item.id));
   }
   return items.map((item) =>
@@ -152,7 +180,7 @@ export function applyOptimisticList<T extends ActionableItem>(
 export interface PendingIntent {
   action: BulkAction;
   ids: string[];
-  state: string;
+  state: string | string[];
   repositoryId?: string;
   /** Serialized notifications query key of the view that sent the intent. */
   viewKey: string;
@@ -164,16 +192,17 @@ export interface RepoItem extends ActionableItem {
 
 /**
  * One repo-wide triage action applied to a list. Done and unsubscribe keep
- * rows in the done view and mark them in place in the all view; read only
- * flips the flag. Shared by the display fold and the mutation caches so the
- * three stay consistent.
+ * rows in the done-only view and mark them in place in the all view; read
+ * only flips the flag. Shared by the display fold and the mutation caches so
+ * the three stay consistent.
  */
 export function applyRepoAction<T extends RepoItem>(
   items: T[],
   repositoryId: string,
   action: "done" | "unsubscribe" | "read",
-  state: string
+  state: string | string[]
 ): T[] {
+  const { isAll, isDoneOnly } = stateFlags(state);
   if (action === "read") {
     // The repo-wide endpoint marks every unread row of the repo, including
     // done-but-unread ones, so the optimistic pass flips them all; the
@@ -184,8 +213,8 @@ export function applyRepoAction<T extends RepoItem>(
         : item
     );
   }
-  if (state === "done") return items;
-  if (state === "all") {
+  if (isDoneOnly) return items;
+  if (isAll) {
     return items.map((item) =>
       item.repositoryId === repositoryId ? { ...item, isDone: 1, localUnread: false } : item
     );

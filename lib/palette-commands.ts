@@ -366,21 +366,26 @@ export function dimensionEntries(
   types: { value: string; label: string }[]
 ): PaletteEntry[] {
   const repoName =
-    filters.repo === "all"
+    filters.repos.length === 0
       ? "All repositories"
-      : (repos.find((r) => r.id === filters.repo)?.fullName ?? filters.repo);
+      : filters.repos.length === 1
+        ? (repos.find((r) => r.id === filters.repos[0])?.fullName ?? filters.repos[0])
+        : `${filters.repos.length} repositories`;
   const typeLabel =
-    filters.type === "all"
+    filters.types.length === 0
       ? "All types"
-      : (types.find((t) => t.value === filters.type)?.label ?? filters.type);
-  const stateLabel =
-    filters.state === "unread"
-      ? "Unread"
-      : filters.state === "done"
-        ? "Done"
-        : "All open";
+      : filters.types.length === 1
+        ? (types.find((t) => t.value === filters.types[0])?.label ?? filters.types[0])
+        : `${filters.types.length} types`;
+  const hasUnread = filters.states.includes("unread");
+  const hasDone = filters.states.includes("done");
+  const stateLabel = hasUnread && hasDone ? "All open" : hasDone ? "Done" : "Unread";
   const ageLabel =
-    AGE_FILTERS.find((f) => f.value === filters.age)?.label ?? filters.age;
+    filters.ages.length === 0
+      ? "All time"
+      : filters.ages.length === 1
+        ? (AGE_FILTERS.find((f) => f.value === filters.ages[0])?.label ?? filters.ages[0])
+        : `${filters.ages.length} ages`;
   return [
     {
       id: "dim-repo",
