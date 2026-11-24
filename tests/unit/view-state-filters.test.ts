@@ -1,7 +1,21 @@
 import { describe, expect, test } from "vitest";
 import {
+  displayState,
+  filtersEqual,
+  isAllAges,
+  isAllRepos,
+  isAllStates,
+  isAllTypes,
+  isDoneOnly,
+  isUnreadOnly,
+  normalizeInboxFilters,
   parseInboxFilters,
+  repoFilterHref,
   serializeInboxFilters,
+  statesEqual,
+  toggleAge,
+  toggleInList,
+  toggleState,
   type InboxFilters,
 } from "@/lib/view-state";
 
@@ -148,6 +162,70 @@ describe("serializeInboxFilters", () => {
     expect(serializeInboxFilters({ ...DEFAULTS, repos: ["b", "a"] })).toBe(
       "?repo=a&repo=b"
     );
+  });
+});
+
+describe("multi-select toggle helpers", () => {
+  test("toggleInList adds and removes in sorted order", () => {
+    expect(toggleInList([], "b")).toEqual(["b"]);
+    expect(toggleInList(["b", "a"], "c")).toEqual(["a", "b", "c"]);
+    expect(toggleInList(["a", "b"], "a")).toEqual(["b"]);
+  });
+
+  test("toggleState keeps at least one state selected", () => {
+    expect(toggleState(["unread"], "done")).toEqual(["unread", "done"]);
+    expect(toggleState(["unread", "done"], "unread")).toEqual(["done"]);
+    expect(toggleState(["done"], "done")).toEqual(["done"]);
+  });
+
+  test("toggleAge clears the whole group on all", () => {
+    expect(toggleAge(["7d"], "all")).toEqual([]);
+    expect(toggleAge([], "7d")).toEqual(["7d"]);
+    expect(toggleAge(["7d"], "7d")).toEqual([]);
+  });
+});
+
+describe("multi-select display helpers", () => {
+  const one: InboxFilters = { repos: ["a"], states: ["done"], types: ["t"], ages: ["7d"] };
+
+  test("empty lists mean all, states default to unread", () => {
+    expect(isAllRepos(DEFAULTS)).toBe(true);
+    expect(isAllTypes(DEFAULTS)).toBe(true);
+    expect(isAllAges(DEFAULTS)).toBe(true);
+    expect(isAllRepos(one)).toBe(false);
+    expect(displayState(DEFAULTS)).toBe("unread");
+    expect(displayState({ ...DEFAULTS, states: ["done"] })).toBe("done");
+    expect(displayState({ ...DEFAULTS, states: ["unread", "done"] })).toBe("all");
+  });
+
+  test("state predicates partition the sets", () => {
+    expect(isUnreadOnly(DEFAULTS)).toBe(true);
+    expect(isDoneOnly(DEFAULTS)).toBe(false);
+    expect(isAllStates(DEFAULTS)).toBe(false);
+    expect(isDoneOnly({ ...DEFAULTS, states: ["done"] })).toBe(true);
+    expect(isAllStates({ ...DEFAULTS, states: ["unread", "done"] })).toBe(true);
+  });
+
+  test("equality ignores order", () => {
+    expect(statesEqual(["done", "unread"], ["unread", "done"])).toBe(true);
+    expect(statesEqual(["unread"], ["done"])).toBe(false);
+    expect(
+      filtersEqual(
+        { repos: ["b", "a"], states: ["done", "unread"], types: [], ages: [] },
+        { repos: ["a", "b"], states: ["unread", "done"], types: [], ages: [] }
+      )
+    ).toBe(true);
+    expect(filtersEqual(DEFAULTS, one)).toBe(false);
+  });
+
+  test("repoFilterHref sets a single repo or clears", () => {
+    expect(repoFilterHref("?type=mention", "acme--web")).toBe("/?repo=acme--web&type=mention");
+    expect(repoFilterHref("?repo=acme--web", "all")).toBe("/");
+  });
+
+  test("normalizeInboxFilters rejects a non-object", () => {
+    expect(normalizeInboxFilters(42)).toEqual(DEFAULTS);
+    expect(normalizeInboxFilters(null)).toEqual(DEFAULTS);
   });
 });
 

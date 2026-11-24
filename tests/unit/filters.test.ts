@@ -3,6 +3,8 @@ import {
   isMergedItem,
   isReleaseItem,
   matchAge,
+  matchAnyAge,
+  matchesAnyTypeFilter,
   matchesTypeFilter,
   QUICK_SELECTS,
   selectByQuickFilter,
@@ -115,6 +117,38 @@ describe("matchesTypeFilter", () => {  test("all passes everything", () => {
   test("other values keep matching the reason", () => {
     expect(matchesTypeFilter("mention", "Issue", "mention")).toBe(true);
     expect(matchesTypeFilter("subscribed", "Issue", "mention")).toBe(false);
+  });
+});
+
+describe("matchesAnyTypeFilter", () => {
+  test("an empty set matches everything", () => {
+    expect(matchesAnyTypeFilter("mention", "Issue", [])).toBe(true);
+  });
+
+  test("any member matching is enough", () => {
+    expect(matchesAnyTypeFilter("mention", "Issue", ["assign", "mention"])).toBe(true);
+    expect(matchesAnyTypeFilter("mention", "Issue", ["assign", "subscribed"])).toBe(false);
+  });
+
+  test("special filters apply per member", () => {
+    expect(matchesAnyTypeFilter("subscribed", "PullRequest", ["pull_request"])).toBe(true);
+    expect(
+      matchesAnyTypeFilter("subscribed", null, ["merged"], { prMerged: true })
+    ).toBe(true);
+  });
+});
+
+describe("matchAnyAge", () => {
+  const now = new Date(2026, 5, 15, 12, 0, 0).getTime();
+  const DAY = 24 * 60 * 60 * 1000;
+
+  test("an empty set matches all time", () => {
+    expect(matchAnyAge(now - 400 * DAY, now, [])).toBe(true);
+  });
+
+  test("any bucket matching is enough", () => {
+    expect(matchAnyAge(now - 6 * DAY, now, ["24h", "7d"])).toBe(true);
+    expect(matchAnyAge(now - 6 * DAY, now, ["24h", "48h"])).toBe(false);
   });
 });
 

@@ -197,6 +197,41 @@ describe("the remembered inbox filters", () => {
     });
   });
 
+  test("v2 arrays drop garbage entries per-field", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({
+        version: 2,
+        filters: {
+          repos: ["a", 42, "all", ""],
+          states: ["done", "bogus"],
+          types: [null, "mention"],
+          ages: ["7d", "bogus"],
+        },
+      })
+    );
+    expect(loadInboxFilters()).toEqual({
+      repos: ["a"],
+      states: ["done"],
+      types: ["mention"],
+      ages: ["7d"],
+    });
+  });
+
+  test("v2 all-states alias maps to both", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({ version: 2, filters: { repos: [], states: ["all"], types: [], ages: [] } })
+    );
+    expect(loadInboxFilters()).toEqual({
+      repos: [],
+      states: ["unread", "done"],
+      types: [],
+      ages: [],
+    });
+  });
   test("missing storage means no remembered filters", () => {
     setGlobal("localStorage", fakeStorage());
     expect(loadInboxFilters()).toBeNull();

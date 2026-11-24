@@ -206,6 +206,34 @@ describe("palette filter dimensions", () => {  test("state and age entries carry
       "Currently: All time",
     ]);
   });
+
+  test("dimension entries count multi-select sets", () => {
+    const entries = dimensionEntries(
+      { repos: ["b", "a"], states: ["done"], types: ["y", "x"], ages: ["7d", "30d"] },
+      [{ id: "a", fullName: "acme/a" }],
+      [{ value: "x", label: "X" }]
+    );
+    expect(entries.map((e) => e.subtitle)).toEqual([
+      "Currently: 2 repositories",
+      "Currently: 2 types",
+      "Currently: Done",
+      "Currently: 2 ages",
+    ]);
+  });
+
+  test("dimension entries resolve single values by name", () => {
+    const entries = dimensionEntries(
+      { repos: ["missing"], states: ["unread"], types: ["missing"], ages: ["7d"] },
+      [],
+      []
+    );
+    expect(entries.map((e) => e.subtitle)).toEqual([
+      "Currently: missing",
+      "Currently: missing",
+      "Currently: Unread",
+      "Currently: Last 7 days",
+    ]);
+  });
 });
 
 describe("ensureRepoEntries", () => {

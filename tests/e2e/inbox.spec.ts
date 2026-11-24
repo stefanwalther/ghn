@@ -290,7 +290,7 @@ test.describe("inbox filter", () => {
     await page.goto("/");
 
     for (const type of TYPE_CASES) {
-      await page.getByRole("button", { name: "Show all" }).click();
+      await page.getByRole("button", { name: "Show all", exact: true }).click();
       await page.getByRole("button", { name: type.label }).click();
 
       await expect(page).toHaveURL(new RegExp(`\\?type=${type.value}`));
@@ -299,7 +299,7 @@ test.describe("inbox filter", () => {
     }
 
     // Two types combine: the union of both rows.
-    await page.getByRole("button", { name: "Show all" }).click();
+    await page.getByRole("button", { name: "Show all", exact: true }).click();
     await page.getByRole("button", { name: "Filter by Pull requests" }).click();
     await page.getByRole("button", { name: "Filter by Merged" }).click();
     await expect(page).toHaveURL(/type=merged/);
