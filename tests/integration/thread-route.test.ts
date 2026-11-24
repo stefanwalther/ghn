@@ -685,7 +685,7 @@ describe("POST /api/thread/sync", () => {
     expect(blocked).toEqual([]);
   });
 
-  test("a failed subject refresh preserves the last successful per-thread snapshot", async () => {
+  test("a failed subject refresh preserves its timestamp and recovers on an unchanged global poll", async () => {
     standIn.setThreads([{
       id: "n_001",
       unread: false,
@@ -734,6 +734,21 @@ describe("POST /api/thread/sync", () => {
     });
     const rows = await db.select().from(notifications).where(eq(notifications.id, "n_001"));
     expect(rows[0]).toMatchObject({ subjectState: "closed", prMerged: 1, sourceUrl: htmlUrl });
+    expect(rows[0]?.githubUpdatedAt).toBe(Date.parse("2026-01-15T11:30:00Z"));
+
+    await db.insert(syncState).values({ key: "lastSyncAt", value: String(NOW) });
+    process.env.GHN_NOW = String(NOW + 60_000);
+    standIn.setScenario("/notifications", { status: 304 });
+    standIn.setScenario("/repos/acme/web/pulls/1", null);
+    standIn.setSubject("/repos/acme/web/pulls/1", { html_url: htmlUrl, state: "open", merged: false });
+    const { POST } = await import("@/app/api/sync/route");
+    const polled = await POST(new Request("http://localhost/api/sync", { method: "POST", body: "{}" }));
+    expect(polled.status).toBe(200);
+    const recovered = await db.select().from(notifications).where(eq(notifications.id, "n_001"));
+    expect(recovered[0]).toMatchObject({
+      subjectState: "open", prMerged: 0, sourceUrl: htmlUrl,
+      githubUpdatedAt: Date.parse("2026-01-15T11:45:00Z"),
+    });
     expect(blocked).toEqual([]);
   });
 

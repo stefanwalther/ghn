@@ -202,6 +202,16 @@ describe("the thread upsert", () => {
     });
   });
 
+  test.each([false, true])("a failed snapshot does not mark the subject timestamp processed (existing=%s)", async (existing) => {
+    const db = createMemoryDb().db;
+    if (existing) await seedRow(db);
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    }));
+    expect((await db.select().from(schema.notifications))[0]?.githubUpdatedAt)
+      .toBe(existing ? 1791000000000 : null);
+  });
+
   test("a failed snapshot preserves subject fields updated while resolving", async () => {
     const db = createMemoryDb().db;
     await seedRow(db);
@@ -229,6 +239,18 @@ describe("the thread upsert", () => {
     }));
     expect((await db.select().from(schema.notifications))[0]).toMatchObject({
       subjectState: null, prMerged: 0, sourceUrl: "https://github.com/acme/web/pull/12",
+    });
+  });
+
+  test("a deleted row discovered again resolves despite its old pending retry", async () => {
+    const db = createMemoryDb().db;
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    }));
+    await db.delete(schema.notifications).where(eq(schema.notifications.id, "t1"));
+    await upsertThreads(db, [thread()], null, 1792000002000, resolve);
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "open", sourceUrl: "https://github.com/acme/web/pull/12", githubUpdatedAt: thread().updatedAt,
     });
   });
 

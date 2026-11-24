@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { notifications } from "@/db/schema";
+import { nowMs } from "@/lib/clock";
+import { recordSubjectResolution } from "@/lib/subject-retries";
 import {
   fetchThread,
   getStoredToken,
@@ -46,9 +48,9 @@ export async function POST(request: Request) {
       subjectType: thread.subjectType,
       reason: thread.reason,
       createdAt: thread.updatedAt,
-      githubUpdatedAt: thread.updatedAt,
       isRead,
       ...(snapshot.ok ? {
+        githubUpdatedAt: thread.updatedAt,
         subjectState: snapshot.state ?? row.subjectState,
         prMerged: snapshot.merged === true ? 1 : 0,
         sourceUrl: snapshot.url,
@@ -63,6 +65,7 @@ export async function POST(request: Request) {
   if (!updated) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  await recordSubjectResolution(db, thread, snapshot.ok, nowMs());
   return NextResponse.json({
     gone: false,
     item: {

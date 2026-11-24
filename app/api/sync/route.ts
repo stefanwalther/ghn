@@ -25,6 +25,7 @@ import {
   writeSyncState,
 } from "@/lib/sync";
 import { drainQueue, getQueuedThreadIds, queueHealth } from "@/lib/queue";
+import { retryPendingSubjects } from "@/lib/subject-retries";
 
 export const dynamic = "force-dynamic";
 
@@ -177,6 +178,7 @@ export async function POST(request: Request) {
   }
 
   if (notModified) {
+    await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
     await writeSyncState(db, "lastSyncAt", String(now));
     return NextResponse.json({
       now,
@@ -210,6 +212,7 @@ export async function POST(request: Request) {
     await refreshUnreachableFlags(token, new Set(summary.seenRepoIds));
   }
 
+  await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
   await writeSyncState(db, "lastSyncAt", String(now));
 
   return NextResponse.json({
