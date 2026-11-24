@@ -38,7 +38,6 @@ export async function POST(request: Request) {
   }
   const thread = fetched.data;
   const snapshot = await resolveSubject(token, thread);
-  const changed = (row.githubUpdatedAt ?? 0) < thread.updatedAt;
   const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
   const [updated] = await db
     .update(notifications)
@@ -52,7 +51,7 @@ export async function POST(request: Request) {
       ...(snapshot.ok ? {
         subjectState: snapshot.state ?? row.subjectState,
         prMerged: snapshot.merged === true ? 1 : 0,
-        sourceUrl: changed ? snapshot.url : row.sourceUrl,
+        sourceUrl: snapshot.url,
       } : {}),
     })
     .where(eq(notifications.id, id))

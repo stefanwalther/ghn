@@ -737,6 +737,51 @@ describe("POST /api/thread/sync", () => {
     expect(blocked).toEqual([]);
   });
 
+  test("a successful retry at the same thread timestamp persists the recovered URL", async () => {
+    const oldUrl = "https://github.com/acme/web/pull/1";
+    const recoveredUrl = "https://github.com/acme/web/pull/1#discussion";
+    await db.update(notifications).set({ subjectState: "open", prMerged: 0, sourceUrl: oldUrl })
+      .where(eq(notifications.id, "n_001"));
+    standIn.setThreads([{
+      id: "n_001",
+      unread: false,
+      reason: "review_requested",
+      updated_at: "2026-01-15T11:30:00Z",
+      subject: {
+        title: "Fix flaky login redirect",
+        type: "PullRequest",
+        url: `${standIn.url}/repos/acme/web/pulls/1`,
+      },
+      repository: {
+        full_name: "acme/web",
+        html_url: "https://github.com/acme/web",
+        owner: { login: "acme" },
+      },
+      url: `${standIn.url}/notifications/threads/n_001`,
+    }]);
+    standIn.setScenario("/repos/acme/web/pulls/1", { status: 500 });
+    const failed = await syncThread({ id: "n_001" });
+    expect(failed.status).toBe(200);
+    expect(failed.body.item).toMatchObject({
+      subjectState: "open", prMerged: false, sourceUrl: oldUrl,
+    });
+
+    standIn.setScenario("/repos/acme/web/pulls/1", null);
+    standIn.setSubject("/repos/acme/web/pulls/1", {
+      html_url: recoveredUrl, state: "closed", merged: true,
+    });
+    const retried = await syncThread({ id: "n_001" });
+    expect(retried.status).toBe(200);
+    expect.soft(retried.body.item).toMatchObject({
+      subjectState: "closed", prMerged: true, sourceUrl: recoveredUrl,
+    });
+    const rows = await db.select().from(notifications).where(eq(notifications.id, "n_001"));
+    expect(rows[0]).toMatchObject({
+      subjectState: "closed", prMerged: 1, sourceUrl: recoveredUrl,
+    });
+    expect(blocked).toEqual([]);
+  });
+
   test("a failed subject refresh preserves and returns a snapshot updated while fetching", async () => {
     await db.update(notifications).set({ subjectState: "open", prMerged: 0 })
       .where(eq(notifications.id, "n_001"));
