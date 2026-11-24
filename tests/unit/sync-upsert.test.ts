@@ -22,7 +22,9 @@ function thread(overrides: Partial<GhThread> = {}): GhThread {
   };
 }
 
-const resolveUrl = async () => "https://github.com/acme/web/pull/12";
+const resolve = async () => ({
+  ok: true, url: "https://github.com/acme/web/pull/12", state: "open", merged: false,
+});
 
 async function seedRow(
   db: ReturnType<typeof createMemoryDb>["db"],
@@ -70,7 +72,7 @@ describe("the thread upsert", () => {
       [thread({ id: "t2", subjectTitle: "" })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db
       .select()
@@ -85,7 +87,7 @@ describe("the thread upsert", () => {
     const db = createMemoryDb().db;
     await seedRow(db, { id: "t3", githubUpdatedAt: null });
 
-    await upsertThreads(db, [thread({ id: "t3" })], null, 1792000001000, resolveUrl);
+    await upsertThreads(db, [thread({ id: "t3" })], null, 1792000001000, resolve);
     const rows = await db
       .select()
       .from(schema.notifications)
@@ -108,7 +110,7 @@ describe("the thread upsert", () => {
       [thread({ id: "t4", updatedAt: 1791000000000 })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db
       .select()
@@ -129,7 +131,7 @@ describe("the thread upsert", () => {
       [thread({ id: "t5", unread: true })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db
       .select()
@@ -149,7 +151,7 @@ describe("the thread upsert", () => {
       [thread({ id: "t6", unread: false })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db
       .select()
@@ -169,7 +171,7 @@ describe("the thread upsert", () => {
       [thread({ id: "t7", subjectTitle: "" })],
       null,
       1792000001000,
-      resolveUrl
+      resolve
     );
     const rows = await db
       .select()
@@ -178,40 +180,96 @@ describe("the thread upsert", () => {
     expect(rows[0]?.subject).toBe("Untitled");
   });
 
-  // A stored row that is refreshed picks up the merged flag of its
-  // subject, so the merged filter stays correct.
-  test("a stored row that is refreshed picks up the merged flag", async () => {
-    const apiUrl = "https://api.example.test/repos/acme/web/pulls/77";
-    vi.stubGlobal(
-      "fetch",
-      async () =>
-        new Response(
-          JSON.stringify({ html_url: "https://github.com/acme/web/pull/77", merged: true }),
-          { headers: { "Content-Type": "application/json" } }
-        )
-    );
-    const github = await import("@/lib/github");
-    await github.resolveSubjectHtmlUrl(
-      "token",
-      thread({ id: "t8", subjectApiUrl: apiUrl }),
-      new Map()
-    );
-    vi.unstubAllGlobals();
-
+  test.each([false, true])("successful snapshots persist state, merged and URL (existing=%s)", async (existing) => {
     const db = createMemoryDb().db;
-    await seedRow(db, { id: "t8", githubUpdatedAt: 1791000000000 });
+    if (existing) await seedRow(db);
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: true, url: "https://github.com/acme/web/pull/12", state: "closed", merged: true,
+    }));
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/12",
+    });
+  });
 
-    await upsertThreads(
-      db,
-      [thread({ id: "t8", subjectApiUrl: apiUrl })],
-      null,
-      1792000001000,
-      resolveUrl
-    );
-    const rows = await db
-      .select()
-      .from(schema.notifications)
-      .where(eq(schema.notifications.id, "t8"));
-    expect(rows[0]?.prMerged).toBe(1);
+  test("a failed snapshot keeps the stored state, merged flag and URL", async () => {
+    const db = createMemoryDb().db;
+    await seedRow(db, { subjectState: "closed", prMerged: 1 });
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    }));
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/1",
+    });
+  });
+
+  test.each([false, true])("a failed snapshot does not mark the subject timestamp processed (existing=%s)", async (existing) => {
+    const db = createMemoryDb().db;
+    if (existing) await seedRow(db);
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    }));
+    expect((await db.select().from(schema.notifications))[0]?.githubUpdatedAt)
+      .toBe(existing ? 1791000000000 : null);
+  });
+
+  test("a failed snapshot preserves subject fields updated while resolving", async () => {
+    const db = createMemoryDb().db;
+    await seedRow(db);
+
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => {
+      await db.update(schema.notifications).set({
+        subjectState: "closed",
+        prMerged: 1,
+        sourceUrl: "https://github.com/acme/web/pull/12#merged",
+      }).where(eq(schema.notifications.id, "t1"));
+      return { ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null };
+    });
+
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "closed",
+      prMerged: 1,
+      sourceUrl: "https://github.com/acme/web/pull/12#merged",
+    });
+  });
+
+  test("a new row with a failed snapshot stores unknown state and the fallback URL", async () => {
+    const db = createMemoryDb().db;
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    }));
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: null, prMerged: 0, sourceUrl: "https://github.com/acme/web/pull/12",
+    });
+  });
+
+  test("a deleted row discovered again resolves despite its old pending retry", async () => {
+    const db = createMemoryDb().db;
+    await upsertThreads(db, [thread()], null, 1792000001000, async () => ({
+      ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+    }));
+    await db.delete(schema.notifications).where(eq(schema.notifications.id, "t1"));
+    await upsertThreads(db, [thread()], null, 1792000002000, resolve);
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "open", sourceUrl: "https://github.com/acme/web/pull/12", githubUpdatedAt: thread().updatedAt,
+    });
+  });
+
+  test.each([1792000000000, 1791000000000])("a non-advanced timestamp %s is never resolved", async (updatedAt) => {
+    const db = createMemoryDb().db;
+    await seedRow(db, { githubUpdatedAt: thread().updatedAt, subjectState: "closed", prMerged: 1 });
+    const resolver = vi.fn(resolve);
+    await upsertThreads(db, [thread({ updatedAt })], null, 1792000001000, resolver);
+    expect(resolver).not.toHaveBeenCalled();
+    expect((await db.select().from(schema.notifications))[0]).toMatchObject({
+      subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/1",
+    });
+  });
+
+  test("only pull requests can store a merged flag", async () => {
+    const db = createMemoryDb().db;
+    await upsertThreads(db, [thread({ subjectType: "Issue" })], null, 1792000001000, async () => ({
+      ok: true, url: "https://github.com/acme/web/issues/12", state: "closed", merged: true,
+    }));
+    expect((await db.select().from(schema.notifications))[0]?.prMerged).toBe(0);
   });
 });

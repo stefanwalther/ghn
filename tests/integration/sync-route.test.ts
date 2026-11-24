@@ -527,3 +527,211 @@ describe("a repeated sync", () => {
     expect(paths).toContain("/notifications");
   });
 });
+
+describe("US2 subject freshness in one server process (SC-006)", () => {
+  function advanceThreads(pass: number) {
+    standIn.setThreads(buildThreads(standIn.url).map((thread) => ({
+      ...thread, updated_at: new Date(NOW + pass * 120_000).toISOString(),
+    })));
+    process.env.GHN_NOW = String(NOW + pass * 120_000);
+  }
+
+  async function row(id: string) {
+    return (await db.select().from(notifications).where(eq(notifications.id, id)))[0];
+  }
+
+  test.each([200, 304])("a failed subject recovers when the next listing returns %s without that thread", async (listingStatus) => {
+    const path = "/repos/acme/web/pulls/11";
+    await sync();
+    standIn.setScenario(path, { status: 500 });
+    advanceThreads(1);
+    await sync();
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+
+    standIn.setScenario(path, null);
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11#reopened", state: "open", merged: false });
+    standIn.setScenario("/notifications", { status: listingStatus, body: [] });
+    process.env.GHN_NOW = String(NOW + 240_000);
+    await sync();
+    expect(await row("t_001")).toMatchObject({
+      subjectState: "open", prMerged: 0, sourceUrl: "https://github.com/acme/web/pull/11#reopened",
+      githubUpdatedAt: NOW + 120_000,
+    });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(3);
+
+    process.env.GHN_NOW = String(NOW + 360_000);
+    await sync();
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(3);
+  });
+
+  test("failed new subjects retry at most twelve per poll and back off even when listed again", async () => {
+    const template = buildThreads(standIn.url)[0]!;
+    standIn.setThreads(Array.from({ length: 13 }, (_, i) => ({
+      ...template, id: `retry_${i}`,
+      subject: { ...template.subject, url: `${standIn.url}/repos/acme/web/pulls/${100 + i}` },
+    })));
+    standIn.setScenario("/repos/acme/web/pulls/*", { status: 500 });
+    const attempts = () => standIn.requests.filter((r) => r.path.startsWith("/repos/acme/web/pulls/")).length;
+    await sync();
+    expect(attempts()).toBe(13);
+    expect((await db.select().from(notifications)).every((r) => r.githubUpdatedAt === null)).toBe(true);
+    const expectedAttempts = [25, 26, 38, 39, 39];
+    for (let poll = 1; poll <= expectedAttempts.length; poll += 1) {
+      process.env.GHN_NOW = String(NOW + poll * 60_000);
+      await sync();
+      expect(attempts()).toBe(expectedAttempts[poll - 1]);
+    }
+
+    standIn.setScenario("/repos/acme/web/pulls/*", null);
+    standIn.setScenario("/notifications", { status: 304 });
+    process.env.GHN_NOW = String(NOW + 7 * 60_000);
+    await sync();
+    const rows = await db.select().from(notifications);
+    expect(rows.filter((r) => r.githubUpdatedAt !== null)).toHaveLength(12);
+    process.env.GHN_NOW = String(NOW + 8 * 60_000);
+    await sync();
+    expect((await db.select().from(notifications)).every((r) => r.githubUpdatedAt !== null)).toBe(true);
+  });
+
+  test.each(["done", "deleted", "newer"])("a queued retry is discarded after the item is %s", async (change) => {
+    const path = "/repos/acme/web/pulls/11";
+    standIn.setScenario(path, { status: 500 });
+    await sync();
+    if (change === "deleted") {
+      await db.delete(notifications).where(eq(notifications.id, "t_001"));
+    } else {
+      await db.update(notifications).set(change === "done"
+        ? { isDone: 1 }
+        : { githubUpdatedAt: NOW, subjectState: "closed", prMerged: 1 })
+        .where(eq(notifications.id, "t_001"));
+    }
+    standIn.setScenario(path, null);
+    standIn.setScenario("/notifications", { status: 304 });
+    process.env.GHN_NOW = String(NOW + 60_000);
+    await sync();
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(1);
+    if (change !== "deleted") {
+      // Reviving a row later must not revive its discarded retry record.
+      await db.update(notifications).set({ isDone: 0, githubUpdatedAt: null })
+        .where(eq(notifications.id, "t_001"));
+      process.env.GHN_NOW = String(NOW + 120_000);
+      await sync();
+      expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(1);
+    }
+  });
+
+  test("an in-flight retry cannot replace a newer successful snapshot", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    standIn.setScenario(path, { status: 500 });
+    await sync();
+    standIn.setScenario(path, null);
+    standIn.setScenario("/notifications", { status: 304 });
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11#old", state: "open", merged: false });
+    process.env.GHN_NOW = String(NOW + 60_000);
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const response = await originalFetch(input, init);
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url === `${standIn.url}${path}`) {
+        await db.update(notifications).set({
+          subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/11#newer",
+          githubUpdatedAt: NOW, localUnread: 1, isRead: 0,
+        }).where(eq(notifications.id, "t_001"));
+      }
+      return response;
+    });
+    try {
+      await sync();
+      expect(await row("t_001")).toMatchObject({
+        subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/11#newer",
+        githubUpdatedAt: NOW, localUnread: 1, isRead: 0,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("overlapping polls attempt a queued subject only once", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    standIn.setScenario(path, { status: 500 });
+    await sync();
+    standIn.setScenario("/notifications", { status: 304 });
+    standIn.setScenario(path, { status: 500, delayMs: 30 });
+    process.env.GHN_NOW = String(NOW + 60_000);
+    await Promise.all([sync(), sync()]);
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+  });
+
+  test("repeated subject failures eventually retry hourly without waiting longer", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    standIn.setScenario(path, { status: 500 });
+    await sync();
+    standIn.setScenario("/notifications", { status: 304 });
+    for (const minute of [1, 3, 7, 15, 31, 63, 123]) {
+      process.env.GHN_NOW = String(NOW + minute * 60_000);
+      await sync();
+    }
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(8);
+    process.env.GHN_NOW = String(NOW + 124 * 60_000);
+    await sync();
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(8);
+    standIn.setScenario(path, null);
+    process.env.GHN_NOW = String(NOW + 183 * 60_000);
+    await sync();
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(9);
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+  });
+
+  test("a tracked PR becomes merged on the next incremental sync", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11", state: "open", merged: false });
+    await sync();
+    expect(await row("t_001")).toMatchObject({ subjectState: "open", prMerged: 0 });
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11", state: "closed", merged: true });
+    advanceThreads(1);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+
+    // Keep this repository in the main flow so its Merged facet is visible.
+    await db.update(repositories).set({ rhythm: "immediate", nextDueAt: null }).where(eq(repositories.id, "acme--web"));
+    const { GET } = await import("@/app/api/notifications/route");
+    const response = await GET(new Request("http://localhost/api/notifications?type=merged&state=all"));
+    const body = await response.json();
+    expect(body.facets.types.find((t: { value: string }) => t.value === "merged").count).toBe(1);
+    expect(body.mainFlow).toEqual(expect.arrayContaining([expect.objectContaining({ id: "t_001", prMerged: true, subjectState: "closed" })]));
+  });
+
+  test("a closed issue becomes open on the next incremental sync", async () => {
+    const path = "/repos/test-user/mine/issues/3";
+    standIn.setSubject(path, { html_url: "https://github.com/test-user/mine/issues/3", state: "closed" });
+    await sync();
+    expect(await row("t_002")).toMatchObject({ subjectState: "closed", prMerged: 0 });
+    standIn.setSubject(path, { html_url: "https://github.com/test-user/mine/issues/3", state: "open" });
+    advanceThreads(1);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_002")).toMatchObject({ subjectState: "open", prMerged: 0 });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+  });
+
+  test("a failed subject fetch keeps known values and retries on a later update", async () => {
+    const path = "/repos/acme/web/pulls/11";
+    await sync();
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+    standIn.setSubject(path, { html_url: "https://github.com/acme/web/pull/11-new", state: "open", merged: false });
+    standIn.setScenario(path, { status: 500 });
+    advanceThreads(1);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_001")).toMatchObject({
+      subjectState: "closed", prMerged: 1, sourceUrl: "https://github.com/acme/web/pull/11",
+    });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(2);
+    standIn.setScenario(path, null);
+    advanceThreads(2);
+    expect(await sync()).toMatchObject({ fresh: true, upserted: 2 });
+    expect(await row("t_001")).toMatchObject({
+      subjectState: "open", prMerged: 0, sourceUrl: "https://github.com/acme/web/pull/11-new",
+    });
+    expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(3);
+  });
+});

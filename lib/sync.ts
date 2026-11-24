@@ -2,8 +2,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { notifications, repositories, syncState, writebackQueue } from "@/db/schema";
 import type { Db } from "@/db/client";
 import { computeNextDueAt } from "@/lib/digest";
-import type { GhThread } from "@/lib/github";
-import { readPrMerged, readSubjectState } from "@/lib/github";
+import type { GhThread, SubjectSnapshot } from "@/lib/github";
+import { readSubjectRetries, recordSubjectResolution } from "@/lib/subject-retries";
 
 export function repoIdForFullName(fullName: string): string {
   return fullName.toLowerCase().replace(/\//g, "--");
@@ -36,12 +36,6 @@ export async function readSyncStatus(db: Db, nowMs = Date.now()): Promise<SyncSt
   const stale =
     lastSyncAt !== null && nowMs - lastSyncAt > 2 * pollIntervalSecs * 1000;
   return { lastSyncAt, pollIntervalSecs, stale };
-}
-
-const urlCache = new Map<string, string>();
-
-export function clearUrlCache(): void {
-  urlCache.clear();
 }
 
 async function ensureRepository(
@@ -143,7 +137,7 @@ export async function upsertThreads(
   threads: GhThread[],
   viewerLogin: string | null,
   now: number,
-  resolveUrl: (thread: GhThread) => Promise<string>
+  resolve: (thread: GhThread) => Promise<SubjectSnapshot>
 ): Promise<UpsertSummary> {
   // Paginated GitHub responses can repeat the same thread id on large first
   // syncs. Dedupe by id up front (freshest updatedAt wins) so the insert loop
@@ -168,41 +162,45 @@ export async function upsertThreads(
   }
   const existingRows = await db.select().from(notifications);
   const existingById = new Map(existingRows.map((r) => [r.id, r]));
+  const retries = await readSubjectRetries(db);
   const toResolve = pending.filter(({ thread }) => {
     const row = existingById.get(thread.id);
     if (!row || row.isDone === 1) return row === undefined;
+    const retry = retries.get(thread.id);
+    if (retry && retry.retry.thread.updatedAt >= thread.updatedAt) return false;
     return (row.githubUpdatedAt ?? 0) < thread.updatedAt;
   });
   const resolved = await mapWithLimit(toResolve, 12, async ({ thread }) => ({
     id: thread.id,
-    url: await resolveUrl(thread),
+    snapshot: await resolve(thread),
   }));
-  const urlById = new Map(resolved.map((r) => [r.id, r.url]));
+  const snapshotById = new Map(resolved.map((r) => [r.id, r.snapshot]));
   for (const { thread, repoId } of pending) {
     const row = existingById.get(thread.id);
+    const snapshot = snapshotById.get(thread.id);
     if (!row) {
       await db.insert(notifications).values({
         id: thread.id,
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
-        subjectState: readSubjectState(thread.subjectApiUrl),
+        subjectState: snapshot?.ok ? snapshot.state : null,
         reason: thread.reason,
         createdAt: thread.updatedAt,
-        githubUpdatedAt: thread.updatedAt,
+        githubUpdatedAt: snapshot?.ok ? thread.updatedAt : null,
         isRead: thread.unread ? 0 : 1,
         isDone: 0,
         localUnread: 0,
-        prMerged: readPrMerged(thread.subjectApiUrl) ? 1 : 0,
-        sourceUrl: urlById.get(thread.id) ?? "",
+        prMerged: thread.subjectType === "PullRequest" && snapshot?.ok && snapshot.merged === true ? 1 : 0,
+        sourceUrl: snapshot?.url ?? "",
       });
+      if (snapshot) await recordSubjectResolution(db, thread, snapshot.ok, now);
       upserted += 1;
       continue;
     }
     if (row.isDone === 1) {
       continue;
     }
-    const changed = (row.githubUpdatedAt ?? 0) < thread.updatedAt;
     const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
     await db
       .update(notifications)
@@ -210,27 +208,22 @@ export async function upsertThreads(
         repositoryId: repoId,
         subject: thread.subjectTitle.slice(0, 200) || "Untitled",
         subjectType: thread.subjectType,
-        subjectState: urlById.has(thread.id)
-          ? readSubjectState(thread.subjectApiUrl)
-          : (row.subjectState ?? null),
         reason: thread.reason,
         createdAt: thread.updatedAt,
-        githubUpdatedAt: thread.updatedAt,
         isRead,
-        prMerged: urlById.has(thread.id)
-          ? readPrMerged(thread.subjectApiUrl) ? 1 : 0
-          : (row.prMerged ?? 0),
-        sourceUrl: changed ? (urlById.get(thread.id) ?? row.sourceUrl) : row.sourceUrl,
+        ...(snapshot?.ok ? {
+          githubUpdatedAt: thread.updatedAt,
+          subjectState: snapshot.state ?? row.subjectState,
+          prMerged: thread.subjectType === "PullRequest" && snapshot.merged === true ? 1 : 0,
+          sourceUrl: snapshot.url,
+        } : {}),
       })
       .where(eq(notifications.id, thread.id));
+    if (snapshot) await recordSubjectResolution(db, thread, snapshot.ok, now);
     upserted += 1;
   }
   const discoveredRepos = seenRepos.size;
   return { upserted, discoveredRepos, seenRepoIds: [...seenRepos] };
-}
-
-export function sharedUrlCache(): Map<string, string> {
-  return urlCache;
 }
 
 export async function applyRemoteDone(

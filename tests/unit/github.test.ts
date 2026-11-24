@@ -13,6 +13,8 @@ import {
   parseDependabotAlertCoordsFromApi,
   parseDependabotAlertCoordsFromHtml,
   parsePullCoords,
+  resolveSubject,
+  type GhThread,
   parseRepoCoords,
   parseWorkflowNameFromTitle,
   subjectApiUrlFromHtml,
@@ -592,6 +594,68 @@ describe("fetchCheckSummary", () => {
         apiBase: `${server.url}`,
       });
       expect(summary).toEqual({ state: "failure", passing: 1, total: 2 });
+    } finally {
+      await server.stop(true);
+    }
+  });
+});
+
+describe("resolveSubject snapshots", () => {
+  function thread(url: string, subjectType = "PullRequest"): GhThread {
+    return {
+      id: "subject-1", unread: true, reason: "subscribed", updatedAt: 1000,
+      subjectTitle: "Tracked subject", subjectType, subjectApiUrl: url,
+      repoFullName: "acme/web", repoOwnerLogin: "acme",
+      repoHtmlUrl: "https://github.com/acme/web", threadUrl: "",
+    };
+  }
+
+  test.each([
+    { subjectType: "PullRequest", state: "closed", merged: true, expectedMerged: true },
+    { subjectType: "PullRequest", state: "open", merged: false, expectedMerged: false },
+    { subjectType: "Issue", state: "closed", merged: true, expectedMerged: null },
+  ])("returns one coherent snapshot for $subjectType $state", async ({ subjectType, state, merged, expectedMerged }) => {
+    let calls = 0;
+    const server = await serve(() => {
+      calls += 1;
+      return Response.json({ html_url: "https://github.com/acme/web/pull/12", state, merged });
+    });
+    try {
+      expect(await resolveSubject("token", thread(`${server.url}/repos/acme/web/pulls/12`, subjectType))).toEqual({
+        ok: true, url: "https://github.com/acme/web/pull/12", state, merged: expectedMerged,
+      });
+      expect(calls).toBe(1);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test("an issue can reopen between calls without resetting the module", async () => {
+    let state = "closed";
+    const server = await serve(() => Response.json({ state, merged: true }));
+    try {
+      const issue = thread(`${server.url}/repos/acme/web/issues/12`, "Issue");
+      expect(await resolveSubject("token", issue)).toMatchObject({ ok: true, state: "closed", merged: null });
+      state = "open";
+      expect(await resolveSubject("token", issue)).toEqual({
+        ok: true, url: "https://github.com/acme/web/issues/12", state: "open", merged: null,
+      });
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test.each([
+    { body: "{}", status: 500 },
+    { body: "not JSON", status: 200 },
+    { body: "null", status: 200 },
+    { body: "[]", status: 200 },
+  ])("returns a failed snapshot for status $status body $body", async ({ body, status }) => {
+    const server = await serve(() => new Response(body, { status }));
+    try {
+      expect(await resolveSubject("token", thread(`${server.url}/repos/acme/web/pulls/12`))).toEqual({
+        ok: false, url: "https://github.com/acme/web/pull/12", state: null, merged: null,
+      });
     } finally {
       await server.stop(true);
     }

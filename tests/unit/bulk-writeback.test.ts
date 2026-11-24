@@ -23,12 +23,14 @@ function thread(overrides: Partial<GhThread> = {}): GhThread {
   };
 }
 
-const resolveUrl = async () => "https://github.com/acme/web/pull/12";
+const resolve = async () => ({
+  ok: true, url: "https://github.com/acme/web/pull/12", state: "open", merged: false,
+});
 
 describe("pending read preservation across sync", () => {
   test("reapply restores a queued read that upsert reverted", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ unread: false })], null, 1792000000000, resolveUrl);
+    await upsertThreads(db, [thread({ unread: false })], null, 1792000000000, resolve);
     await enqueueWriteback(db, "9001", "read", "network", 1792000000000);
     // GitHub still reports unread while the PATCH retry is pending.
     await upsertThreads(
@@ -36,7 +38,7 @@ describe("pending read preservation across sync", () => {
       [thread({ unread: true, updatedAt: 1792000002000 })],
       null,
       1792000003000,
-      resolveUrl
+      resolve
     );
     const reverted = await db
       .select()
@@ -53,7 +55,7 @@ describe("pending read preservation across sync", () => {
 
   test("reapply respects an explicit local unread", async () => {
     const db = createMemoryDb().db;
-    await upsertThreads(db, [thread({ unread: false })], null, 1792000000000, resolveUrl);
+    await upsertThreads(db, [thread({ unread: false })], null, 1792000000000, resolve);
     await enqueueWriteback(db, "9001", "read", "network", 1792000000000);
     await db
       .update(schema.notifications)

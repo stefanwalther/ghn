@@ -9,7 +9,7 @@ import {
   markThreadDone,
   markThreadRead,
   probeConnection,
-  resolveSubjectHtmlUrl,
+  resolveSubject,
   setSubscriptionIgnored,
 } from "@/lib/github";
 import {
@@ -21,11 +21,11 @@ import {
   pruneEmptyRepositories,
   readSyncState,
   reapplyPendingReads,
-  sharedUrlCache,
   upsertThreads,
   writeSyncState,
 } from "@/lib/sync";
 import { drainQueue, getQueuedThreadIds, queueHealth } from "@/lib/queue";
+import { retryPendingSubjects } from "@/lib/subject-retries";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +178,7 @@ export async function POST(request: Request) {
   }
 
   if (notModified) {
+    await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
     await writeSyncState(db, "lastSyncAt", String(now));
     return NextResponse.json({
       now,
@@ -192,13 +193,12 @@ export async function POST(request: Request) {
     });
   }
 
-  const cache = sharedUrlCache();
   const summary = await upsertThreads(
     db,
     threads,
     probe.viewerLogin,
     now,
-    (t) => resolveSubjectHtmlUrl(token, t, cache)
+    (t) => resolveSubject(token, t)
   );
   // Upsert recomputes isRead from the remote unread flag, which would revert
   // a locally-read row whose PATCH is still queued. Restore those while the
@@ -212,6 +212,7 @@ export async function POST(request: Request) {
     await refreshUnreachableFlags(token, new Set(summary.seenRepoIds));
   }
 
+  await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
   await writeSyncState(db, "lastSyncAt", String(now));
 
   return NextResponse.json({

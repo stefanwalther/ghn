@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { notifications } from "@/db/schema";
+import { nowMs } from "@/lib/clock";
+import { recordSubjectResolution } from "@/lib/subject-retries";
 import {
   fetchThread,
   getStoredToken,
-  readPrMerged,
-  readSubjectState,
-  resolveSubjectHtmlUrl,
+  resolveSubject,
 } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
@@ -39,35 +39,45 @@ export async function POST(request: Request) {
     );
   }
   const thread = fetched.data;
-  const url = await resolveSubjectHtmlUrl(token, thread, new Map());
-  const changed = (row.githubUpdatedAt ?? 0) < thread.updatedAt;
+  const snapshot = await resolveSubject(token, thread);
   const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
-  await db
+  const [updated] = await db
     .update(notifications)
     .set({
       subject: thread.subjectTitle.slice(0, 200) || "Untitled",
       subjectType: thread.subjectType,
-      subjectState: readSubjectState(thread.subjectApiUrl),
       reason: thread.reason,
       createdAt: thread.updatedAt,
-      githubUpdatedAt: thread.updatedAt,
       isRead,
-      prMerged: readPrMerged(thread.subjectApiUrl) ? 1 : 0,
-      sourceUrl: changed ? url : row.sourceUrl,
+      ...(snapshot.ok ? {
+        githubUpdatedAt: thread.updatedAt,
+        subjectState: snapshot.state ?? row.subjectState,
+        prMerged: snapshot.merged === true ? 1 : 0,
+        sourceUrl: snapshot.url,
+      } : {}),
     })
-    .where(eq(notifications.id, id));
+    .where(eq(notifications.id, id))
+    .returning({
+      subjectState: notifications.subjectState,
+      prMerged: notifications.prMerged,
+      sourceUrl: notifications.sourceUrl,
+    });
+  if (!updated) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  await recordSubjectResolution(db, thread, snapshot.ok, nowMs());
   return NextResponse.json({
     gone: false,
     item: {
       id: thread.id,
       subject: thread.subjectTitle.slice(0, 200) || "Untitled",
       subjectType: thread.subjectType,
-      subjectState: readSubjectState(thread.subjectApiUrl),
+      subjectState: updated.subjectState,
       reason: thread.reason,
-      prMerged: readPrMerged(thread.subjectApiUrl),
+      prMerged: updated.prMerged === 1,
       createdAt: thread.updatedAt,
       isRead,
-      sourceUrl: changed ? url : row.sourceUrl,
+      sourceUrl: updated.sourceUrl,
     },
   });
 }
