@@ -404,12 +404,14 @@ export function FilterSidebar({
     : visibleRepos;
   const listedRepos =
     activeRepoList.length > 0 && trimmedQuery
-      ? searchedRepos.some((r) => activeRepoSet.has(r.id))
-        ? searchedRepos
-        : [
-            ...visibleRepos.filter((r) => activeRepoSet.has(r.id)),
-            ...searchedRepos,
-          ]
+      ? [
+          // Every active repo stays pinned even when the search misses
+          // it: matching rows keep their rank, missing actives go first.
+          ...visibleRepos.filter(
+            (r) => activeRepoSet.has(r.id) && !searchedRepos.some((s) => s.id === r.id)
+          ),
+          ...searchedRepos,
+        ]
       : searchedRepos;
   const regularRepos = listedRepos.filter((r) => !r.isSnoozed);
   const snoozedRepos = listedRepos.filter((r) => r.isSnoozed);
