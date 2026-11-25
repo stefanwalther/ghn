@@ -3,25 +3,25 @@ import { nowMs } from "@/lib/clock";
 import { notifications, repositories } from "@/db/schema";
 import { formatDueDate, isDue } from "@/lib/digest";
 import { formatSnoozeUntil, isSnoozed } from "@/lib/snooze";
-import { isClosedItem, isMergedItem, matchAge, matchesTypeFilter, TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
+import { isClosedItem, isMergedItem, matchAnyAge, matchesAnyTypeFilter, TYPE_FILTERS } from "@/lib/filters";
+import { parseInboxFilters } from "@/lib/view-state";
 import { parsePaletteLimit } from "@/lib/view-state";
 import { readSyncStatus } from "@/lib/sync";
 import { queueDepth as writebackDepth } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
 
-const AGES = ["all", "24h", "48h", "7d", "14d", "30d", "year", "older"] as const;
-
 export async function GET(request: Request) {
   const { db } = await import("@/db/client");
   const url = new URL(request.url);
-  const repoFilter = url.searchParams.get("repo") || "all";
-  const stateFilter = url.searchParams.get("state") || "unread";
-  const typeFilter = url.searchParams.get("type") || "all";
-  const rawAge = url.searchParams.get("age") || "all";
-  const ageFilter: AgeFilter = (AGES as readonly string[]).includes(rawAge)
-    ? (rawAge as AgeFilter)
-    : "all";
+  const parsed = parseInboxFilters(url.searchParams);
+  const repoSet = new Set(parsed.repos);
+  const hasUnread = parsed.states.includes("unread");
+  const hasDone = parsed.states.includes("done");
+  const isAllStates = hasUnread && hasDone;
+  const isDoneOnly = hasDone && !hasUnread;
+  const typeSet = parsed.types;
+  const ageSet = parsed.ages;
   const limit = parsePaletteLimit(url.searchParams.get("limit"));
   const now = nowMs();
 
@@ -33,48 +33,30 @@ export async function GET(request: Request) {
   const rows = await db.select().from(notifications);
   const repoName = (id: string) => reposById.get(id)?.fullName ?? id;
 
-  let filtered = rows.filter((n) => n.isDone === 0);
-  if (stateFilter === "done") {
-    filtered = rows.filter((n) => n.isDone === 1);
-  } else if (stateFilter === "all") {
-    filtered = rows.filter((n) => (repoFilter === "all" ? true : n.repositoryId === repoFilter));
-  } else {
-    filtered = rows.filter(
-      (n) =>
-        n.isDone === 0 &&
-        (repoFilter === "all" ? true : n.repositoryId === repoFilter)
-    );
-  }
-  if (stateFilter === "done" && repoFilter !== "all") {
-    filtered = filtered.filter((n) => n.repositoryId === repoFilter);
-  }
-  if (typeFilter !== "all") {
-    filtered = filtered.filter((n) =>
-      matchesTypeFilter(n.reason, n.subjectType, typeFilter, {
-        prMerged: (n.prMerged ?? 0) === 1,
-        subjectState: n.subjectState ?? null,
-      })
-    );
-  }
-  if (ageFilter !== "all") {
-    filtered = filtered.filter((n) => matchAge(n.createdAt, now, ageFilter));
-  }
+  const matchRepo = (n: (typeof rows)[number]) =>
+    repoSet.size === 0 || repoSet.has(n.repositoryId);
+  const matchStateFn = (isDone: number) =>
+    isAllStates ? true : isDoneOnly ? isDone === 1 : isDone === 0;
+  const matchType = (n: (typeof rows)[number]) =>
+    matchesAnyTypeFilter(n.reason, n.subjectType, typeSet, {
+      prMerged: (n.prMerged ?? 0) === 1,
+      subjectState: n.subjectState ?? null,
+    });
+  const matchAgeFn = (n: (typeof rows)[number]) => matchAnyAge(n.createdAt, now, ageSet);
 
-  const matchState = (isDone: number) =>
-    stateFilter === "done" ? isDone === 1 : stateFilter === "all" ? true : isDone === 0;
+  const filtered = rows.filter(
+    (n) => matchStateFn(n.isDone) && matchRepo(n) && matchType(n) && matchAgeFn(n)
+  );
+
+  const matchState = matchStateFn;
   const matchBase = (
     n: (typeof rows)[number],
     ignore: "type" | "repo" | "none"
   ) =>
     matchState(n.isDone) &&
-    (ignore === "repo" || repoFilter === "all" || n.repositoryId === repoFilter) &&
-    (ignore === "type" ||
-      typeFilter === "all" ||
-      matchesTypeFilter(n.reason, n.subjectType, typeFilter, {
-        prMerged: (n.prMerged ?? 0) === 1,
-        subjectState: n.subjectState ?? null,
-      })) &&
-    matchAge(n.createdAt, now, ageFilter);
+    (ignore === "repo" || matchRepo(n)) &&
+    (ignore === "type" || matchType(n)) &&
+    matchAgeFn(n);
 
   const placement = (n: (typeof rows)[number]): "main" | "quiet" => {
     if (n.isDone === 1) return "main";
@@ -240,7 +222,7 @@ export async function GET(request: Request) {
       nextDueLabel: formatDueDate(repo?.nextDueAt ?? null),
       pendingCount: items.length,
       unreadCount: items.filter((i) => (i.isRead ?? 0) === 0).length,
-      items: stateFilter === "done" ? [] : [],
+      items: isDoneOnly ? [] : [],
       isSnoozed: snoozed,
       snoozeLabel: formatSnoozeUntil(repo?.snoozedUntil ?? null, now),
     };

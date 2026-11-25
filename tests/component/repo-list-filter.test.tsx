@@ -171,6 +171,15 @@ describe("FilterSidebar repository search", () => {
     expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
   });
 
+  test("every active repo stays pinned when the search matches only one", () => {
+    renderSidebar({ activeRepo: ["other--docs", "acme--web"] });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Filter repositories" }), {
+      target: { value: "web" },
+    });
+    expect(screen.getByRole("button", { name: "Filter by other/docs" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filter by acme/web" })).toBeInTheDocument();
+  });
+
   test("scope qualifiers are stripped: the box already lists only repos", () => {
     renderSidebar();
     fireEvent.change(screen.getByRole("searchbox", { name: "Filter repositories" }), {

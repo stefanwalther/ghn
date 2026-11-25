@@ -268,9 +268,23 @@ describe("inbox screen", () => {
     renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
-    fireEvent.change(screen.getByLabelText("Filter by age"), { target: { value: "7d" } });
+    fireEvent.click(screen.getByLabelText("Filter by age Last 7 days"));
 
     expect(nav.replace).toHaveBeenCalledWith("/?age=7d", { scroll: false });
+  });
+
+  test("age and state filters are multi-select", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    // Both state boxes start with unread checked only.
+    expect(screen.getByLabelText("Filter by state Unread")).toBeChecked();
+    expect(screen.getByLabelText("Filter by state Done")).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("Filter by state Done"));
+
+    expect(nav.replace).toHaveBeenCalledWith("/?state=all", { scroll: false });
   });
 
   test("a repository filter change replaces the route with the matching query string", async () => {
@@ -915,7 +929,12 @@ describe("inbox screen", () => {
     );
     await screen.findByText("Fix flaky login redirect");
     client.invalidateQueries({
-      queryKey: queryKeys.notifications({ repo: "all", state: "done", type: "all", age: "all" }),
+      queryKey: queryKeys.notifications({
+        repos: [],
+        states: ["done"],
+        types: [],
+        ages: [],
+      }),
     });
 
     // Revisit done while its refetch is gated: the cached rows must show

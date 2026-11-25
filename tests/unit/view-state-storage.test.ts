@@ -139,19 +139,99 @@ describe("the stored drawer width", () => {
 describe("the remembered inbox filters", () => {
   test("a full filter set round-trips", () => {
     setGlobal("localStorage", fakeStorage());
-    saveInboxFilters({ repo: "acme/web", state: "unread", type: "pull_request", age: "7d" });
-    expect(loadInboxFilters()).toEqual({
-      repo: "acme/web",
-      state: "unread",
-      type: "pull_request",
-      age: "7d",
+    saveInboxFilters({
+      repos: ["acme/web"],
+      states: ["unread"],
+      types: ["pull_request"],
+      ages: ["7d"],
     });
-    expect(isDefaultInboxFilters({ repo: "all", state: "unread", type: "all", age: "all" })).toBe(true);
+    expect(loadInboxFilters()).toEqual({
+      repos: ["acme/web"],
+      states: ["unread"],
+      types: ["pull_request"],
+      ages: ["7d"],
+    });
     expect(
-      isDefaultInboxFilters({ repo: "acme/web", state: "unread", type: "all", age: "all" })
+      isDefaultInboxFilters({ repos: [], states: ["unread"], types: [], ages: [] })
+    ).toBe(true);
+    expect(
+      isDefaultInboxFilters({
+        repos: ["acme/web"],
+        states: ["unread"],
+        types: [],
+        ages: [],
+      })
     ).toBe(false);
   });
 
+  test("multi-value defaults round-trip and persist", () => {
+    setGlobal("localStorage", fakeStorage());
+    saveInboxFilters({
+      repos: ["a", "b"],
+      states: ["unread", "done"],
+      types: ["mention", "assign"],
+      ages: ["7d", "30d"],
+    });
+    expect(loadInboxFilters()).toEqual({
+      repos: ["a", "b"],
+      states: ["unread", "done"],
+      types: ["assign", "mention"],
+      ages: ["7d", "30d"],
+    });
+  });
+
+  test("a v1 payload migrates to multi-select", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({
+        version: 1,
+        filters: { repo: "acme/web", state: "all", type: "pull_request", age: "7d" },
+      })
+    );
+    expect(loadInboxFilters()).toEqual({
+      repos: ["acme/web"],
+      states: ["unread", "done"],
+      types: ["pull_request"],
+      ages: ["7d"],
+    });
+  });
+
+  test("v2 arrays drop garbage entries per-field", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({
+        version: 2,
+        filters: {
+          repos: ["a", 42, "all", ""],
+          states: ["done", "bogus"],
+          types: [null, "mention"],
+          ages: ["7d", "bogus"],
+        },
+      })
+    );
+    expect(loadInboxFilters()).toEqual({
+      repos: ["a"],
+      states: ["done"],
+      types: ["mention"],
+      ages: ["7d"],
+    });
+  });
+
+  test("v2 all-states alias maps to both", () => {
+    setGlobal("localStorage", fakeStorage());
+    localStorage.setItem(
+      INBOX_FILTERS_KEY,
+      JSON.stringify({ version: 2, filters: { repos: [], states: ["all"], types: [], ages: [] } })
+    );
+    expect(loadInboxFilters()).toEqual({
+      repos: [],
+      states: ["unread", "done"],
+      types: [],
+      ages: [],
+    });
+  });
   test("missing storage means no remembered filters", () => {
     setGlobal("localStorage", fakeStorage());
     expect(loadInboxFilters()).toBeNull();
@@ -167,7 +247,7 @@ describe("the remembered inbox filters", () => {
     setGlobal("localStorage", fakeStorage());
     localStorage.setItem(
       INBOX_FILTERS_KEY,
-      JSON.stringify({ version: 999, filters: { repo: "x", state: "all", type: "all", age: "all" } })
+      JSON.stringify({ version: 999, filters: { repos: ["x"], states: ["done"], types: [], ages: [] } })
     );
     expect(loadInboxFilters()).toBeNull();
   });
@@ -181,7 +261,12 @@ describe("the remembered inbox filters", () => {
         filters: { repo: "", state: "bogus", type: "", age: "bogus" },
       })
     );
-    expect(loadInboxFilters()).toEqual({ repo: "all", state: "unread", type: "all", age: "all" });
+    expect(loadInboxFilters()).toEqual({
+      repos: [],
+      states: ["unread"],
+      types: [],
+      ages: [],
+    });
   });
 
   test("throwing storage fails open", () => {
@@ -195,7 +280,7 @@ describe("the remembered inbox filters", () => {
     });
     expect(loadInboxFilters()).toBeNull();
     expect(() =>
-      saveInboxFilters({ repo: "acme/web", state: "all", type: "all", age: "all" })
+      saveInboxFilters({ repos: ["acme/web"], states: ["unread", "done"], types: [], ages: [] })
     ).not.toThrow();
   });
 });

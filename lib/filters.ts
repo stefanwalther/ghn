@@ -96,6 +96,19 @@ export function matchesTypeFilter(
   return reason === filter;
 }
 
+/**
+ * Multi-select OR over type filters. Empty means all.
+ */
+export function matchesAnyTypeFilter(
+  reason: string,
+  subjectType: string | null | undefined,
+  filters: string[],
+  extra?: { prMerged?: boolean | null; subjectState?: string | null }
+): boolean {
+  if (filters.length === 0) return true;
+  return filters.some((f) => matchesTypeFilter(reason, subjectType, f, extra));
+}
+
 export interface QuickSelectItem {
   id: string;
   reason: string;
@@ -173,4 +186,12 @@ export function matchAge(createdAt: number, now: number, age: AgeFilter): boolea
     case "30d":
       return createdAt >= now - 30 * DAY;
   }
+}
+
+/**
+ * Multi-select OR over age buckets. Empty means all time.
+ */
+export function matchAnyAge(createdAt: number, now: number, ages: AgeFilter[]): boolean {
+  if (ages.length === 0) return true;
+  return ages.some((a) => matchAge(createdAt, now, a));
 }

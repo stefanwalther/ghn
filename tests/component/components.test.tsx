@@ -781,12 +781,14 @@ describe("FilterSidebar", () => {
     expect(props.onType).toHaveBeenCalledWith("mention");
   });
 
-  test("reports the reset when the active type is chosen again", () => {
+  test("reports the toggle when the active type is chosen again", () => {
     const props = renderSidebar({ activeType: "mention" });
 
     fireEvent.click(screen.getByRole("button", { name: "Filter by Mention" }));
 
-    expect(props.onType).toHaveBeenCalledWith("all");
+    // Multi-select: the sidebar reports the toggled value; the parent
+    // removes it, which lands back on all when the set empties.
+    expect(props.onType).toHaveBeenCalledWith("mention");
   });
 
   test("marks the active type as current", () => {
