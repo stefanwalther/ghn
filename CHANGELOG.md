@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.12.0...ghn-v0.13.0) (2026-11-25)
+
+
+### Features
+
+* **inbox:** multi-select filters persisted as defaults ([#155](https://github.com/stefanwalther/ghn/issues/155)) ([d54d230](https://github.com/stefanwalther/ghn/commit/d54d230bfc8e847e5968a92c676e42e8901e3475))
+
+
+### Bug Fixes
+
+* **sync:** fetch fresh subject state for changed notifications ([#146](https://github.com/stefanwalther/ghn/issues/146)) ([303da4b](https://github.com/stefanwalther/ghn/commit/303da4b6e7aaef712e1d0ea82fcaad332b31ebee))
+
 ## [0.12.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.11.2...ghn-v0.12.0) (2026-11-16)
 
 
