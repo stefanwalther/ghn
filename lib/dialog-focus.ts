@@ -4,10 +4,29 @@ const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
+ * When focus was inside a transient popup (such as a filter dropdown) that
+ * closes and unmounts as the modal takes focus, locate the trigger controlling
+ * that popup so closing the modal can still return focus to a connected control.
+ */
+function findPopupTrigger(
+  opener: HTMLElement | null,
+  dialogRoot: HTMLElement
+): HTMLElement | null {
+  const popup = opener?.closest<HTMLElement>('[role="dialog"][id], [role="menu"][id]');
+  if (!popup || popup === dialogRoot || !popup.id) return null;
+  for (const control of document.querySelectorAll<HTMLElement>("[aria-controls]")) {
+    const controlledIds = control.getAttribute("aria-controls")?.split(/\s+/) ?? [];
+    if (controlledIds.includes(popup.id)) return control;
+  }
+  return null;
+}
+
+/**
  * Dialog focus contract shared by every overlay: when `active`, focus the
  * `[data-autofocus]` element (or the first input, or the root itself), trap
  * Tab inside the root, and return focus to the previously focused element
- * when the dialog closes or unmounts.
+ * (or its controlling popup trigger if the opener unmounted) when the dialog
+ * closes or unmounts.
  */
 export function useDialogFocus(
   rootRef: React.RefObject<HTMLElement | null>,
@@ -19,6 +38,7 @@ export function useDialogFocus(
     if (!root) return;
     const node: HTMLElement = root;
     const prev = document.activeElement as HTMLElement | null;
+    const fallback = findPopupTrigger(prev, node);
     const target =
       node.querySelector<HTMLElement>("[data-autofocus]") ??
       node.querySelector<HTMLElement>("input") ??
@@ -49,9 +69,15 @@ export function useDialogFocus(
     return () => {
       cancelAnimationFrame(raf);
       node.removeEventListener("keydown", onKeyDown);
-      if (prev && document.contains(prev)) {
+      const restoreTarget =
+        prev && document.contains(prev)
+          ? prev
+          : fallback && document.contains(fallback)
+            ? fallback
+            : null;
+      if (restoreTarget) {
         try {
-          prev.focus({ preventScroll: true });
+          restoreTarget.focus({ preventScroll: true });
         } catch {
           // A removed or unfocusable opener must not break dialog close.
         }

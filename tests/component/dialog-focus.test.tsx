@@ -2,6 +2,7 @@ import * as React from "react";
 import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useDialogFocus } from "@/lib/dialog-focus";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
 
 afterEach(() => {
   cleanup();
@@ -102,6 +103,60 @@ describe("useDialogFocus", () => {
     fireEvent.click(screen.getByRole("button", { name: "close it" }));
     await waitFor(() => {
       expect(opener).toHaveFocus();
+    });
+  });
+
+  test("falls back to the controlling dropdown trigger when an open option unmounts", async () => {
+    function FilterWithPalette() {
+      const [paletteOpen, setPaletteOpen] = React.useState(false);
+      const paletteRef = React.useRef<HTMLDivElement>(null);
+      useDialogFocus(paletteRef, paletteOpen);
+      return (
+        <div>
+          <FilterDropdown
+            property="Age"
+            summary="All time"
+            mode="single"
+            options={[{ value: "7d", label: "Last 7 days" }]}
+            selected={[]}
+            onSelect={() => {}}
+            allLabel="All time"
+            onReset={() => {}}
+            panelLabel="Age filters"
+          />
+          <button type="button" onClick={() => setPaletteOpen(true)}>
+            Trigger palette
+          </button>
+          {paletteOpen ? (
+            <div ref={paletteRef} role="dialog" aria-modal="true" aria-label="Search and commands">
+              <input aria-label="Palette input" data-autofocus />
+              <button type="button" onClick={() => setPaletteOpen(false)}>
+                Close palette
+              </button>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    render(<FilterWithPalette />);
+    const ageTrigger = screen.getByRole("button", { name: "Age: All time" });
+    fireEvent.click(ageTrigger);
+    expect(screen.getByRole("radio", { name: "All time" })).toHaveFocus();
+
+    // Open the palette without moving focus via mouse (simulates Cmd+K or /).
+    fireEvent.click(screen.getByRole("button", { name: "Trigger palette" }));
+    const paletteInput = await screen.findByLabelText("Palette input");
+    await waitFor(() => {
+      expect(paletteInput).toHaveFocus();
+    });
+    // Blur onto the palette input closes the dropdown and unmounts the option.
+    expect(screen.queryByRole("dialog", { name: "Age filters" })).not.toBeInTheDocument();
+
+    // Closing the palette returns focus to the still-connected Age trigger.
+    fireEvent.click(screen.getByRole("button", { name: "Close palette" }));
+    await waitFor(() => {
+      expect(ageTrigger).toHaveFocus();
     });
   });
 });
