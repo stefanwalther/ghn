@@ -1238,9 +1238,10 @@ function InboxView() {
         // The shortcuts dialog now lives in the global AppShell. When it is
         // open, leave selection and drawer alone so Escape only closes help.
         if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
-        // An open context menu owns its own Escape to close; leave selection
-        // and drawer alone with it.
+        // An open context menu or filter dropdown owns its own Escape to close;
+        // leave selection and drawer alone with it.
         if (document.querySelector('div[role="menu"]')) return;
+        if (document.querySelector('[data-filter-popover="true"]')) return;
         if (confirmUnsub) {
           setConfirmUnsub(null);
           return;
@@ -1259,9 +1260,11 @@ function InboxView() {
       }
       if (isEditableTarget(e.target)) return;
       if (document.querySelector('div[role="dialog"][aria-label="Keyboard shortcuts"]')) return;
-      // A visible context menu owns the keyboard: list shortcuts stay quiet
-      // while it is open so j/k and triage keys never act behind it.
+      // A visible context menu or filter dropdown owns the keyboard: list
+      // shortcuts stay quiet while it is open so j/k and triage keys never
+      // act behind it.
       if (document.querySelector('div[role="menu"]')) return;
+      if (document.querySelector('[data-filter-popover="true"]')) return;
       if (confirmUnsub) return;
       if (confirmDone) return;
       if (confirmBulk) return;

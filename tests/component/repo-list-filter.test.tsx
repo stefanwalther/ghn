@@ -882,6 +882,17 @@ describe("CommandPalette repository filtering", () => {
     fireEvent.change(reopened, { target: { value: "age:7" } });
     fireEvent.click(await screen.findByRole("option", { name: /Last 7 days/ }));
     expect(pushMock).toHaveBeenCalledWith("/?age=7d");
+
+    // Picking a different age from the palette replaces the active one.
+    window.history.replaceState({}, "", "/?age=7d");
+    act(() => {
+      useUIStore.getState().openPalette();
+    });
+    const replaced = await screen.findByRole("combobox");
+    fireEvent.change(replaced, { target: { value: "age:24" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Last 24 hours/ }));
+    expect(pushMock).toHaveBeenCalledWith("/?age=24h");
+    window.history.replaceState({}, "", "/");
   });
 
   test("Types tab scopes an empty query to type values", async () => {

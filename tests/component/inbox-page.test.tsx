@@ -268,23 +268,42 @@ describe("inbox screen", () => {
     renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
-    fireEvent.click(screen.getByLabelText("Filter by age Last 7 days"));
+    fireEvent.click(screen.getByRole("button", { name: "Age: All time" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Filter by age Last 7 days" }));
 
     expect(nav.replace).toHaveBeenCalledWith("/?age=7d", { scroll: false });
   });
 
-  test("age and state filters are multi-select", async () => {
+  test("state filter is multi-select", async () => {
     installFetch();
     renderWithQuery(<InboxPage />);
     await screen.findByText("Fix flaky login redirect");
 
-    // Both state boxes start with unread checked only.
-    expect(screen.getByLabelText("Filter by state Unread")).toBeChecked();
-    expect(screen.getByLabelText("Filter by state Done")).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "State: Unread" }));
+    // State dropdown starts with unread checked only.
+    expect(screen.getByRole("checkbox", { name: "Filter by state Unread" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Filter by state Done" })).not.toBeChecked();
 
-    fireEvent.click(screen.getByLabelText("Filter by state Done"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Filter by state Done" }));
 
     expect(nav.replace).toHaveBeenCalledWith("/?state=all", { scroll: false });
+  });
+
+  test("Escape closes an open filter dropdown without clearing row selection", async () => {
+    installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible" }));
+    expect(await screen.findByText("2 selected")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Age: All time" }));
+    expect(screen.getByRole("dialog", { name: "Age filters" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Age filters" })).not.toBeInTheDocument();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
   });
 
   test("a repository filter change replaces the route with the matching query string", async () => {
