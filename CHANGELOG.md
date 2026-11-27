@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.13.0...ghn-v0.14.0) (2026-11-27)
+
+
+### Features
+
+* **inbox:** compact filter dropdowns and single-select age ([#157](https://github.com/stefanwalther/ghn/issues/157)) ([3990bc5](https://github.com/stefanwalther/ghn/commit/3990bc513fa69c58557b513bb7702e8dcffeebdf))
+
 ## [0.13.0](https://github.com/stefanwalther/ghn/compare/ghn-v0.12.0...ghn-v0.13.0) (2026-11-25)
 
 
