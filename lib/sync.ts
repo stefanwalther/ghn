@@ -42,13 +42,15 @@ async function ensureRepository(
   db: Db,
   thread: GhThread,
   viewerLogin: string | null,
-  now: number
+  now: number,
+  knownRepos: Map<string, { unreachable: number }>
 ): Promise<string> {
   const id = repoIdForFullName(thread.repoFullName);
-  const existing = await db.select().from(repositories).where(eq(repositories.id, id));
-  if (existing[0]) {
-    if (existing[0].unreachable === 1) {
+  const existing = knownRepos.get(id);
+  if (existing) {
+    if (existing.unreachable === 1) {
       await db.update(repositories).set({ unreachable: 0 }).where(eq(repositories.id, id));
+      existing.unreachable = 0;
     }
     return id;
   }
@@ -70,6 +72,7 @@ async function ensureRepository(
     unreachable: 0,
     createdAt: now,
   });
+  knownRepos.set(id, { unreachable: 0 });
   return id;
 }
 
@@ -130,6 +133,15 @@ export interface UpsertSummary {
   upserted: number;
   discoveredRepos: number;
   seenRepoIds: string[];
+  resolvedIds: string[];
+}
+
+function hasSubjectApiUrl(thread: GhThread): boolean {
+  return thread.subjectApiUrl.trim().length > 0;
+}
+
+function fallbackRepoUrl(thread: GhThread): string {
+  return thread.repoHtmlUrl || (thread.repoFullName ? `https://github.com/${thread.repoFullName}` : "");
 }
 
 export async function upsertThreads(
@@ -153,10 +165,15 @@ export async function upsertThreads(
   const uniqueThreads = [...deduped.values()];
   let upserted = 0;
   const seenRepos = new Set<string>();
+  const resolvedIds: string[] = [];
   const pending: { thread: GhThread; repoId: string }[] = [];
+  const existingRepos = await db
+    .select({ id: repositories.id, unreachable: repositories.unreachable })
+    .from(repositories);
+  const knownRepos = new Map(existingRepos.map((r) => [r.id, { unreachable: r.unreachable }]));
   for (const thread of uniqueThreads) {
     if (!thread.repoFullName) continue;
-    const repoId = await ensureRepository(db, thread, viewerLogin, now);
+    const repoId = await ensureRepository(db, thread, viewerLogin, now, knownRepos);
     seenRepos.add(repoId);
     pending.push({ thread, repoId });
   }
@@ -164,6 +181,7 @@ export async function upsertThreads(
   const existingById = new Map(existingRows.map((r) => [r.id, r]));
   const retries = await readSubjectRetries(db);
   const toResolve = pending.filter(({ thread }) => {
+    if (!hasSubjectApiUrl(thread)) return false;
     const row = existingById.get(thread.id);
     if (!row || row.isDone === 1) return row === undefined;
     const retry = retries.get(thread.id);
@@ -178,6 +196,7 @@ export async function upsertThreads(
   for (const { thread, repoId } of pending) {
     const row = existingById.get(thread.id);
     const snapshot = snapshotById.get(thread.id);
+    const noSubjectUrl = !hasSubjectApiUrl(thread);
     if (!row) {
       await db.insert(notifications).values({
         id: thread.id,
@@ -187,14 +206,17 @@ export async function upsertThreads(
         subjectState: snapshot?.ok ? snapshot.state : null,
         reason: thread.reason,
         createdAt: thread.updatedAt,
-        githubUpdatedAt: snapshot?.ok ? thread.updatedAt : null,
+        githubUpdatedAt: noSubjectUrl || snapshot?.ok ? thread.updatedAt : null,
         isRead: thread.unread ? 0 : 1,
         isDone: 0,
         localUnread: 0,
         prMerged: thread.subjectType === "PullRequest" && snapshot?.ok && snapshot.merged === true ? 1 : 0,
-        sourceUrl: snapshot?.url ?? "",
+        sourceUrl: noSubjectUrl ? fallbackRepoUrl(thread) : (snapshot?.url ?? ""),
       });
-      if (snapshot) await recordSubjectResolution(db, thread, snapshot.ok, now);
+      if (snapshot) {
+        if (snapshot.ok) resolvedIds.push(thread.id);
+        await recordSubjectResolution(db, thread, snapshot.ok, now);
+      }
       upserted += 1;
       continue;
     }
@@ -211,6 +233,7 @@ export async function upsertThreads(
         reason: thread.reason,
         createdAt: thread.updatedAt,
         isRead,
+        ...(noSubjectUrl ? { githubUpdatedAt: thread.updatedAt } : {}),
         ...(snapshot?.ok ? {
           githubUpdatedAt: thread.updatedAt,
           subjectState: snapshot.state ?? row.subjectState,
@@ -219,11 +242,14 @@ export async function upsertThreads(
         } : {}),
       })
       .where(eq(notifications.id, thread.id));
-    if (snapshot) await recordSubjectResolution(db, thread, snapshot.ok, now);
+    if (snapshot) {
+      if (snapshot.ok) resolvedIds.push(thread.id);
+      await recordSubjectResolution(db, thread, snapshot.ok, now);
+    }
     upserted += 1;
   }
   const discoveredRepos = seenRepos.size;
-  return { upserted, discoveredRepos, seenRepoIds: [...seenRepos] };
+  return { upserted, discoveredRepos, seenRepoIds: [...seenRepos], resolvedIds };
 }
 
 export async function applyRemoteDone(

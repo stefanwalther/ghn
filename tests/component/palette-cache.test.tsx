@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CommandPalette } from "@/components/search/command-palette";
 import { resetUIStore, useUIStore } from "@/lib/ui-store";
@@ -109,5 +109,27 @@ describe("command palette cache", () => {
       expect(callsTo("/api/notifications?state=all&limit=400")).toHaveLength(1);
       expect(callsTo("/api/repositories")).toHaveLength(1);
     });
+  });
+
+  test("selecting Full sync from GitHub requests a full sync and closes the palette", async () => {
+    installFetch();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <CommandPalette />
+      </QueryClientProvider>
+    );
+
+    act(() => {
+      useUIStore.getState().openPalette();
+    });
+    const option = await screen.findByText("Full sync from GitHub");
+    fireEvent.click(option);
+
+    expect(useUIStore.getState().fullSyncRequest).toBe(1);
+    expect(useUIStore.getState().paletteOpen).toBe(false);
   });
 });

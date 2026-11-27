@@ -245,6 +245,48 @@ describe("stand-in endpoint inventory", () => {
     });
   });
 
+  test("POST /graphql resolves batched PR and issue states and partial repo errors", async () => {
+    await withStandIn(async (standIn) => {
+      standIn.setSubject("/repos/acme/web/pulls/11", {
+        state: "closed",
+        merged: true,
+        html_url: "https://github.com/acme/web/pull/11",
+      });
+      standIn.setSubject("/repos/acme/web/issues/4", {
+        state: "open",
+        html_url: "https://github.com/acme/web/issues/4",
+      });
+      standIn.setScenario("/repos/gone/repo", { status: 404 });
+      const query = `query {
+        r0: repository(owner: "acme", name: "web") {
+          s0: pullRequest(number: 11) { state merged }
+          s1: issue(number: 4) { state }
+        }
+        r1: repository(owner: "gone", name: "repo") {
+          s2: pullRequest(number: 1) { state merged }
+        }
+      }`;
+      const res = await fetch(`${standIn.url}/graphql`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: Record<string, unknown>;
+        errors?: Array<{ type: string; path: string[] }>;
+      };
+      expect(body.data).toEqual({
+        r0: {
+          s0: { state: "MERGED", merged: true, url: "https://github.com/acme/web/pull/11" },
+          s1: { state: "OPEN", url: "https://github.com/acme/web/issues/4" },
+        },
+        r1: null,
+      });
+      expect(body.errors?.[0]).toMatchObject({ type: "NOT_FOUND", path: ["r1"] });
+    });
+  });
+
   test("POST /graphql returns the contribution calendar for a dated query", async () => {
     await withStandIn(async (standIn) => {
       const res = await fetch(`${standIn.url}/graphql`, {

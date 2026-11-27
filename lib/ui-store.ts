@@ -28,6 +28,7 @@ interface UIState {
   openThread: OpenThreadRequest | null;
   menuRequest: MenuRequest | null;
   refreshRequest: number;
+  fullSyncRequest: number;
   scrollTopRequest: number;
   /** Narrows the inbox repository list; set from the palette, edited in the sidebar. */
   repoListFilter: string;
@@ -41,6 +42,7 @@ interface UIState {
   consumeOpenThread: () => void;
   requestMenu: (id: string) => void;
   requestRefresh: () => void;
+  requestFullSync: () => void;
   requestScrollTop: () => void;
   setRepoListFilter: (query: string) => void;
 }
@@ -78,6 +80,7 @@ function baseState(): Pick<
   | "openThread"
   | "menuRequest"
   | "refreshRequest"
+  | "fullSyncRequest"
   | "scrollTopRequest"
   | "repoListFilter"
 > {
@@ -88,6 +91,7 @@ function baseState(): Pick<
     openThread: null,
     menuRequest: null,
     refreshRequest: 0,
+    fullSyncRequest: 0,
     scrollTopRequest: 0,
     repoListFilter: "",
   };
@@ -124,6 +128,7 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ menuRequest: { id, n: menuSeq } });
   },
   requestRefresh: () => set((s) => ({ refreshRequest: s.refreshRequest + 1 })),
+  requestFullSync: () => set((s) => ({ fullSyncRequest: s.fullSyncRequest + 1 })),
   requestScrollTop: () => set((s) => ({ scrollTopRequest: s.scrollTopRequest + 1 })),
   setRepoListFilter: (query) => set({ repoListFilter: query }),
 }));

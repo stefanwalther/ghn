@@ -115,12 +115,12 @@ export function tokenDisabled(): boolean {
   return "GHN_TOKEN" in process.env && !process.env.GHN_TOKEN?.trim();
 }
 
-export async function probeConnection(): Promise<{
+export async function probeConnection(tokenOverride?: string | null): Promise<{
   connected: boolean;
   viewerLogin: string | null;
   reason?: SyncFailureReason;
 }> {
-  const token = await readToken();
+  const token = tokenOverride === undefined ? await readToken() : tokenOverride;
   if (!token) {
     return { connected: false, viewerLogin: null, reason: "auth" };
   }

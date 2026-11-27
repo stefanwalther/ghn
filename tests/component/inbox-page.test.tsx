@@ -1249,8 +1249,64 @@ describe("inbox screen", () => {
     });
     const [, init] = callsTo(fetchMock, "/api/sync")[0]!;
     expect(init?.method).toBe("POST");
+    expect(init?.body).toBe("{}");
     await waitFor(() => {
       expect(callsTo(fetchMock, "/api/notifications").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  test("shift-clicking refresh and requesting a full sync post full: true to /api/sync", async () => {
+    const fetchMock = installFetch();
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh inbox from GitHub" }), {
+      shiftKey: true,
+    });
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/sync")).toHaveLength(1);
+    });
+    expect(callsTo(fetchMock, "/api/sync")[0]![1]?.body).toBe(JSON.stringify({ full: true }));
+
+    act(() => {
+      useUIStore.getState().requestFullSync();
+    });
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/sync")).toHaveLength(2);
+    });
+    expect(callsTo(fetchMock, "/api/sync")[1]![1]?.body).toBe(JSON.stringify({ full: true }));
+  });
+
+  test("holding Shift enables Shift+click full sync inside the poll window", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-15T10:00:00Z"));
+    const fetchMock = installFetch({
+      notifications: {
+        ...notificationsPayload,
+        lastSyncAt: Date.parse("2026-01-15T10:00:00Z"),
+      },
+    });
+
+    renderWithQuery(<InboxPage />);
+    await screen.findByText("Fix flaky login redirect");
+
+    const refreshBtn = screen.getByRole("button", { name: "Refresh inbox from GitHub" });
+    expect(refreshBtn).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: "Shift", shiftKey: true });
+    expect(refreshBtn).toBeEnabled();
+
+    fireEvent.click(refreshBtn, { shiftKey: true });
+    await waitFor(() => {
+      expect(callsTo(fetchMock, "/api/sync")).toHaveLength(1);
+    });
+    expect(callsTo(fetchMock, "/api/sync")[0]![1]?.body).toBe(JSON.stringify({ full: true }));
+
+    fireEvent.keyUp(window, { key: "Shift", shiftKey: false });
+    await waitFor(() => {
+      expect(refreshBtn).toBeDisabled();
     });
   });
 

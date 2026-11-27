@@ -466,6 +466,11 @@ export function CommandPalette() {
       close();
       return;
     }
+    if (a.type === "full-sync") {
+      ui.requestFullSync();
+      close();
+      return;
+    }
     if (a.type === "toggle-sidebar") {
       ui.toggleSidebar();
       close();

@@ -7,6 +7,7 @@ export type PaletteAction =
   | { type: "external"; href: string }
   | { type: "theme" }
   | { type: "refresh" }
+  | { type: "full-sync" }
   | { type: "toggle-sidebar" }
   | { type: "show-help" }
   | { type: "scroll-top" }
@@ -47,6 +48,14 @@ export function staticEntries(): PaletteEntry[] {
       subtitle: "Sync now, then reload the inbox",
       keywords: "refresh sync reload fetch update",
       action: { type: "refresh" },
+    },
+    {
+      id: "cmd-full-sync",
+      section: "commands",
+      title: "Full sync from GitHub",
+      subtitle: "Reconcile read and done state across every thread",
+      keywords: "full sync refresh reconcile all threads done read",
+      action: { type: "full-sync" },
     },
     {
       id: "cmd-theme",

@@ -39,7 +39,8 @@ export async function POST(request: Request) {
     );
   }
   const thread = fetched.data;
-  const snapshot = await resolveSubject(token, thread);
+  const noSubjectUrl = !thread.subjectApiUrl.trim();
+  const snapshot = noSubjectUrl ? null : await resolveSubject(token, thread);
   const isRead = thread.unread ? 0 : row.localUnread === 1 ? 0 : 1;
   const [updated] = await db
     .update(notifications)
@@ -49,10 +50,11 @@ export async function POST(request: Request) {
       reason: thread.reason,
       createdAt: thread.updatedAt,
       isRead,
-      ...(snapshot.ok ? {
+      ...(noSubjectUrl ? { githubUpdatedAt: thread.updatedAt } : {}),
+      ...(snapshot?.ok ? {
         githubUpdatedAt: thread.updatedAt,
         subjectState: snapshot.state ?? row.subjectState,
-        prMerged: snapshot.merged === true ? 1 : 0,
+        prMerged: thread.subjectType === "PullRequest" && snapshot.merged === true ? 1 : 0,
         sourceUrl: snapshot.url,
       } : {}),
     })
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
   if (!updated) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  await recordSubjectResolution(db, thread, snapshot.ok, nowMs());
+  await recordSubjectResolution(db, thread, noSubjectUrl || Boolean(snapshot?.ok), nowMs());
   return NextResponse.json({
     gone: false,
     item: {
