@@ -50,12 +50,13 @@ export async function readSubjectRetries(db: Db) {
 /** One record per notification, with compare-and-swap writes across overlapping syncs. */
 export async function recordSubjectResolution(db: Db, thread: GhThread, ok: boolean, now: number) {
   const key = `${PREFIX}${thread.id}`;
+  const nonResolvable = !thread.subjectApiUrl.trim();
   for (;;) {
     const [stored] = await db.select().from(syncState).where(eq(syncState.key, key));
     const previous = stored ? parseRetry(stored.value) : null;
     if (previous && previous.thread.updatedAt > thread.updatedAt) return;
     const [row] = await db.select().from(notifications).where(eq(notifications.id, thread.id));
-    if (ok || !row || row.isDone === 1 || (row.githubUpdatedAt ?? -1) >= thread.updatedAt) {
+    if (ok || nonResolvable || !row || row.isDone === 1 || (row.githubUpdatedAt ?? -1) >= thread.updatedAt) {
       if (!stored) return;
       const removed = await db.delete(syncState)
         .where(and(eq(syncState.key, key), eq(syncState.value, stored.value))).returning({ key: syncState.key });
@@ -82,7 +83,15 @@ export async function retryPendingSubjects(
   const due: typeof pending = [];
   for (const entry of pending) {
     const [row] = await db.select().from(notifications).where(eq(notifications.id, entry.retry.thread.id));
-    if (!row || row.isDone === 1 || (row.githubUpdatedAt ?? -1) >= entry.retry.thread.updatedAt) {
+    if (!entry.retry.thread.subjectApiUrl.trim()) {
+      if (row && row.isDone === 0 && row.githubUpdatedAt === null) {
+        await db
+          .update(notifications)
+          .set({ githubUpdatedAt: entry.retry.thread.updatedAt })
+          .where(and(eq(notifications.id, row.id), sql`${notifications.githubUpdatedAt} IS NULL`));
+      }
+      await db.delete(syncState).where(and(eq(syncState.key, entry.key), eq(syncState.value, entry.value)));
+    } else if (!row || row.isDone === 1 || (row.githubUpdatedAt ?? -1) >= entry.retry.thread.updatedAt) {
       await db.delete(syncState).where(and(eq(syncState.key, entry.key), eq(syncState.value, entry.value)));
     } else if (entry.retry.nextAttemptAt <= now) {
       due.push(entry);
@@ -91,6 +100,7 @@ export async function retryPendingSubjects(
   due.sort((a, b) => a.retry.nextAttemptAt - b.retry.nextAttemptAt || a.key.localeCompare(b.key));
   let attempted = 0;
   let updated = 0;
+  const resolvedIds: string[] = [];
   await Promise.all(due.slice(0, RETRIES_PER_POLL).map(async (entry) => {
     // Claim and schedule the next attempt before fetching. A concurrent poll
     // cannot claim the same record, and a crash leaves a retryable lease.
@@ -116,9 +126,12 @@ export async function retryPendingSubjects(
         sql`${notifications.githubUpdatedAt} IS ${row.githubUpdatedAt}`,
         eq(notifications.createdAt, row.createdAt),
       )).returning({ id: notifications.id });
-      updated += changed.length;
+      if (changed.length > 0) {
+        updated += changed.length;
+        resolvedIds.push(thread.id);
+      }
     }
     await db.delete(syncState).where(and(eq(syncState.key, entry.key), eq(syncState.value, value)));
   }));
-  return { attempted, updated };
+  return { attempted, updated, resolvedIds };
 }

@@ -86,6 +86,7 @@ function InboxView() {
   const [focusIdx, setFocusIdx] = React.useState<number | null>(null);
   const [drawerItem, setDrawerItem] = React.useState<InboxItem | null>(null);
   const [showHints, setShowHints] = React.useState(false);
+  const [shiftHeld, setShiftHeld] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   // Notices are errors (red) by default; passing confirmations go muted.
   const [noticeKind, setNoticeKind] = React.useState<"error" | "info">("error");
@@ -1170,11 +1171,13 @@ function InboxView() {
   // Counters use seen-refs so a remount never replays an old request.
   const openThreadReq = useUIStore((s) => s.openThread);
   const refreshReq = useUIStore((s) => s.refreshRequest);
+  const fullSyncReq = useUIStore((s) => s.fullSyncRequest);
   const scrollTopReq = useUIStore((s) => s.scrollTopRequest);
   // Palette-to-sidebar handoff: Cmd+K "Filter repository list to X" lands here.
   const repoListFilter = useUIStore((s) => s.repoListFilter);
   const setRepoListFilter = useUIStore((s) => s.setRepoListFilter);
   const seenRefresh = React.useRef(refreshReq);
+  const seenFullSync = React.useRef(fullSyncReq);
   const seenScrollTop = React.useRef(scrollTopReq);
 
   React.useEffect(() => {
@@ -1198,6 +1201,12 @@ function InboxView() {
   }, [refreshReq]);
 
   React.useEffect(() => {
+    if (fullSyncReq === seenFullSync.current) return;
+    seenFullSync.current = fullSyncReq;
+    void refreshRef.current({ full: true });
+  }, [fullSyncReq]);
+
+  React.useEffect(() => {
     if (scrollTopReq === seenScrollTop.current) return;
     seenScrollTop.current = scrollTopReq;
     setSelected(new Set());
@@ -1205,24 +1214,27 @@ function InboxView() {
   }, [scrollTopReq]);
 
   React.useEffect(() => {
-    function onAltDown(e: KeyboardEvent) {
+    function onModifierDown(e: KeyboardEvent) {
       if (isAltHintKey(e)) {
         setShowHints(true);
         e.preventDefault();
       }
+      if (e.key === "Shift") setShiftHeld(true);
     }
-    function onAltUp(e: KeyboardEvent) {
+    function onModifierUp(e: KeyboardEvent) {
       if (isAltHintKey(e) || !e.altKey) setShowHints(false);
+      if (e.key === "Shift" || !e.shiftKey) setShiftHeld(false);
     }
     function onBlur() {
       setShowHints(false);
+      setShiftHeld(false);
     }
-    window.addEventListener("keydown", onAltDown);
-    window.addEventListener("keyup", onAltUp);
+    window.addEventListener("keydown", onModifierDown);
+    window.addEventListener("keyup", onModifierUp);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", onAltDown);
-      window.removeEventListener("keyup", onAltUp);
+      window.removeEventListener("keydown", onModifierDown);
+      window.removeEventListener("keyup", onModifierUp);
       window.removeEventListener("blur", onBlur);
     };
   }, []);
@@ -1382,13 +1394,17 @@ function InboxView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <HintTooltip label="Refresh from GitHub">
+          <HintTooltip label="Refresh from GitHub (Shift+click for full sync)">
             <Button
               variant="ghost"
               size="sm"
               aria-label="Refresh inbox from GitHub"
-              onClick={() => void refresh()}
-              disabled={syncing || refreshing || inPollWindow}
+              onClick={(e) => {
+                const full = e.shiftKey || shiftHeld;
+                if (inPollWindow && !full) return;
+                void refresh(full ? { full: true } : undefined);
+              }}
+              disabled={syncing || refreshing || (inPollWindow && !shiftHeld)}
             >
               <SyncSpinner spinning={syncing || refreshing} />
             </Button>

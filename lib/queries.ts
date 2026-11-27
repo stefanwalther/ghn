@@ -486,7 +486,6 @@ export interface ConnectionState {
  */
 export function useSyncFlow(filters: InboxFilters) {
   const client = useQueryClient();
-  const notificationsKey = queryKeys.notifications(filters);
   const notifQuery = useNotifications(filters);
   const connectionQuery = useConnection();
   const [pollSecs, setPollSecs] = React.useState(60);
@@ -499,27 +498,27 @@ export function useSyncFlow(filters: InboxFilters) {
   }, []);
 
   const syncMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (opts?: { full?: boolean }) =>
       fetchJson<SyncResponse>(
         "/api/sync",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: "{}",
+          body: JSON.stringify(opts?.full ? { full: true } : {}),
           cache: "no-store",
         },
         SYNC_TIMEOUT_MS
       ),
     onSettled: () => {
-      client.invalidateQueries({ queryKey: notificationsKey });
+      client.invalidateQueries({ queryKey: ["notifications"] });
       client.invalidateQueries({ queryKey: queryKeys.repositories() });
       client.invalidateQueries({ queryKey: queryKeys.connection() });
     },
   });
 
-  const refresh = async () => {
+  const refresh = async (opts?: { full?: boolean }) => {
     try {
-      const data = await syncMutation.mutateAsync();
+      const data = await syncMutation.mutateAsync(opts);
       if (data && typeof data.pollIntervalSecs === "number") {
         setPollSecs(data.pollIntervalSecs);
       }

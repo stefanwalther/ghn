@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { nowMs } from "@/lib/clock";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { notifications, repositories } from "@/db/schema";
 import {
   checkRepoExists,
@@ -26,6 +26,11 @@ import {
 } from "@/lib/sync";
 import { drainQueue, getQueuedThreadIds, queueHealth } from "@/lib/queue";
 import { retryPendingSubjects } from "@/lib/subject-retries";
+import {
+  applyActiveSubjectUpdates,
+  prefetchActiveSubjects,
+  refreshActiveSubjects,
+} from "@/lib/subject-states";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +51,8 @@ async function refreshUnreachableFlags(
   const { db } = await import("@/db/client");
   const rows = await db
     .select({ id: notifications.id, repositoryId: notifications.repositoryId })
-    .from(notifications);
+    .from(notifications)
+    .where(eq(notifications.isDone, 0));
   const liveByRepo = new Map<string, boolean>();
   for (const row of rows) {
     if (row.id.startsWith("n_")) continue;
@@ -54,14 +60,14 @@ async function refreshUnreachableFlags(
     liveByRepo.set(row.repositoryId, true);
   }
   const repoIds = [...liveByRepo.keys()];
+  if (repoIds.length === 0) return;
+  const repoRows = await db
+    .select({ id: repositories.id, fullName: repositories.fullName })
+    .from(repositories)
+    .where(inArray(repositories.id, repoIds));
   const fullNames = new Map<string, string>();
-  for (const repoId of repoIds) {
-    const repoRows = await db
-      .select({ fullName: repositories.fullName })
-      .from(repositories)
-      .where(inArray(repositories.id, [repoId]));
-    const fullName = repoRows[0]?.fullName;
-    if (fullName) fullNames.set(repoId, fullName);
+  for (const repo of repoRows) {
+    if (repo.fullName) fullNames.set(repo.id, repo.fullName);
   }
   await mapWithLimit([...fullNames.entries()], 8, async ([repoId, fullName]) => {
     const exists = await checkRepoExists(token, fullName);
@@ -77,8 +83,9 @@ export async function POST(request: Request) {
   const forceFull = body?.full === true;
   const now = nowMs();
 
-  const probe = await probeConnection();
-  if (!probe.connected) {
+  const token = await getStoredToken();
+  const probe = await probeConnection(token);
+  if (!probe.connected || !token) {
     const lastSyncAt = Number.parseInt((await readSyncState(db, "lastSyncAt")) ?? "0", 10) || null;
     return NextResponse.json({
       now,
@@ -89,7 +96,6 @@ export async function POST(request: Request) {
       ...(await queueJson(db, now)),
     });
   }
-  const token = (await getStoredToken()) as string;
 
   const pending = await getQueuedThreadIds(db);
   if (pending.size > 0) {
@@ -152,11 +158,17 @@ export async function POST(request: Request) {
   }
 
   const full = forceFull || isFirstSync;
-  const listed = await listNotifications(token, {
-    since: full || !lastSyncAt ? null : new Date(lastSyncAt).toISOString(),
-    ifModifiedSince: full ? null : lastModified,
-    full,
-  });
+  // On incremental syncs, overlap the read-only GraphQL subject refresh with
+  // `/notifications?since=` so the two main network legs run concurrently.
+  // Prefetched results are only applied after `/notifications` succeeds.
+  const [listed, prefetched] = await Promise.all([
+    listNotifications(token, {
+      since: full || !lastSyncAt ? null : new Date(lastSyncAt).toISOString(),
+      ifModifiedSince: full ? null : lastModified,
+      full,
+    }),
+    full ? Promise.resolve(null) : prefetchActiveSubjects(db, token),
+  ]);
   if (!listed.ok || !listed.data) {
     return NextResponse.json({
       now,
@@ -178,7 +190,14 @@ export async function POST(request: Request) {
   }
 
   if (notModified) {
-    await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
+    const retried = await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
+    const skipIds = new Set(retried.resolvedIds);
+    if (prefetched) {
+      await applyActiveSubjectUpdates(db, token, prefetched, { skipIds });
+    } else {
+      await refreshActiveSubjects(db, token, { skipIds });
+    }
+    await reapplyPendingReads(db);
     await writeSyncState(db, "lastSyncAt", String(now));
     return NextResponse.json({
       now,
@@ -200,19 +219,29 @@ export async function POST(request: Request) {
     now,
     (t) => resolveSubject(token, t)
   );
-  // Upsert recomputes isRead from the remote unread flag, which would revert
-  // a locally-read row whose PATCH is still queued. Restore those while the
-  // retry is pending; explicit unread rows (localUnread=1) are left alone.
-  await reapplyPendingReads(db);
   let markedDone = 0;
   if (full) {
+    // Check unreachable repositories before applyRemoteDone marks their
+    // disappeared threads done, so active repos that were deleted or lost
+    // access are still detected while historical done-only repos stay skipped.
+    await refreshUnreachableFlags(token, new Set(summary.seenRepoIds));
     const seenIds = new Set(threads.map((t) => t.id));
     const queued = await getQueuedThreadIds(db);
     markedDone = (await applyRemoteDone(db, seenIds, queued)).markedDone;
-    await refreshUnreachableFlags(token, new Set(summary.seenRepoIds));
   }
 
-  await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
+  const retried = await retryPendingSubjects(db, now, (thread) => resolveSubject(token, thread));
+  const skipIds = new Set([...summary.resolvedIds, ...retried.resolvedIds]);
+  if (prefetched) {
+    await applyActiveSubjectUpdates(db, token, prefetched, { skipIds });
+  } else {
+    await refreshActiveSubjects(db, token, { skipIds });
+  }
+  // Upsert and thread refresh recompute isRead from the remote unread flag,
+  // which would revert a locally-read row whose PATCH is still queued.
+  // Restore those while the retry is pending; explicit unread rows
+  // (localUnread=1) are left alone.
+  await reapplyPendingReads(db);
   await writeSyncState(db, "lastSyncAt", String(now));
 
   return NextResponse.json({

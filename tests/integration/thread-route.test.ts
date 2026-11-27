@@ -878,4 +878,52 @@ describe("POST /api/thread/sync", () => {
     const { body } = await syncThread({ id: "n_001" });
     expect((body.item as { isRead: number }).isRead).toBe(0);
   });
+
+  test("syncing a CheckSuite without a subject URL advances githubUpdatedAt and queues no retry", async () => {
+    await db.insert(notifications).values({
+      id: "cs_sync_1",
+      repositoryId: "acme--web",
+      subject: "CI workflow run failed for main branch",
+      subjectType: "CheckSuite",
+      subjectState: null,
+      reason: "ci_activity",
+      prMerged: 0,
+      createdAt: NOW - 3600 * 1000,
+      githubUpdatedAt: null,
+      isRead: 0,
+      isDone: 0,
+      localUnread: 0,
+      sourceUrl: "https://github.com/acme/web",
+    });
+    standIn.setThreads([
+      {
+        id: "cs_sync_1",
+        unread: false,
+        reason: "ci_activity",
+        updated_at: "2026-01-15T11:40:00Z",
+        subject: {
+          title: "CI workflow run failed for main branch",
+          type: "CheckSuite",
+          url: "",
+        },
+        repository: {
+          full_name: "acme/web",
+          html_url: "https://github.com/acme/web",
+          owner: { login: "acme" },
+        },
+        url: `${standIn.url}/notifications/threads/cs_sync_1`,
+      },
+    ]);
+    const { status } = await syncThread({ id: "cs_sync_1" });
+    expect(status).toBe(200);
+    const rows = await db.select().from(notifications).where(eq(notifications.id, "cs_sync_1"));
+    expect(rows[0]?.githubUpdatedAt).toBe(Date.parse("2026-01-15T11:40:00Z"));
+    expect(rows[0]?.isRead).toBe(1);
+    const retries = await db
+      .select()
+      .from(syncState)
+      .where(eq(syncState.key, "subjectRetry:cs_sync_1"));
+    expect(retries).toHaveLength(0);
+    expect(blocked).toEqual([]);
+  });
 });

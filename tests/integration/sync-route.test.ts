@@ -734,4 +734,230 @@ describe("US2 subject freshness in one server process (SC-006)", () => {
     });
     expect(standIn.requests.filter((r) => r.path === path)).toHaveLength(3);
   });
+
+  test.each([304, 200])(
+    "global sync updates a self-merged PR even when /notifications returns %s without that thread",
+    async (listingStatus) => {
+      const prPath = "/repos/acme/web/pulls/11";
+      standIn.setSubject(prPath, {
+        html_url: "https://github.com/acme/web/pull/11",
+        state: "open",
+        merged: false,
+      });
+      await sync();
+      expect(await row("t_001")).toMatchObject({
+        subjectState: "open",
+        prMerged: 0,
+        isRead: 0,
+      });
+
+      // Simulate the user merging the PR on GitHub: the PR is now merged and
+      // the thread was marked read, but incremental /notifications?since=
+      // returns 304 (or 200 []) without listing the thread.
+      const mergedAt = NOW + 90_000;
+      standIn.setSubject(prPath, {
+        html_url: "https://github.com/acme/web/pull/11",
+        state: "closed",
+        merged: true,
+      });
+      standIn.setThreads(
+        buildThreads(standIn.url).map((t) =>
+          t.id === "t_001"
+            ? { ...t, unread: false, updated_at: new Date(mergedAt).toISOString() }
+            : t
+        )
+      );
+      standIn.setScenario("/notifications", { status: listingStatus, body: [] });
+      process.env.GHN_NOW = String(NOW + 120_000);
+
+      const res = await sync();
+      expect(res.fresh).toBe(true);
+      expect(await row("t_001")).toMatchObject({
+        subjectState: "closed",
+        prMerged: 1,
+        isRead: 1,
+        createdAt: mergedAt,
+        githubUpdatedAt: mergedAt,
+      });
+    }
+  );
+
+  test("global sync updates a reopened issue even when /notifications returns 304", async () => {
+    const issuePath = "/repos/test-user/mine/issues/3";
+    standIn.setSubject(issuePath, {
+      html_url: "https://github.com/test-user/mine/issues/3",
+      state: "closed",
+    });
+    await sync();
+    expect(await row("t_002")).toMatchObject({ subjectState: "closed", prMerged: 0 });
+
+    standIn.setSubject(issuePath, {
+      html_url: "https://github.com/test-user/mine/issues/3",
+      state: "open",
+    });
+    standIn.setScenario("/notifications", { status: 304 });
+    process.env.GHN_NOW = String(NOW + 120_000);
+
+    await sync();
+    expect(await row("t_002")).toMatchObject({ subjectState: "open", prMerged: 0 });
+  });
+
+  test("CheckSuite notifications without a subject URL do not queue infinite subject retries", async () => {
+    standIn.setThreads([
+      ...buildThreads(standIn.url),
+      {
+        id: "cs_001",
+        unread: true,
+        reason: "ci_activity",
+        updated_at: "2026-01-15T11:30:00Z",
+        subject: {
+          title: "CI workflow run failed for main branch",
+          type: "CheckSuite",
+          url: "",
+        },
+        repository: {
+          full_name: "acme/web",
+          html_url: "https://github.com/acme/web",
+          owner: { login: "acme" },
+        },
+        url: `${standIn.url}/notifications/threads/cs_001`,
+      },
+    ]);
+    await sync();
+    expect(await row("cs_001")).toMatchObject({
+      subjectType: "CheckSuite",
+      subjectState: null,
+      prMerged: 0,
+      sourceUrl: "https://github.com/acme/web",
+      githubUpdatedAt: Date.parse("2026-01-15T11:30:00Z"),
+    });
+    expect(await syncStateValue("subjectRetry:cs_001")).toBeNull();
+  });
+
+  test("legacy CheckSuite subject retries are pruned and backfilled on the next poll", async () => {
+    await sync();
+    const ts = NOW - 60_000;
+    await db.insert(notifications).values({
+      id: "cs_legacy",
+      repositoryId: "acme--web",
+      subject: "CI workflow run failed for main branch",
+      subjectType: "CheckSuite",
+      subjectState: null,
+      reason: "ci_activity",
+      prMerged: 0,
+      createdAt: ts,
+      githubUpdatedAt: null,
+      isRead: 0,
+      isDone: 0,
+      localUnread: 0,
+      sourceUrl: "https://github.com/acme/web",
+    });
+    await db.insert(syncState).values({
+      key: "subjectRetry:cs_legacy",
+      value: JSON.stringify({
+        thread: {
+          id: "cs_legacy",
+          unread: true,
+          reason: "ci_activity",
+          updatedAt: ts,
+          subjectTitle: "CI workflow run failed for main branch",
+          subjectType: "CheckSuite",
+          subjectApiUrl: "",
+          repoFullName: "acme/web",
+          repoOwnerLogin: "acme",
+          repoHtmlUrl: "https://github.com/acme/web",
+          threadUrl: `${standIn.url}/notifications/threads/cs_legacy`,
+        },
+        attempts: 3,
+        nextAttemptAt: NOW + 600_000,
+      }),
+    });
+    standIn.setScenario("/notifications", { status: 304 });
+    process.env.GHN_NOW = String(NOW + 120_000);
+    await sync();
+    expect(await syncStateValue("subjectRetry:cs_legacy")).toBeNull();
+    expect((await row("cs_legacy"))?.githubUpdatedAt).toBe(ts);
+  });
+
+  test("GraphQL partial repo errors and HTTP 500 preserve stored states without failing sync", async () => {
+    const prPath = "/repos/acme/web/pulls/11";
+    const issuePath = "/repos/test-user/mine/issues/3";
+    standIn.setSubject(prPath, { html_url: "https://github.com/acme/web/pull/11", state: "open", merged: false });
+    standIn.setSubject(issuePath, { html_url: "https://github.com/test-user/mine/issues/3", state: "open" });
+    await sync();
+
+    // Missing repo for test-user/mine while acme/web PR merged: acme/web updates, test-user/mine stays open.
+    standIn.setSubject(prPath, { html_url: "https://github.com/acme/web/pull/11", state: "closed", merged: true });
+    standIn.setScenario("/repos/test-user/mine", { status: 404 });
+    standIn.setScenario("/notifications", { status: 304 });
+    process.env.GHN_NOW = String(NOW + 120_000);
+    const partial = await sync();
+    expect(partial.fresh).toBe(true);
+    expect(await row("t_001")).toMatchObject({ subjectState: "closed", prMerged: 1 });
+    expect(await row("t_002")).toMatchObject({ subjectState: "open", prMerged: 0 });
+
+    // GraphQL HTTP 500 still keeps sync fresh and preserves stored state.
+    standIn.setScenario("/repos/test-user/mine", null);
+    standIn.setSubject(issuePath, { html_url: "https://github.com/test-user/mine/issues/3", state: "closed" });
+    standIn.setScenario("/graphql", { status: 500 });
+    process.env.GHN_NOW = String(NOW + 240_000);
+    const failed = await sync();
+    expect(failed.fresh).toBe(true);
+    expect(await row("t_002")).toMatchObject({ subjectState: "open", prMerged: 0 });
+  });
+
+  test("full sync unreachable check skips repositories that only have done notifications", async () => {
+    await sync();
+    await db.insert(repositories).values({
+      id: "old--done",
+      fullName: "old/done",
+      ownership: "watched",
+      rhythm: "weekly",
+      lastPromotedAt: null,
+      nextDueAt: NOW + 1000,
+      snoozedUntil: null,
+      unreachable: 0,
+      createdAt: NOW,
+    });
+    await db.insert(notifications).values({
+      id: "done_only_1",
+      repositoryId: "old--done",
+      subject: "Old finished notification",
+      subjectType: "Issue",
+      subjectState: "closed",
+      reason: "subscribed",
+      prMerged: 0,
+      createdAt: NOW - 10_000,
+      githubUpdatedAt: NOW - 10_000,
+      isRead: 1,
+      isDone: 1,
+      localUnread: 0,
+      sourceUrl: "https://github.com/old/done/issues/1",
+    });
+    const before = standIn.requests.length;
+    await sync({ full: true });
+    const repoChecks = standIn.requests
+      .slice(before)
+      .filter((r) => r.path === "/repos/old/done");
+    expect(repoChecks).toHaveLength(0);
+  });
+
+  test("full sync marks a repository unreachable when its active notifications disappear and GitHub returns 404", async () => {
+    await sync();
+    expect(await row("t_001")).toMatchObject({ isDone: 0 });
+
+    // Remove acme/web's active thread from the full listing and return 404 for the repo.
+    standIn.setThreads(buildThreads(standIn.url).filter((t) => t.id !== "t_001"));
+    standIn.setScenario("/repos/acme/web", { status: 404 });
+
+    const res = await sync({ full: true });
+    expect(res.fresh).toBe(true);
+    expect(res.markedDone).toBe(1);
+    expect(await row("t_001")).toMatchObject({ isDone: 1 });
+    const repoRows = await db
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, "acme--web"));
+    expect(repoRows[0]?.unreachable).toBe(1);
+  });
 });

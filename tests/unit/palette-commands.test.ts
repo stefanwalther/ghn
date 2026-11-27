@@ -29,6 +29,15 @@ describe("palette static entries", () => {
     expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
   });
 
+  test("includes an on-demand full sync command alongside refresh", () => {
+    const entries = staticEntries();
+    expect(entries.find((e) => e.id === "cmd-full-sync")).toMatchObject({
+      section: "commands",
+      title: "Full sync from GitHub",
+      action: { type: "full-sync" },
+    });
+  });
+
   test("navigation targets stay internal except GitHub links", () => {
     for (const e of staticEntries()) {
       if (e.action.type === "navigate") {

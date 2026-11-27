@@ -32,6 +32,8 @@ export interface StandInRequest {
   path: string;
   authorization?: string;
   body?: string;
+  startedAt: number;
+  finishedAt: number;
 }
 
 export interface StandIn {
@@ -41,6 +43,7 @@ export interface StandIn {
   setThreads(threads: StandInThread[]): void;
   setSubject(path: string, payload: unknown): void;
   setScenario(path: string, scenario: Scenario | null): void;
+  setDelay(path: string, delayMs: number | null): void;
   setRateLimit(limit: number, used: number, remaining: number, reset: number): void;
   reset(): void;
   close(): Promise<void>;
@@ -70,8 +73,19 @@ export async function startGitHubStandIn(
   let threads: StandInThread[] = options.threads ?? [];
   let rateLimit = options.rateLimit ?? DEFAULT_RATE_LIMIT;
   const scenarios = new Map<string, Scenario>();
+  const delays = new Map<string, number>();
   const subjects = new Map<string, unknown>();
   const requests: StandInRequest[] = [];
+
+  function findDelay(path: string): number {
+    if (delays.has(path)) return delays.get(path) ?? 0;
+    for (const [pattern, ms] of delays) {
+      if (pattern.endsWith("*") && path.startsWith(pattern.slice(0, -1))) {
+        return ms;
+      }
+    }
+    return 0;
+  }
 
   function rateLimitHeaders(override?: number): Record<string, string> {
     return {
@@ -145,14 +159,19 @@ export async function startGitHubStandIn(
         const path = url.pathname;
         const method = req.method ?? "GET";
 
-        requests.push({
+        const startedAt = performance.now();
+        const record: StandInRequest = {
           method,
           path,
           authorization: req.headers.authorization,
           body: body || undefined,
-        });
+          startedAt,
+          finishedAt: startedAt,
+        };
+        requests.push(record);
 
         const reply = (status: number, payload: unknown, extra?: Record<string, string>) => {
+          record.finishedAt = performance.now();
           const headers: Record<string, string> = {
             "Content-Type": "application/json",
             ...rateLimitHeaders(),
@@ -164,6 +183,7 @@ export async function startGitHubStandIn(
 
         // The health probe is unauthenticated so the runner can wait for it.
         if (path === "/health") {
+          record.finishedAt = performance.now();
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: true }));
           return;
@@ -175,6 +195,11 @@ export async function startGitHubStandIn(
         if (authorization !== `Bearer ${token}`) {
           reply(401, { error: "Bad credentials" });
           return;
+        }
+
+        const configuredDelay = findDelay(path);
+        if (configuredDelay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, configuredDelay));
         }
 
         const scenario = findScenario(path);
@@ -245,9 +270,11 @@ export async function startGitHubStandIn(
         }
 
         if (path === "/graphql" && method === "POST") {
-          const requested = safeParse(body);
-          const variables = (requested as { variables?: { login?: string; from?: string; to?: string } })
-            ?.variables;
+          const requested = safeParse(body) as {
+            query?: unknown;
+            variables?: { login?: string; from?: string; to?: string };
+          } | null;
+          const variables = requested?.variables;
           if (variables?.from && variables?.to) {
             reply(200, {
               data: {
@@ -266,6 +293,90 @@ export async function startGitHubStandIn(
                 },
               },
             });
+            return;
+          }
+          if (typeof requested?.query === "string" && requested.query.includes("repository(")) {
+            const data: Record<string, unknown> = {};
+            const errors: Array<{ type: string; path: string[]; message: string }> = [];
+            const queryText = requested.query;
+            const repoHeaderRe =
+              /(\w+)\s*:\s*repository\(\s*owner\s*:\s*"([^"]+)"\s*,\s*name\s*:\s*"([^"]+)"\s*\)\s*\{/g;
+            for (const repoMatch of queryText.matchAll(repoHeaderRe)) {
+              const [, rAlias, owner, name] = repoMatch;
+              if (!rAlias || !owner || !name || repoMatch.index === undefined) continue;
+              const openIdx = repoMatch.index + repoMatch[0].length - 1;
+              let depth = 0;
+              let closeIdx = -1;
+              for (let i = openIdx; i < queryText.length; i += 1) {
+                if (queryText[i] === "{") depth += 1;
+                else if (queryText[i] === "}") {
+                  depth -= 1;
+                  if (depth === 0) {
+                    closeIdx = i;
+                    break;
+                  }
+                }
+              }
+              if (closeIdx === -1) continue;
+              const inner = queryText.slice(openIdx + 1, closeIdx);
+              const repoScenario = findScenario(`/repos/${owner}/${name}`);
+              if (repoScenario && repoScenario.status >= 400) {
+                data[rAlias] = null;
+                errors.push({
+                  type: repoScenario.status === 404 ? "NOT_FOUND" : "FORBIDDEN",
+                  path: [rAlias],
+                  message: `Could not resolve repository ${owner}/${name}`,
+                });
+                continue;
+              }
+              const repoData: Record<string, unknown> = {};
+              const itemRe = /(\w+)\s*:\s*(pullRequest|issue)\(\s*number\s*:\s*(\d+)\s*\)/g;
+              for (const itemMatch of inner.matchAll(itemRe)) {
+                const [, sAlias, kind, num] = itemMatch;
+                if (!sAlias || !kind || !num) continue;
+                const subjectPath = `/repos/${owner}/${name}/${kind === "pullRequest" ? "pulls" : "issues"}/${num}`;
+                const itemScenario = findScenario(subjectPath);
+                if (itemScenario && itemScenario.status >= 400) {
+                  repoData[sAlias] = null;
+                  errors.push({
+                    type: itemScenario.status === 404 ? "NOT_FOUND" : "FORBIDDEN",
+                    path: [rAlias, sAlias],
+                    message: `Could not resolve ${subjectPath}`,
+                  });
+                  continue;
+                }
+                const subj = defaultSubject(subjectPath) as {
+                  state?: unknown;
+                  merged?: unknown;
+                  html_url?: unknown;
+                };
+                if (kind === "pullRequest") {
+                  const merged = subj.merged === true;
+                  const state = merged
+                    ? "MERGED"
+                    : subj.state === "closed"
+                      ? "CLOSED"
+                      : "OPEN";
+                  repoData[sAlias] = {
+                    state,
+                    merged,
+                    url: typeof subj.html_url === "string"
+                      ? subj.html_url
+                      : `https://github.com/${owner}/${name}/pull/${num}`,
+                  };
+                } else {
+                  const state = subj.state === "closed" ? "CLOSED" : "OPEN";
+                  repoData[sAlias] = {
+                    state,
+                    url: typeof subj.html_url === "string"
+                      ? subj.html_url
+                      : `https://github.com/${owner}/${name}/issues/${num}`,
+                  };
+                }
+              }
+              data[rAlias] = repoData;
+            }
+            reply(200, errors.length > 0 ? { data, errors } : { data });
             return;
           }
           reply(200, { data: { viewer: { login: viewerLogin } } });
@@ -369,6 +480,10 @@ export async function startGitHubStandIn(
       if (scenario === null) scenarios.delete(path);
       else scenarios.set(path, scenario);
     },
+    setDelay(path: string, delayMs: number | null) {
+      if (delayMs === null || delayMs <= 0) delays.delete(path);
+      else delays.set(path, delayMs);
+    },
     setRateLimit(limit: number, used: number, remaining: number, reset: number) {
       rateLimit = { limit, used, remaining, reset };
     },
@@ -376,6 +491,7 @@ export async function startGitHubStandIn(
       threads = options.threads ?? [];
       rateLimit = options.rateLimit ?? DEFAULT_RATE_LIMIT;
       scenarios.clear();
+      delays.clear();
       subjects.clear();
       requests.length = 0;
     },
