@@ -256,32 +256,38 @@ test.describe("inbox filter", () => {
     await page.goto("/");
 
     for (const age of AGE_CASES) {
-      // Reset to all time, then check only this age: age filters are
-      // multi-select checkboxes with an OR semantic, so single-age
-      // assertions need a clean set first.
-      await page.getByLabel("Filter by age All time").click();
-      await page.getByLabel(`Filter by age ${age.label}`).click();
+      await page.getByRole("button", { name: /^Age:/ }).click();
+      await page.getByRole("radio", { name: `Filter by age ${age.label}` }).click();
 
-      await expect(page).toHaveURL(new RegExp(`\\?age=${age.value}`));
+      await expect(page).toHaveURL(new RegExp(`\\?age=${age.value}$`));
+      await expect(page.getByRole("button", { name: `Age: ${age.label}` })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Age filters" })).toHaveCount(0);
       await expect(inboxRows(page)).toHaveCount(age.ids.length);
       expect(await inboxNotificationIds(page)).toEqual(age.ids);
     }
 
-    await page.getByLabel("Filter by age All time").click();
+    await page.getByRole("button", { name: /^Age:/ }).click();
+    await page.getByRole("radio", { name: "Filter by age All time" }).click();
     await expect(page).not.toHaveURL(/age=/);
+    await expect(page.getByRole("button", { name: "Age: All time" })).toBeVisible();
     await expect(inboxRows(page)).toHaveCount(30);
     expect(await inboxNotificationIds(page)).toEqual(VISIBLE_IDS);
   });
 
-  test("age filters combine with an OR semantic", async ({ page }) => {
+  test("picking a new age replaces the previous age and closes the dropdown", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByLabel("Filter by age Last 24 hours").click();
-    await page.getByLabel("Filter by age Last 7 days").click();
+    await page.getByRole("button", { name: "Age: All time" }).click();
+    await page.getByRole("radio", { name: "Filter by age Last 24 hours" }).click();
+    await expect(page).toHaveURL(/\?age=24h$/);
+    await expect(page.getByRole("dialog", { name: "Age filters" })).toHaveCount(0);
 
-    await expect(page).toHaveURL(/age=24h/);
-    await expect(page).toHaveURL(/age=7d/);
-    // 7d is the wider bucket, so the union equals the 7d rows.
+    await page.getByRole("button", { name: "Age: Last 24 hours" }).click();
+    await page.getByRole("radio", { name: "Filter by age Last 7 days" }).click();
+
+    await expect(page).toHaveURL(/\?age=7d$/);
+    await expect(page.getByRole("button", { name: "Age: Last 7 days" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Age filters" })).toHaveCount(0);
     const seven = AGE_CASES.find((a) => a.value === "7d")!;
     await expect(inboxRows(page)).toHaveCount(seven.ids.length);
   });
@@ -348,18 +354,22 @@ test.describe("inbox filter", () => {
   test("switches the state filter between the open items and the done items", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByLabel("Filter by state Done").click();
-    await page.getByLabel("Filter by state Unread").click();
+    await page.getByRole("button", { name: "State: Unread" }).click();
+    await page.getByRole("checkbox", { name: "Filter by state Done" }).click();
+    await page.getByRole("checkbox", { name: "Filter by state Unread" }).click();
     await expect(page).toHaveURL(/\?state=done/);
+    await expect(page.getByRole("button", { name: "State: Done" })).toBeVisible();
     await expect(inboxRows(page)).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Nothing finished yet" })).toBeVisible();
 
-    await page.getByLabel("Filter by state Unread").click();
+    await page.getByRole("checkbox", { name: "Filter by state Unread" }).click();
     await expect(page).toHaveURL(/\?state=all/);
+    await expect(page.getByRole("button", { name: "State: Unread, Done" })).toBeVisible();
     await expect(inboxRows(page)).toHaveCount(30);
 
-    await page.getByLabel("Filter by state Done").click();
+    await page.getByRole("checkbox", { name: "Filter by state Done" }).click();
     await expect(page).not.toHaveURL(/state=/);
+    await expect(page.getByRole("button", { name: "State: Unread" })).toBeVisible();
     await expect(inboxRows(page)).toHaveCount(30);
   });
 });

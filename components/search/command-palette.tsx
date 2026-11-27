@@ -27,7 +27,7 @@ import {
 } from "@/lib/palette-commands";
 import { rankSearch } from "@/lib/search";
 import { useDialogFocus } from "@/lib/dialog-focus";
-import { TYPE_FILTERS } from "@/lib/filters";
+import { TYPE_FILTERS, type AgeFilter } from "@/lib/filters";
 import { useNotifications, useRepositories } from "@/lib/queries";
 import { useUIStore } from "@/lib/ui-store";
 import { parseInboxFilters, repoFilterHref, saveLastOpened, serializeInboxFilters, type InboxFilters } from "@/lib/view-state";
@@ -398,10 +398,10 @@ export function CommandPalette() {
       requestAnimationFrame(() => inputRef.current?.focus());
       return;
     }
-    // Inbox filter values preserve every other active filter. Type and
-    // age toggle into their multi-select sets; "all" clears the group.
-    // State "all" means both states; picking the active single state
-    // again resets to the unread default.
+    // Inbox filter values preserve every other active filter. Types toggle
+    // into a multi-select set; age is single-select (picking the active age
+    // again clears back to all time). State "all" means both states; picking
+    // the active single state again resets to the unread default.
     if (a.type === "filter") {
       close();
       try {
@@ -419,10 +419,9 @@ export function CommandPalette() {
           if (a.value === "all") {
             router.push(`/${serializeInboxFilters({ ...current, ages: [] })}`);
           } else {
-            const next = current.ages.includes(a.value as never)
-              ? current.ages.filter((v) => v !== a.value)
-              : [...current.ages, a.value as never].sort();
-            router.push(`/${serializeInboxFilters({ ...current, ages: next as never[] } as InboxFilters)}`);
+            const isSame = current.ages.length === 1 && current.ages[0] === a.value;
+            const next: AgeFilter[] = isSame ? [] : [a.value as AgeFilter];
+            router.push(`/${serializeInboxFilters({ ...current, ages: next })}`);
           }
         } else {
           const next =

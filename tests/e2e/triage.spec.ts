@@ -95,8 +95,9 @@ test.describe("triage writes", () => {
     await expect(page.getByText("28 items", { exact: true })).toBeVisible();
 
     // The state survives in the application: both items are done now.
-    await page.getByLabel("Filter by state Done").click();
-    await page.getByLabel("Filter by state Unread").click();
+    await page.getByRole("button", { name: "State: Unread" }).click();
+    await page.getByRole("checkbox", { name: "Filter by state Done" }).click();
+    await page.getByRole("checkbox", { name: "Filter by state Unread" }).click();
     await expect(page).toHaveURL(/\?state=done/);
     await expect(inboxRows(page)).toHaveCount(2);
     expect(await inboxNotificationIds(page)).toEqual(["n_001", "n_002"]);
